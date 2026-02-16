@@ -23,8 +23,8 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const tareasRef = ref(db, 'tareas'); // Tabla temporal (se puede borrar)
-        const tareasHistorialRef = ref(db, 'historial_tareas'); // Datos persistentes para gráficos
+        const tareasRef = ref(db, 'tareas');
+        const tareasHistorialRef = ref(db, 'historial_tareas');
         const pausaRef = ref(db, 'estadoPausa');
         const incidenciaRef = ref(db, 'estadoIncidencia');
         const reposicionRef = ref(db, 'estadoReposicion');
@@ -37,8 +37,7 @@
         let inicioReposicionMS = 0;
         let chartInstance = null;
         let chartProductividad = null;
-        let todasLasTareas = {}; // Datos del historial (persistentes)
-        let mapeoIndicesFirebase = {};
+        let todasLasTareas = {};
 
         const obtenerFecha = () => new Date().toLocaleDateString('es-ES');
         const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
@@ -68,61 +67,66 @@
             return new Date(anio, mes - 1, dia);
         }
 
-        // GRÁFICO 1: TAREAS INDIVIDUALES (tiempo por tarea) - Solo producción
+        // GRÁFICO 1: TAREAS INDIVIDUALES - Muestra cada tarea con su tiempo
         function actualizarGraficoPuntos(fechaFiltro = null) {
-            const puntos = [];
-            mapeoIndicesFirebase = {};
+            const tareasAdrian = [];
+            const tareasAlberto = [];
             
             if (todasLasTareas) {
-                Object.entries(todasLasTareas).forEach(([firebaseId, t]) => {
-                    // Solo tareas de producción con tiempo válido
-                    if (t.tipo === 'produccion' && t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0) {
-                        if (fechaFiltro && t.fecha !== fechaFiltro) return;
-                        
-                        puntos.push({
-                            firebaseId: firebaseId,
-                            operario: t.operario,
-                            tiempo: parseInt(t.total),
-                            tarea: t.codigo,
-                            serie: t.numSerie,
-                            hora: t.inicio,
-                            horaMinutos: convertirHoraAMinutos(t.inicio),
-                            fecha: t.fecha
-                        });
+                // Filtrar solo tareas de producción finalizadas
+                const tareasProduccion = Object.entries(todasLasTareas)
+                    .filter(([id, t]) => {
+                        // Debe ser producción y tener tiempo numérico válido
+                        const esProduccion = t.tipo === 'produccion';
+                        const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
+                        const cumpleFecha = !fechaFiltro || t.fecha === fechaFiltro;
+                        return esProduccion && tieneTiempo && cumpleFecha;
+                    })
+                    .map(([id, t]) => ({
+                        id: id,
+                        ...t,
+                        tiempoNum: parseInt(t.total),
+                        horaMinutos: convertirHoraAMinutos(t.inicio)
+                    }));
+                
+                // Ordenar por hora de inicio
+                tareasProduccion.sort((a, b) => a.horaMinutos - b.horaMinutos);
+                
+                // Asignar índice secuencial a cada tarea
+                tareasProduccion.forEach((t, index) => {
+                    const punto = {
+                        x: index, // Índice de la tarea en orden cronológico
+                        y: t.tiempoNum, // Tiempo en minutos (eje Y)
+                        tarea: t.codigo,
+                        serie: t.numSerie,
+                        hora: t.inicio,
+                        fecha: t.fecha,
+                        firebaseId: t.id,
+                        operario: t.operario
+                    };
+                    
+                    if (t.operario === 'Adrian García') {
+                        tareasAdrian.push(punto);
+                    } else if (t.operario === 'Alberto Colmenero') {
+                        tareasAlberto.push(punto);
                     }
                 });
             }
-
-            puntos.sort((a, b) => a.horaMinutos - b.horaMinutos);
-
-            const tareasAdrian = [];
-            const tareasAlberto = [];
-
-            puntos.forEach((p, index) => {
-                mapeoIndicesFirebase[index] = p.firebaseId;
-                
-                const punto = {
-                    x: index,
-                    y: p.tiempo,
-                    tarea: p.tarea,
-                    serie: p.serie,
-                    hora: p.hora,
-                    fecha: p.fecha,
-                    firebaseId: p.firebaseId,
-                    operario: p.operario
-                };
-
-                if (p.operario === 'Adrian García') {
-                    tareasAdrian.push(punto);
-                } else if (p.operario === 'Alberto Colmenero') {
-                    tareasAlberto.push(punto);
-                }
-            });
 
             const ctx = document.getElementById('graficoTareas').getContext('2d');
             
             if (chartInstance) {
                 chartInstance.destroy();
+            }
+
+            // Si no hay datos, mostrar mensaje
+            if (tareasAdrian.length === 0 && tareasAlberto.length === 0) {
+                document.getElementById('contadorTareas').textContent = 
+                    fechaFiltro ? `Sin datos para ${fechaFiltro}` : 'Sin tareas en el historial';
+            } else {
+                const totalTareas = tareasAdrian.length + tareasAlberto.length;
+                document.getElementById('contadorTareas').textContent = 
+                    fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
             }
 
             chartInstance = new Chart(ctx, {
@@ -170,10 +174,19 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return `Tarea #${context[0].parsed.x + 1}`;
+                                },
                                 label: function(context) {
                                     const point = context.raw;
-                                    const datasetLabel = context.datasetIndex === 0 ? 'Adrian' : 'Alberto';
-                                    return `${datasetLabel} - ${point.tarea} (${point.hora}): ${point.y} min`;
+                                    const operario = context.datasetIndex === 0 ? 'Adrian' : 'Alberto';
+                                    return [
+                                        `Operario: ${operario}`,
+                                        `Tarea: ${point.tarea}`,
+                                        `Serie: ${point.serie}`,
+                                        `Hora: ${point.hora}`,
+                                        `Tiempo: ${point.y} minutos`
+                                    ];
                                 }
                             }
                         }
@@ -183,15 +196,12 @@
                             display: true,
                             title: { 
                                 display: true, 
-                                text: 'Orden cronológico de tareas (clic para eliminar)',
+                                text: 'Número de tarea (orden cronológico)',
                                 font: { weight: 'bold' }
                             },
-                            min: -0.5,
-                            max: puntos.length,
                             ticks: {
-                                stepSize: 1,
                                 callback: function(value) {
-                                    return Number.isInteger(value) ? value + 1 : '';
+                                    return value + 1;
                                 }
                             },
                             grid: { color: '#e2e8f0' }
@@ -208,10 +218,6 @@
                     }
                 }
             });
-
-            const totalTareas = puntos.length;
-            document.getElementById('contadorTareas').textContent = 
-                fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
         }
 
         // GRÁFICO 2: PRODUCTIVIDAD MENSUAL
@@ -247,7 +253,6 @@
                 });
             }
             
-            // Calcular productividad
             for (let dia = 1; dia <= diasDelMes; dia++) {
                 // Adrian
                 const keyAdrian = `${dia}-Adrian García`;
@@ -464,7 +469,7 @@
             }
         };
 
-        // FINALIZAR TAREA - Guarda en ambos: tabla temporal e historial persistente
+        // FINALIZAR TAREA - Guarda en historial
         window.finalizarTarea = async function(id) {
             if(!confirm('¿Finalizar tarea?')) return;
             const snap = await get(ref(db, `tareas/${id}`));
@@ -475,14 +480,14 @@
             const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
             const horaFin = new Date().toLocaleTimeString('es-ES');
             
-            // 1. Actualizar tabla temporal
+            // Actualizar tabla temporal
             await update(ref(db, `tareas/${id}`), { 
                 fin: horaFin, 
                 total: tiempoTotal, 
                 estado: "finalizado" 
             });
             
-            // 2. Guardar en HISTORIAL PERSISTENTE (para gráficos)
+            // Guardar en HISTORIAL para gráficos
             await push(tareasHistorialRef, {
                 operario: t.operario,
                 numSerie: t.numSerie,
@@ -501,18 +506,17 @@
         };
         
         window.borrarTodoElRegistro = () => { 
-            if (confirm("¿BORRAR TODA LA TABLA TEMPORAL?\n\nLos datos de los gráficos NO se borrarán porque están guardados en el historial.")) {
+            if (confirm("¿BORRAR TODA LA TABLA TEMPORAL?\n\nLos datos de los gráficos NO se borrarán.")) {
                 remove(tareasRef);
             }
         };
 
         window.borrarHistorialGrafico = () => {
-            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\n\nEsto borrará todos los datos de los gráficos.\n\n¡No se puede deshacer!")) {
+            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\n\nEsto borrará todos los datos de los gráficos.")) {
                 remove(tareasHistorialRef);
             }
         };
 
-        // REPOSICIÓN - Guarda en historial al finalizar
         window.toggleReposicion = async function() {
             const ahora = Date.now();
             const snapTareas = await get(tareasRef);
@@ -534,7 +538,7 @@
                 const horaFin = new Date().toLocaleTimeString('es-ES');
                 const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
                 
-                // Guardar en tabla temporal
+                // Tabla temporal
                 push(tareasRef, { 
                     operario: infoR.operario || "SISTEMA", 
                     numSerie: "---", 
@@ -547,7 +551,7 @@
                     tipo: "reposicion" 
                 });
                 
-                // Guardar en HISTORIAL
+                // Historial
                 push(tareasHistorialRef, {
                     operario: infoR.operario || "SISTEMA",
                     numSerie: "---",
@@ -571,7 +575,6 @@
             if (Object.keys(updates).length > 0) update(ref(db), updates);
         };
 
-        // INCIDENCIA - Guarda en historial al finalizar
         window.toggleIncidencia = async function() {
             const ahora = Date.now();
             const snapTareas = await get(tareasRef);
@@ -595,7 +598,6 @@
                 const horaFin = new Date().toLocaleTimeString('es-ES');
                 const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
                 
-                // Guardar en tabla temporal
                 push(tareasRef, { 
                     operario: infoInc.operario || "SISTEMA", 
                     numSerie: "---", 
@@ -608,7 +610,6 @@
                     tipo: "incidencia" 
                 });
                 
-                // Guardar en HISTORIAL
                 push(tareasHistorialRef, {
                     operario: infoInc.operario || "SISTEMA",
                     numSerie: "---",
@@ -632,7 +633,6 @@
             if (Object.keys(updates).length > 0) update(ref(db), updates);
         };
 
-        // DESAYUNO/PAUSA - Guarda en historial al finalizar
         window.togglePausa = async function() {
             const ahora = Date.now(); 
             const snapTareas = await get(tareasRef); 
@@ -654,7 +654,6 @@
                 const horaFin = new Date().toLocaleTimeString('es-ES');
                 const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
                 
-                // Guardar en tabla temporal
                 push(tareasRef, { 
                     operario: infoP.operario || "SISTEMA", 
                     numSerie: "---", 
@@ -667,7 +666,6 @@
                     tipo: "descanso" 
                 });
                 
-                // Guardar en HISTORIAL
                 push(tareasHistorialRef, {
                     operario: infoP.operario || "SISTEMA",
                     numSerie: "---",
@@ -691,14 +689,13 @@
             if (Object.keys(updates).length > 0) update(ref(db), updates);
         };
 
-        // JORNADA (ENTRADA/SALIDA) - Guarda en ambos: tabla temporal e historial persistente
         window.registrarJornada = async (tipo) => {
             const operario = document.getElementById('selectOperario').value;
             const horaActual = new Date().toLocaleTimeString('es-ES');
             const fechaActual = obtenerFecha();
             const esEntrada = tipo === 'INICIO';
             
-            // 1. Guardar en tabla temporal (se puede borrar)
+            // Tabla temporal
             await push(tareasRef, { 
                 operario, 
                 numSerie: "---", 
@@ -706,12 +703,12 @@
                 fecha: fechaActual, 
                 inicio: horaActual, 
                 fin: "---", 
-                total: "REGISTRO",  // Texto para mostrar en tabla
+                total: "REGISTRO",
                 estado: "finalizado", 
                 tipo: "jornada" 
             });
             
-            // 2. Guardar en HISTORIAL PERSISTENTE (para gráficos, nunca se borra con la tabla)
+            // Historial persistente
             await push(tareasHistorialRef, {
                 operario: operario,
                 numSerie: "---",
@@ -719,7 +716,7 @@
                 fecha: fechaActual,
                 inicio: horaActual,
                 fin: "---",
-                total: 0,  // 0 para identificar que es jornada, no tarea productiva
+                total: 0,
                 tipo: "jornada",
                 timestamp: Date.now()
             });
@@ -760,7 +757,7 @@
             actualizarGraficoProductividad();
         });
 
-        // ESCUCHADOR: TAREAS (temporal) - Solo actualiza la tabla visual
+        // ESCUCHADOR: TAREAS (temporal) - Solo actualiza la tabla
         onValue(tareasRef, (snapshot) => {
             const cuerpo = document.getElementById('cuerpoTabla'); 
             cuerpo.innerHTML = "";
@@ -778,7 +775,6 @@
                 if(t.estado === "pausado_desayuno") rowClass = "bg-orange-50";
                 if(t.estado === "pausa_reposicion") rowClass = "bg-yellow-50";
 
-                // Determinar qué mostrar en la columna "Tiempo"
                 let tiempoMostrado;
                 if (activo) {
                     tiempoMostrado = `<span class="contador-vivo text-amber-600" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
@@ -791,10 +787,8 @@
                 } else if (t.estado === "pausado_desayuno") {
                     tiempoMostrado = `<span class="text-orange-400 italic">☕ En Desayuno</span>`;
                 } else if (t.tipo === 'jornada') {
-                    // JORNADA: mostrar "REGISTRO" como antes
                     tiempoMostrado = `<span class="text-slate-500 font-bold text-xs">REGISTRO</span>`;
                 } else {
-                    // Tarea finalizada normal
                     tiempoMostrado = `${t.total} min`;
                 }
 
@@ -853,7 +847,7 @@
     </script>
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
-    <!-- Modal para eliminar punto del historial -->
+    <!-- Modal para eliminar punto -->
     <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
             <h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
@@ -919,11 +913,11 @@
             <button onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
         </div>
 
-        <!-- TABLA TEMPORAL (se puede borrar) -->
+        <!-- TABLA TEMPORAL -->
         <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
             <div class="bg-slate-900 p-4 flex justify-between items-center">
                 <h3 class="text-amber-400 font-black uppercase text-sm">Tabla de Tareas (Temporal)</h3>
-                <span class="text-slate-400 text-xs">Estos datos se pueden borrar sin afectar los gráficos</span>
+                <span class="text-slate-400 text-xs">Se puede borrar sin afectar los gráficos</span>
             </div>
             <table id="tablaProduccion" class="w-full text-left">
                 <thead class="bg-slate-800 text-amber-400 text-[10px] font-black uppercase">
@@ -943,16 +937,16 @@
             </table>
         </div>
 
-        <!-- GRÁFICO 1: TAREAS INDIVIDUALES (datos del historial) -->
+        <!-- GRÁFICO 1: TAREAS INDIVIDUALES -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
                     <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
-                    <p class="text-xs text-slate-500 mt-1">📊 Datos persistentes en Firebase | Clic en punto para eliminar del historial</p>
+                    <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos | Eje X = orden cronológico</p>
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">Filtrar:</label>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Filtrar fecha:</label>
                     <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" 
                            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
                     <button onclick="mostrarTodas()" 
@@ -978,17 +972,17 @@
                     </div>
                 </div>
                 <div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">
-                    0 tareas
+                    Cargando...
                 </div>
             </div>
         </div>
 
-        <!-- GRÁFICO 2: PRODUCTIVIDAD MENSUAL (datos del historial) -->
+        <!-- GRÁFICO 2: PRODUCTIVIDAD MENSUAL -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
                     <h2 class="text-2xl font-black uppercase italic text-slate-800">📈 Productividad Mensual</h2>
-                    <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Salida - Entrada) en horas | Datos persistentes</p>
+                    <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / Horas trabajadas</p>
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
