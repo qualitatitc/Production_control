@@ -82,18 +82,22 @@
         // Funciones para manejar datos del gráfico tiempo por tarea
         const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
             const fechaKey = fecha.replace(/-/g, '_');
+            console.log('💾 Guardando en Firebase:', { fecha, fechaKey, serie, tiempo, finMS });
             await push(ref(db, `tiempoPorTarea/${fechaKey}`), {
                 serie: serie,
                 tiempo: tiempo,
                 finMS: finMS,
                 timestamp: Date.now()
             });
+            console.log('✅ Guardado exitoso');
         };
 
         const obtenerTiempoPorTarea = async (fecha) => {
             const fechaKey = fecha.replace(/-/g, '_');
             const snapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
-            return snapshot.val() || {};
+            const datos = snapshot.val() || {};
+            console.log('📊 Datos obtenidos de Firebase para', fecha, ':', datos);
+            return datos;
         };
 
         const calcularProductividadDiaria = (tareasHoy, entradaMS, salidaMS, operariosPromedio) => {
@@ -282,8 +286,10 @@
             
             const dias = Array.from({ length: 31 }, (_, i) => i + 1);
             const valores = dias.map(dia => {
-                const fecha = new Date(mesAMostrar.year, mesAMostrar.month, dia);
-                const fechaStr = fecha.toISOString().split('T')[0];
+                // Crear fecha en formato YYYY-MM-DD directamente sin conversión de zona horaria
+                const mes = String(mesAMostrar.month + 1).padStart(2, '0');
+                const diaStr = String(dia).padStart(2, '0');
+                const fechaStr = `${mesAMostrar.year}-${mes}-${diaStr}`;
                 const fechaKey = fechaStr.replace(/-/g, '_');
                 return productividadDiaria[fechaKey]?.productividad || 0;
             });
@@ -392,8 +398,11 @@
                 const diasDelMes = new Date(anio, mes + 1, 0).getDate();
                 let suma = 0, diasConDatos = 0;
                 for (let dia = 1; dia <= diasDelMes; dia++) {
-                    const fecha = new Date(anio, mes, dia);
-                    const fechaKey = fecha.toISOString().split('T')[0].replace(/-/g, '_');
+                    // Crear fecha en formato YYYY-MM-DD directamente sin conversión de zona horaria
+                    const mesStr = String(mes + 1).padStart(2, '0');
+                    const diaStr = String(dia).padStart(2, '0');
+                    const fechaStr = `${anio}-${mesStr}-${diaStr}`;
+                    const fechaKey = fechaStr.replace(/-/g, '_');
                     const prod = productividadDiaria[fechaKey]?.productividad || 0;
                     if (prod > 0) { suma += prod; diasConDatos++; }
                 }
@@ -769,6 +778,7 @@
         };
 
         window.finalizarTarea = async (id, inicioMS) => {
+            console.log('🎯 Finalizando tarea:', id);
             const minutos = Math.max(1, Math.round((Date.now() - inicioMS) / 60000));
             const finMS = Date.now();
             
@@ -777,10 +787,28 @@
             if (snapshot.exists()) {
                 const tarea = snapshot.val();
                 const fecha = new Date(tarea.inicioMS).toISOString().split('T')[0];
+                console.log('📅 Fecha de la tarea:', fecha);
+                console.log('🔍 Es sistema?', tarea.codigo === "SISTEMA");
                 
                 // Guardar en tiempoPorTarea si no es un evento del sistema
                 if (tarea.codigo !== "SISTEMA") {
+                    console.log('💾 Guardando en tiempoPorTarea...');
                     await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
+                    
+                    // Actualizar gráfico si es la fecha actualmente seleccionada
+                    if (state.inicializado && fecha === state.fechaProdSeleccionada) {
+                        console.log('📊 Actualizando gráfico...');
+                        const datosGuardados = await obtenerTiempoPorTarea(fecha);
+                        const tareasFinalizadas = [];
+                        Object.keys(datosGuardados).forEach(key => {
+                            const t = datosGuardados[key];
+                            tareasFinalizadas.push({ serie: t.serie, tiempo: t.tiempo, finMS: t.finMS });
+                        });
+                        tareasFinalizadas.sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
+                        const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+                        console.log('📈 Datos para gráfico:', datosProd);
+                        actualizarGraficoProd(datosProd, fecha);
+                    }
                 }
             }
             
@@ -791,6 +819,7 @@
                 total: minutos, 
                 estado: "finalizado" 
             });
+            console.log('✅ Tarea finalizada');
         };
 
         window.borrarRegistro = (id) => {
@@ -989,30 +1018,6 @@
             if (!state.inicializado) return;
             await actualizarGraficoDiario(state.mesSeleccionado);
             await actualizarGraficoMensual(state.anioSeleccionado);
-        });
-
-        // Listener para actualizar gráfico tiempo por tarea cuando cambien los datos
-        onValue(tiempoPorTareaRef, async (snap) => {
-            if (!state.inicializado) return;
-            
-            const fechaSeleccionada = state.fechaProdSeleccionada || new Date().toISOString().split('T')[0];
-            const fechaKey = fechaSeleccionada.replace(/-/g, '_');
-            
-            // Obtener datos de la fecha seleccionada
-            const datosSnapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
-            const datosGuardados = datosSnapshot.val() || {};
-            
-            // Convertir a array y ordenar
-            const tareasFinalizadas = [];
-            Object.keys(datosGuardados).forEach(id => {
-                const t = datosGuardados[id];
-                tareasFinalizadas.push({ serie: t.serie, tiempo: t.tiempo, finMS: t.finMS });
-            });
-            
-            tareasFinalizadas.sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
-            const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-            
-            actualizarGraficoProd(datosProd, fechaSeleccionada);
         });
 
         window.addEventListener('load', async () => {
