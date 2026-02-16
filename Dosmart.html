@@ -38,9 +38,19 @@
         let chartInstance = null;
         let chartProductividad = null;
         let todasLasTareas = {};
+        let primeraVez = true; // Para establecer filtro inicial
 
         const obtenerFecha = () => new Date().toLocaleDateString('es-ES');
         const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
+
+        // NUEVA FUNCIÓN: Obtener fecha de hoy en formato HTML (YYYY-MM-DD)
+        function obtenerFechaHoy() {
+            const hoy = new Date();
+            const anio = hoy.getFullYear();
+            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+            const dia = String(hoy.getDate()).padStart(2, '0');
+            return `${anio}-${mes}-${dia}`;
+        }
 
         function formatTime(ms) {
             if (!ms || ms < 0) return "0m 0s";
@@ -425,7 +435,9 @@
             if (fechaInput) {
                 actualizarGraficoPuntos(convertirFechaHTML(fechaInput));
             } else {
-                actualizarGraficoPuntos(null);
+                // Si se borra la fecha, volver a mostrar hoy
+                document.getElementById('filtroFecha').value = obtenerFechaHoy();
+                actualizarGraficoPuntos(obtenerFecha());
             }
         };
 
@@ -748,7 +760,16 @@
         onValue(tareasHistorialRef, (snapshot) => {
             todasLasTareas = snapshot.val() || {};
             
-            // Actualizar gráfico de tareas individuales
+            // MODIFICACIÓN: Establecer filtro de fecha de hoy la primera vez
+            if (primeraVez) {
+                const inputFecha = document.getElementById('filtroFecha');
+                if (inputFecha) {
+                    inputFecha.value = obtenerFechaHoy();
+                }
+                primeraVez = false;
+            }
+            
+            // Actualizar gráfico de tareas individuales con el filtro actual
             const fechaInput = document.getElementById('filtroFecha').value;
             const fechaFiltro = fechaInput ? convertirFechaHTML(fechaInput) : null;
             actualizarGraficoPuntos(fechaFiltro);
@@ -946,12 +967,12 @@
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">Filtrar fecha:</label>
+                    <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
                     <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" 
                            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
                     <button onclick="mostrarTodas()" 
                             class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-colors">
-                        Todas
+                        Ver Todo
                     </button>
                 </div>
             </div>
