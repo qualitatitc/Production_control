@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Producción - Central</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; }
+        .card { transition: all 0.3s ease; border: 1px solid #1e293b; }
+        .card:hover { transform: translateY(-5px); border-color: #38bdf8; box-shadow: 0 10px 20px -5px rgba(56, 189, 248, 0.2); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6">
+
+    <div class="max-w-4xl w-full">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-extrabold tracking-tight mb-2 uppercase">Sistema de Producción</h1>
+            <p class="text-slate-400 uppercase tracking-widest text-sm font-semibold">Acceso Centralizado a Módulos</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <a href="Dosmart.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
+                <div class="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
+                <h2 class="text-xl font-bold mb-1">Dosmart</h2>
+                <p class="text-slate-400 text-sm">Control de Tareas</p>
+            </a>
+
+            <a href="Dostec%20AC.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
+                <div class="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <h2 class="text-xl font-bold mb-1">Dostec AC</h2>
+                <p class="text-slate-400 text-sm">Producción Activa</p>
+            </a>
+
+            <a href="Restyling.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
+                <div class="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                </div>
+                <h2 class="text-xl font-bold mb-1">Restyling</h2>
+                <p class="text-slate-400 text-sm">Cloud MES</p>
+            </a>
+        </div>
+
+        <footer class="mt-16 text-center text-slate-500 text-xs font-bold uppercase tracking-widest">
+            Acceso Remoto Habilitado • ITC S.A.
+        </footer>
+    </div>
+
+</body>
+</html>
