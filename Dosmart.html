@@ -28,6 +28,8 @@
         const pausaRef = ref(db, 'estadoPausa');
         const incidenciaRef = ref(db, 'estadoIncidencia');
         const reposicionRef = ref(db, 'estadoReposicion');
+        const mantenimientoRef = ref(db, 'tareas_mantenimiento');
+        const incidenciasTextoRef = ref(db, 'incidencias_texto');
 
         let estaPausadoGlobal = false;
         let hayIncidenciaGlobal = false;
@@ -877,6 +879,101 @@
             document.getElementById('numSerie').focus();
         };
 
+        // MANTENIMIENTO
+        window.agregarMantenimiento = async function() {
+            const descripcion = prompt("Descripción de la tarea de mantenimiento:");
+            if (!descripcion || !descripcion.trim()) return;
+            
+            await push(mantenimientoRef, {
+                descripcion: descripcion.trim(),
+                fecha: obtenerFecha(),
+                hora: new Date().toLocaleTimeString('es-ES'),
+                completada: false,
+                timestamp: Date.now()
+            });
+        };
+
+        window.completarMantenimiento = async function(id) {
+            if (!confirm('¿Marcar tarea como realizada?')) return;
+            await remove(ref(db, `tareas_mantenimiento/${id}`));
+        };
+
+        window.borrarMantenimiento = async function(id) {
+            if (!confirm('¿Eliminar esta tarea de mantenimiento?')) return;
+            await remove(ref(db, `tareas_mantenimiento/${id}`));
+        };
+
+        // INCIDENCIAS TEXTO
+        window.registrarIncidenciaTexto = async function() {
+            const descripcion = prompt("Descripción de la incidencia:");
+            if (!descripcion || !descripcion.trim()) return;
+            
+            await push(incidenciasTextoRef, {
+                descripcion: descripcion.trim(),
+                fecha: obtenerFecha(),
+                hora: new Date().toLocaleTimeString('es-ES'),
+                timestamp: Date.now()
+            });
+        };
+
+        window.borrarIncidenciaTexto = async function(id) {
+            if (!confirm('¿Eliminar esta incidencia?')) return;
+            await remove(ref(db, `incidencias_texto/${id}`));
+        };
+
+        // ESCUCHADOR: MANTENIMIENTO
+        onValue(mantenimientoRef, (snapshot) => {
+            const cuerpo = document.getElementById('cuerpoMantenimiento');
+            cuerpo.innerHTML = "";
+            const datos = snapshot.val();
+            
+            if (!datos) {
+                cuerpo.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento pendientes</td></tr>';
+                return;
+            }
+            
+            Object.keys(datos).forEach(id => {
+                const t = datos[id];
+                cuerpo.innerHTML += `
+                    <tr class="bg-white border-b border-slate-100 hover:bg-blue-50 transition-all">
+                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
+                        <td class="p-4 text-slate-600 font-medium text-sm">${t.hora}</td>
+                        <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+                        <td class="p-4 text-right flex justify-end gap-2">
+                            <button onclick="completarMantenimiento('${id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
+                                ✓ Realizada
+                            </button>
+                            <button onclick="borrarMantenimiento('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
+                        </td>
+                    </tr>`;
+            });
+        });
+
+        // ESCUCHADOR: INCIDENCIAS TEXTO
+        onValue(incidenciasTextoRef, (snapshot) => {
+            const cuerpo = document.getElementById('cuerpoIncidencias');
+            cuerpo.innerHTML = "";
+            const datos = snapshot.val();
+            
+            if (!datos) {
+                cuerpo.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
+                return;
+            }
+            
+            Object.keys(datos).forEach(id => {
+                const t = datos[id];
+                cuerpo.innerHTML += `
+                    <tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
+                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
+                        <td class="p-4 text-slate-600 font-medium text-sm">${t.hora}</td>
+                        <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+                        <td class="p-4 text-right">
+                            <button onclick="borrarIncidenciaTexto('${id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
+                        </td>
+                    </tr>`;
+            });
+        });
+
         // ESCUCHADOR: HISTORIAL (persistente) - Actualiza ambos gráficos
         onValue(tareasHistorialRef, (snapshot) => {
             todasLasTareas = snapshot.val() || {};
@@ -1032,6 +1129,12 @@
                 <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
                 <div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
                 
+                <button onclick="agregarMantenimiento()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors">
+                    🔧 Mantenimiento
+                </button>
+                <button onclick="registrarIncidenciaTexto()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors">
+                    📝 Incidencia
+                </button>
                 <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
                 <button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
                 <button id="btnPausa" onclick="togglePausa()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs"></button>
@@ -1235,6 +1338,57 @@
             <button onclick="borrarHistorialGrafico()" class="text-orange-600 font-bold text-[10px] uppercase tracking-widest hover:text-orange-800 transition-colors bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg">
                 ⚠️ Borrar Historial Permanente
             </button>
+        </div>
+
+        <!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+            <!-- TABLA MANTENIMIENTO -->
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
+                <div class="bg-blue-500 p-4">
+                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
+                        🔧 Tareas de Mantenimiento Pendientes
+                    </h3>
+                </div>
+                <div class="max-h-96 overflow-y-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-blue-100 text-blue-800 text-[10px] font-black uppercase sticky top-0">
+                            <tr>
+                                <th class="p-4 w-24">Fecha</th>
+                                <th class="p-4 w-24">Hora</th>
+                                <th class="p-4">Descripción</th>
+                                <th class="p-4 text-right w-32">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
+                            <tr><td colspan="4" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TABLA INCIDENCIAS -->
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
+                <div class="bg-orange-500 p-4">
+                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
+                        📝 Registro de Incidencias
+                    </h3>
+                </div>
+                <div class="max-h-96 overflow-y-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
+                            <tr>
+                                <th class="p-4 w-24">Fecha</th>
+                                <th class="p-4 w-24">Hora</th>
+                                <th class="p-4">Descripción</th>
+                                <th class="p-4 text-right w-20">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
+                            <tr><td colspan="4" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </body>
