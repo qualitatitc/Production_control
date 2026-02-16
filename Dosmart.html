@@ -23,8 +23,8 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const tareasRef = ref(db, 'tareas');
-        const tareasHistorialRef = ref(db, 'historial_tareas');
+        const tareasRef = ref(db, 'tareas'); // Tabla temporal (se puede borrar)
+        const tareasHistorialRef = ref(db, 'historial_tareas'); // Datos persistentes para gráficos
         const pausaRef = ref(db, 'estadoPausa');
         const incidenciaRef = ref(db, 'estadoIncidencia');
         const reposicionRef = ref(db, 'estadoReposicion');
@@ -37,7 +37,7 @@
         let inicioReposicionMS = 0;
         let chartInstance = null;
         let chartProductividad = null;
-        let todasLasTareas = {};
+        let todasLasTareas = {}; // Datos del historial (persistentes)
         let mapeoIndicesFirebase = {};
 
         const obtenerFecha = () => new Date().toLocaleDateString('es-ES');
@@ -63,23 +63,20 @@
         }
 
         function parsearFecha(fechaStr) {
+            if (!fechaStr || !fechaStr.includes('/')) return null;
             const [dia, mes, anio] = fechaStr.split('/').map(Number);
             return new Date(anio, mes - 1, dia);
         }
 
-        // GRÁFICO DE TAREAS INDIVIDUALES - Solo muestra tareas de producción finalizadas
+        // GRÁFICO 1: TAREAS INDIVIDUALES (tiempo por tarea) - Solo producción
         function actualizarGraficoPuntos(fechaFiltro = null) {
             const puntos = [];
             mapeoIndicesFirebase = {};
             
             if (todasLasTareas) {
                 Object.entries(todasLasTareas).forEach(([firebaseId, t]) => {
-                    // Solo tareas de producción finalizadas con tiempo numérico válido
-                    if (t.tipo === 'produccion' && 
-                        t.total && 
-                        !isNaN(parseInt(t.total)) && 
-                        parseInt(t.total) > 0) {
-                        
+                    // Solo tareas de producción con tiempo válido
+                    if (t.tipo === 'produccion' && t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0) {
                         if (fechaFiltro && t.fecha !== fechaFiltro) return;
                         
                         puntos.push({
@@ -217,22 +214,20 @@
                 fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
         }
 
-        // GRÁFICO DE PRODUCTIVIDAD - Usa datos del HISTORIAL (persistente)
+        // GRÁFICO 2: PRODUCTIVIDAD MENSUAL
         function calcularProductividadMes(anio, mes) {
             const diasDelMes = new Date(anio, mes, 0).getDate();
             const datosAdrian = new Array(diasDelMes).fill(null);
             const datosAlberto = new Array(diasDelMes).fill(null);
             
-            // Agrupar por día y operario desde el HISTORIAL
             const tareasPorDia = {};
             const jornadasPorDia = {};
             
             if (todasLasTareas) {
                 Object.values(todasLasTareas).forEach(t => {
-                    // Verificar que la fecha sea válida
-                    if (!t.fecha || !t.fecha.includes('/')) return;
-                    
                     const fecha = parsearFecha(t.fecha);
+                    if (!fecha) return;
+                    
                     if (fecha.getFullYear() === anio && fecha.getMonth() === mes - 1) {
                         const dia = fecha.getDate();
                         const key = `${dia}-${t.operario}`;
@@ -252,7 +247,7 @@
                 });
             }
             
-            // Calcular productividad para cada día
+            // Calcular productividad
             for (let dia = 1; dia <= diasDelMes; dia++) {
                 // Adrian
                 const keyAdrian = `${dia}-Adrian García`;
@@ -294,7 +289,6 @@
             
             const { datosAdrian, datosAlberto, diasDelMes } = calcularProductividadMes(anio, mes);
             
-            // Calcular media (solo días con datos)
             const todosLosValores = [...datosAdrian, ...datosAlberto].filter(v => v !== null && !isNaN(v));
             const media = todosLosValores.length > 0 ? 
                 todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
@@ -356,24 +350,11 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: {
-                                usePointStyle: true,
-                                padding: 20
-                            }
-                        },
+                        legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
-                                    return context[0].label;
-                                },
                                 label: function(context) {
                                     const value = context.raw;
                                     if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
@@ -383,34 +364,15 @@
                         }
                     },
                     scales: {
-                        x: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: 'Días del mes',
-                                font: { weight: 'bold' }
-                            },
-                            grid: { color: '#e2e8f0' }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Productividad (tareas×7 / horas)',
-                                font: { weight: 'bold' }
-                            },
-                            grid: { color: '#e2e8f0' }
-                        }
+                        x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / horas)', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
                     }
                 }
             });
 
-            // Actualizar info
             const diasConDatos = todosLosValores.length > 0 ? Math.ceil(todosLosValores.length / 2) : 0;
-            document.getElementById('mediaProductividad').textContent = 
-                `Media del mes: ${media.toFixed(2)}`;
-            document.getElementById('diasConDatos').textContent = 
-                `Días con datos: ${diasConDatos}`;
+            document.getElementById('mediaProductividad').textContent = `Media del mes: ${media.toFixed(2)}`;
+            document.getElementById('diasConDatos').textContent = `Días con datos: ${diasConDatos}`;
         }
 
         window.cambiarMesProductividad = function() {
@@ -445,7 +407,6 @@
 
         window.eliminarPuntoGrafico = async function(firebaseId) {
             if (!confirm('¿Estás seguro de eliminar este punto del historial?')) return;
-            
             try {
                 await remove(ref(db, `historial_tareas/${firebaseId}`));
                 cerrarModalEliminar();
@@ -457,8 +418,7 @@
         window.filtrarPorFecha = function() {
             const fechaInput = document.getElementById('filtroFecha').value;
             if (fechaInput) {
-                const fechaFormateada = convertirFechaHTML(fechaInput);
-                actualizarGraficoPuntos(fechaFormateada);
+                actualizarGraficoPuntos(convertirFechaHTML(fechaInput));
             } else {
                 actualizarGraficoPuntos(null);
             }
@@ -504,6 +464,7 @@
             }
         };
 
+        // FINALIZAR TAREA - Guarda en ambos: tabla temporal e historial persistente
         window.finalizarTarea = async function(id) {
             if(!confirm('¿Finalizar tarea?')) return;
             const snap = await get(ref(db, `tareas/${id}`));
@@ -511,80 +472,47 @@
             let totalMS = (t.acumuladoMS || 0);
             if(t.estado === "activo") totalMS += (Date.now() - t.inicioMS);
             
-            const tareaFinalizada = { 
-                fin: new Date().toLocaleTimeString('es-ES'), 
-                total: Math.max(1, Math.round(totalMS / 60000)), 
-                estado: "finalizado" 
-            };
+            const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
+            const horaFin = new Date().toLocaleTimeString('es-ES');
             
-            // Guardar en HISTORIAL PERSISTENTE
-            const historialData = {
+            // 1. Actualizar tabla temporal
+            await update(ref(db, `tareas/${id}`), { 
+                fin: horaFin, 
+                total: tiempoTotal, 
+                estado: "finalizado" 
+            });
+            
+            // 2. Guardar en HISTORIAL PERSISTENTE (para gráficos)
+            await push(tareasHistorialRef, {
                 operario: t.operario,
                 numSerie: t.numSerie,
                 codigo: t.codigo,
                 fecha: t.fecha,
                 inicio: t.inicio,
-                fin: tareaFinalizada.fin,
-                total: tareaFinalizada.total,
+                fin: horaFin,
+                total: tiempoTotal,
                 tipo: "produccion",
                 timestamp: Date.now()
-            };
-            
-            await push(tareasHistorialRef, historialData);
-            await update(ref(db, `tareas/${id}`), tareaFinalizada);
+            });
         };
 
         window.borrarTarea = (id) => { 
-            if (confirm('¿Borrar tarea?')) remove(ref(db, `tareas/${id}`)); 
+            if (confirm('¿Borrar tarea de la tabla temporal?')) remove(ref(db, `tareas/${id}`)); 
         };
         
         window.borrarTodoElRegistro = () => { 
-            if (confirm("¿BORRAR TODO EL REGISTRO DE TAREAS ACTIVAS?\n\nLos datos de los gráficos NO se borrarán.")) {
+            if (confirm("¿BORRAR TODA LA TABLA TEMPORAL?\n\nLos datos de los gráficos NO se borrarán porque están guardados en el historial.")) {
                 remove(tareasRef);
             }
         };
 
         window.borrarHistorialGrafico = () => {
-            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE TODO EL HISTORIAL DE LOS GRÁFICOS?\n\nEsto borrará todos los datos de productividad y tareas del historial.\n\n¡Esta acción no se puede deshacer!")) {
+            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\n\nEsto borrará todos los datos de los gráficos.\n\n¡No se puede deshacer!")) {
                 remove(tareasHistorialRef);
             }
         };
 
-        // REGISTRAR JORNADA - Guarda en tabla temporal y en historial persistente
-        window.registrarJornada = async (tipo) => {
-            const operario = document.getElementById('selectOperario').value;
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            const esEntrada = tipo === 'INICIO';
-            
-            // 1. Guardar en tabla temporal (para visualización inmediata)
-            await push(tareasRef, { 
-                operario, 
-                numSerie: "---", 
-                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA", 
-                fecha: fechaActual, 
-                inicio: horaActual, 
-                fin: "---", 
-                total: "REGISTRO",  // Texto para la tabla
-                estado: "finalizado", 
-                tipo: "jornada" 
-            });
-            
-            // 2. Guardar en HISTORIAL PERSISTENTE (para gráficos)
-            // Las jornadas no tienen tiempo numérico, se identifican por tipo
-            await push(tareasHistorialRef, {
-                operario: operario,
-                numSerie: "---",
-                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA",
-                fecha: fechaActual,
-                inicio: horaActual,
-                fin: "---",
-                total: 0,  // 0 indica que no es una tarea productiva
-                tipo: "jornada",
-                timestamp: Date.now()
-            });
-        };
-
+        // REPOSICIÓN - Guarda en historial al finalizar
         window.toggleReposicion = async function() {
             const ahora = Date.now();
             const snapTareas = await get(tareasRef);
@@ -603,7 +531,35 @@
             } else {
                 const snapR = await get(reposicionRef);
                 const infoR = snapR.val();
-                push(tareasRef, { operario: infoR.operario || "SISTEMA", numSerie: "---", codigo: "📦 REPOSICIÓN", fecha: infoR.fecha, inicio: infoR.horaTexto, fin: new Date().toLocaleTimeString('es-ES'), total: Math.round((ahora - infoR.inicioMS) / 60000) || 1, estado: "finalizado", tipo: "reposicion" });
+                const horaFin = new Date().toLocaleTimeString('es-ES');
+                const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
+                
+                // Guardar en tabla temporal
+                push(tareasRef, { 
+                    operario: infoR.operario || "SISTEMA", 
+                    numSerie: "---", 
+                    codigo: "📦 REPOSICIÓN", 
+                    fecha: infoR.fecha, 
+                    inicio: infoR.horaTexto, 
+                    fin: horaFin, 
+                    total: duracion, 
+                    estado: "finalizado", 
+                    tipo: "reposicion" 
+                });
+                
+                // Guardar en HISTORIAL
+                push(tareasHistorialRef, {
+                    operario: infoR.operario || "SISTEMA",
+                    numSerie: "---",
+                    codigo: "📦 REPOSICIÓN",
+                    fecha: infoR.fecha,
+                    inicio: infoR.horaTexto,
+                    fin: horaFin,
+                    total: duracion,
+                    tipo: "reposicion",
+                    timestamp: Date.now()
+                });
+                
                 Object.keys(tareas).forEach(id => {
                     if (tareas[id].estado === "pausa_reposicion") {
                         updates[`tareas/${id}/estado`] = "activo";
@@ -615,11 +571,13 @@
             if (Object.keys(updates).length > 0) update(ref(db), updates);
         };
 
+        // INCIDENCIA - Guarda en historial al finalizar
         window.toggleIncidencia = async function() {
             const ahora = Date.now();
             const snapTareas = await get(tareasRef);
             const tareas = snapTareas.val() || {};
             const updates = {};
+            
             if (!hayIncidenciaGlobal) {
                 const motivo = prompt("Motivo de la incidencia:"); 
                 if (!motivo) return;
@@ -634,20 +592,53 @@
             } else {
                 const snapI = await get(incidenciaRef);
                 const infoInc = snapI.val();
-                push(tareasRef, { operario: infoInc.operario || "SISTEMA", numSerie: "---", codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, fecha: infoInc.fecha, inicio: infoInc.horaTexto, fin: new Date().toLocaleTimeString('es-ES'), total: Math.round((ahora - infoInc.inicioMS) / 60000) || 1, estado: "finalizado", tipo: "incidencia" });
+                const horaFin = new Date().toLocaleTimeString('es-ES');
+                const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
+                
+                // Guardar en tabla temporal
+                push(tareasRef, { 
+                    operario: infoInc.operario || "SISTEMA", 
+                    numSerie: "---", 
+                    codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, 
+                    fecha: infoInc.fecha, 
+                    inicio: infoInc.horaTexto, 
+                    fin: horaFin, 
+                    total: duracion, 
+                    estado: "finalizado", 
+                    tipo: "incidencia" 
+                });
+                
+                // Guardar en HISTORIAL
+                push(tareasHistorialRef, {
+                    operario: infoInc.operario || "SISTEMA",
+                    numSerie: "---",
+                    codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
+                    fecha: infoInc.fecha,
+                    inicio: infoInc.horaTexto,
+                    fin: horaFin,
+                    total: duracion,
+                    tipo: "incidencia",
+                    timestamp: Date.now()
+                });
+                
                 Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausa_incidencia") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; }
+                    if (tareas[id].estado === "pausa_incidencia") { 
+                        updates[`tareas/${id}/estado`] = "activo"; 
+                        updates[`tareas/${id}/inicioMS`] = ahora; 
+                    }
                 });
                 update(incidenciaRef, { activa: false, inicioMS: 0 });
             }
             if (Object.keys(updates).length > 0) update(ref(db), updates);
         };
 
+        // DESAYUNO/PAUSA - Guarda en historial al finalizar
         window.togglePausa = async function() {
             const ahora = Date.now(); 
             const snapTareas = await get(tareasRef); 
             const tareas = snapTareas.val() || {}; 
             const updates = {};
+            
             if (!estaPausadoGlobal) {
                 update(pausaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
                 Object.keys(tareas).forEach(id => {
@@ -660,13 +651,78 @@
             } else {
                 const snapP = await get(pausaRef);
                 const infoP = snapP.val();
-                push(tareasRef, { operario: infoP.operario || "SISTEMA", numSerie: "---", codigo: "☕ DESAYUNO", fecha: infoP.fecha, inicio: infoP.horaTexto, fin: new Date().toLocaleTimeString('es-ES'), total: Math.round((ahora - infoP.inicioMS) / 60000) || 1, estado: "finalizado", tipo: "descanso" });
+                const horaFin = new Date().toLocaleTimeString('es-ES');
+                const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
+                
+                // Guardar en tabla temporal
+                push(tareasRef, { 
+                    operario: infoP.operario || "SISTEMA", 
+                    numSerie: "---", 
+                    codigo: "☕ DESAYUNO", 
+                    fecha: infoP.fecha, 
+                    inicio: infoP.horaTexto, 
+                    fin: horaFin, 
+                    total: duracion, 
+                    estado: "finalizado", 
+                    tipo: "descanso" 
+                });
+                
+                // Guardar en HISTORIAL
+                push(tareasHistorialRef, {
+                    operario: infoP.operario || "SISTEMA",
+                    numSerie: "---",
+                    codigo: "☕ DESAYUNO",
+                    fecha: infoP.fecha,
+                    inicio: infoP.horaTexto,
+                    fin: horaFin,
+                    total: duracion,
+                    tipo: "descanso",
+                    timestamp: Date.now()
+                });
+                
                 Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausado_desayuno") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; }
+                    if (tareas[id].estado === "pausado_desayuno") { 
+                        updates[`tareas/${id}/estado`] = "activo"; 
+                        updates[`tareas/${id}/inicioMS`] = ahora; 
+                    }
                 });
                 update(pausaRef, { activa: false, inicioMS: 0 });
             }
             if (Object.keys(updates).length > 0) update(ref(db), updates);
+        };
+
+        // JORNADA (ENTRADA/SALIDA) - Guarda en ambos: tabla temporal e historial persistente
+        window.registrarJornada = async (tipo) => {
+            const operario = document.getElementById('selectOperario').value;
+            const horaActual = new Date().toLocaleTimeString('es-ES');
+            const fechaActual = obtenerFecha();
+            const esEntrada = tipo === 'INICIO';
+            
+            // 1. Guardar en tabla temporal (se puede borrar)
+            await push(tareasRef, { 
+                operario, 
+                numSerie: "---", 
+                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA", 
+                fecha: fechaActual, 
+                inicio: horaActual, 
+                fin: "---", 
+                total: "REGISTRO",  // Texto para mostrar en tabla
+                estado: "finalizado", 
+                tipo: "jornada" 
+            });
+            
+            // 2. Guardar en HISTORIAL PERSISTENTE (para gráficos, nunca se borra con la tabla)
+            await push(tareasHistorialRef, {
+                operario: operario,
+                numSerie: "---",
+                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA",
+                fecha: fechaActual,
+                inicio: horaActual,
+                fin: "---",
+                total: 0,  // 0 para identificar que es jornada, no tarea productiva
+                tipo: "jornada",
+                timestamp: Date.now()
+            });
         };
 
         window.iniciarTarea = function() {
@@ -674,11 +730,24 @@
             const serie = document.getElementById('numSerie').value.trim();
             const cod = document.getElementById('codigo').value.trim();
             if (!serie || !cod) return;
-            push(tareasRef, { operario, numSerie: serie, codigo: cod, fecha: obtenerFecha(), operarios: document.getElementById('numOperarios').value, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), acumuladoMS: 0, estado: "activo", tipo: "produccion" });
-            document.getElementById('numSerie').value = ''; document.getElementById('codigo').value = ''; document.getElementById('numSerie').focus();
+            push(tareasRef, { 
+                operario, 
+                numSerie: serie, 
+                codigo: cod, 
+                fecha: obtenerFecha(), 
+                operarios: document.getElementById('numOperarios').value, 
+                inicio: new Date().toLocaleTimeString('es-ES'), 
+                inicioMS: Date.now(), 
+                acumuladoMS: 0, 
+                estado: "activo", 
+                tipo: "produccion" 
+            });
+            document.getElementById('numSerie').value = ''; 
+            document.getElementById('codigo').value = ''; 
+            document.getElementById('numSerie').focus();
         };
 
-        // Escuchar HISTORIAL (persistente) - Actualiza AMBOS gráficos
+        // ESCUCHADOR: HISTORIAL (persistente) - Actualiza ambos gráficos
         onValue(tareasHistorialRef, (snapshot) => {
             todasLasTareas = snapshot.val() || {};
             
@@ -691,13 +760,14 @@
             actualizarGraficoProductividad();
         });
 
-        // Escuchar TAREAS ACTIVAS (temporal) - Solo para la tabla
+        // ESCUCHADOR: TAREAS (temporal) - Solo actualiza la tabla visual
         onValue(tareasRef, (snapshot) => {
             const cuerpo = document.getElementById('cuerpoTabla'); 
             cuerpo.innerHTML = "";
             const datos = snapshot.val(); 
             
             if (!datos) return;
+            
             Object.keys(datos).forEach(id => {
                 const t = datos[id];
                 const activo = t.estado === "activo";
@@ -708,7 +778,7 @@
                 if(t.estado === "pausado_desayuno") rowClass = "bg-orange-50";
                 if(t.estado === "pausa_reposicion") rowClass = "bg-yellow-50";
 
-                // Mostrar tiempo correctamente según el tipo
+                // Determinar qué mostrar en la columna "Tiempo"
                 let tiempoMostrado;
                 if (activo) {
                     tiempoMostrado = `<span class="contador-vivo text-amber-600" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
@@ -721,10 +791,10 @@
                 } else if (t.estado === "pausado_desayuno") {
                     tiempoMostrado = `<span class="text-orange-400 italic">☕ En Desayuno</span>`;
                 } else if (t.tipo === 'jornada') {
-                    // Para jornadas, mostrar "REGISTRO" como antes
-                    tiempoMostrado = `<span class="text-slate-500 font-bold">REGISTRO</span>`;
+                    // JORNADA: mostrar "REGISTRO" como antes
+                    tiempoMostrado = `<span class="text-slate-500 font-bold text-xs">REGISTRO</span>`;
                 } else {
-                    // Para tareas finalizadas normales, mostrar minutos
+                    // Tarea finalizada normal
                     tiempoMostrado = `${t.total} min`;
                 }
 
@@ -737,9 +807,7 @@
                         <td class="p-4 text-center font-bold text-xs">${t.operarios || '-'}</td>
                         <td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
                         <td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
-                        <td class="p-4 font-black">
-                            ${tiempoMostrado}
-                        </td>
+                        <td class="p-4 font-black text-center">${tiempoMostrado}</td>
                         <td class="p-4 text-right flex justify-end gap-2">
                             ${(activo || t.estado === "pausa_manual") ? `
                                 <button onclick="togglePausaTarea('${id}')" class="${activo ? 'bg-blue-500' : 'bg-emerald-500'} text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">
@@ -758,23 +826,34 @@
             document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
             document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
         });
+        
         onValue(pausaRef, s => {
             const d = s.val(); estaPausadoGlobal = d?.activa; inicioPausaMS = d?.inicioMS;
             document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
             document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
         });
+        
         onValue(reposicionRef, s => {
             const d = s.val(); hayReposicionGlobal = d?.activa; inicioReposicionMS = d?.inicioMS;
             document.getElementById('btnReposicion').innerHTML = hayReposicionGlobal ? "📦 LISTO" : "📦 REPOSICIÓN";
             document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposicionGlobal);
         });
 
-        window.handleKeyPress = (e, nextId) => { if (e.key === 'Enter') { e.preventDefault(); if (nextId) document.getElementById(nextId).focus(); else window.iniciarTarea(); } };
-        window.exportarExcel = () => { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("tablaProduccion")), "Dosmart_Produccion.xlsx"); };
+        window.handleKeyPress = (e, nextId) => { 
+            if (e.key === 'Enter') { 
+                e.preventDefault(); 
+                if (nextId) document.getElementById(nextId).focus(); 
+                else window.iniciarTarea(); 
+            } 
+        };
+        
+        window.exportarExcel = () => { 
+            XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("tablaProduccion")), "Dosmart_Produccion.xlsx"); 
+        };
     </script>
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
-    <!-- Modal para eliminar punto -->
+    <!-- Modal para eliminar punto del historial -->
     <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
             <h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
@@ -791,6 +870,7 @@
     </div>
 
     <div class="max-w-7xl mx-auto">
+        <!-- Header -->
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dosmart <span class="text-amber-500">Production</span></h1>
             <div class="flex flex-wrap justify-center gap-3">
@@ -805,25 +885,31 @@
             </div>
         </div>
 
+        <!-- Botones Entrada/Salida -->
         <div class="grid grid-cols-2 gap-4 mb-6">
-            <button onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg">☀️ Entrada</button>
-            <button onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg">🌙 Salida</button>
+            <button onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
+            <button onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors">🌙 Salida</button>
         </div>
 
+        <!-- Formulario Nueva Tarea -->
         <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div class="flex flex-col"><label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
+            <div class="flex flex-col">
+                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
                 <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
                     <option>Adrian García</option>
                     <option>Alberto Colmenero</option>
                 </select>
             </div>
-            <div class="flex flex-col"><label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
+            <div class="flex flex-col">
+                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
                 <input id="numSerie" type="text" onkeypress="handleKeyPress(event, 'codigo')" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
             </div>
-            <div class="flex flex-col"><label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Tarea</label>
+            <div class="flex flex-col">
+                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Tarea</label>
                 <input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
             </div>
-            <div class="flex flex-col"><label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Equipo</label>
+            <div class="flex flex-col">
+                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Equipo</label>
                 <select id="numOperarios" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none">
                     <option value="1">1 Pers.</option>
                     <option value="2">2 Pers.</option>
@@ -833,27 +919,40 @@
             <button onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
         </div>
 
+        <!-- TABLA TEMPORAL (se puede borrar) -->
         <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
+            <div class="bg-slate-900 p-4 flex justify-between items-center">
+                <h3 class="text-amber-400 font-black uppercase text-sm">Tabla de Tareas (Temporal)</h3>
+                <span class="text-slate-400 text-xs">Estos datos se pueden borrar sin afectar los gráficos</span>
+            </div>
             <table id="tablaProduccion" class="w-full text-left">
-                <thead class="bg-slate-900 text-amber-400 text-[10px] font-black uppercase">
+                <thead class="bg-slate-800 text-amber-400 text-[10px] font-black uppercase">
                     <tr>
-                        <th class="p-5">Operario</th><th class="p-5">Fecha</th><th class="p-5">Serie</th><th class="p-5">Tarea</th><th class="p-5 text-center">EQ</th><th class="p-5">H. Inicio</th><th class="p-5">H. Fin</th><th class="p-5">Tiempo</th><th class="p-5 text-right">Acción</th>
+                        <th class="p-4">Operario</th>
+                        <th class="p-4">Fecha</th>
+                        <th class="p-4">Serie</th>
+                        <th class="p-4">Tarea</th>
+                        <th class="p-4 text-center">EQ</th>
+                        <th class="p-4">H. Inicio</th>
+                        <th class="p-4">H. Fin</th>
+                        <th class="p-4 text-center">Tiempo</th>
+                        <th class="p-4 text-right">Acción</th>
                     </tr>
                 </thead>
                 <tbody id="cuerpoTabla" class="divide-y divide-slate-100"></tbody>
             </table>
         </div>
 
-        <!-- Gráfico de Puntos - Tiempo por Tarea -->
+        <!-- GRÁFICO 1: TAREAS INDIVIDUALES (datos del historial) -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
                     <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
-                    <p class="text-xs text-slate-500 mt-1">📊 Solo tareas de producción | Datos persistentes en Firebase</p>
+                    <p class="text-xs text-slate-500 mt-1">📊 Datos persistentes en Firebase | Clic en punto para eliminar del historial</p>
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">Filtrar por fecha:</label>
+                    <label class="text-xs font-bold text-slate-500 uppercase">Filtrar:</label>
                     <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" 
                            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
                     <button onclick="mostrarTodas()" 
@@ -884,7 +983,7 @@
             </div>
         </div>
 
-        <!-- Gráfico de Productividad -->
+        <!-- GRÁFICO 2: PRODUCTIVIDAD MENSUAL (datos del historial) -->
         <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
@@ -948,11 +1047,12 @@
             </div>
         </div>
 
+        <!-- Botones de borrado -->
         <div class="flex justify-center gap-4 p-8">
-            <button onclick="borrarTodoElRegistro()" class="text-red-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-600 transition-colors">
-                🗑️ Borrar Solo Tabla Temporal
+            <button onclick="borrarTodoElRegistro()" class="text-red-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-600 transition-colors border border-red-200 px-4 py-2 rounded-lg">
+                🗑️ Borrar Tabla Temporal
             </button>
-            <button onclick="borrarHistorialGrafico()" class="text-orange-600 font-bold text-[10px] uppercase tracking-widest hover:text-orange-800 transition-colors bg-orange-50 px-4 py-2 rounded-lg">
+            <button onclick="borrarHistorialGrafico()" class="text-orange-600 font-bold text-[10px] uppercase tracking-widest hover:text-orange-800 transition-colors bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg">
                 ⚠️ Borrar Historial Permanente
             </button>
         </div>
