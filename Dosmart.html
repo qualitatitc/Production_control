@@ -34,6 +34,8 @@
         let estaPausadoGlobal = false;
         let hayIncidenciaGlobal = false;
         let hayReposicionGlobal = false;
+        let lineaIniciada = false; // Nueva variable para controlar si hay entrada registrada
+        let numOperariosActivos = 1; // Número de operarios trabajando (1 o 2)
         let inicioPausaMS = 0;
         let inicioIncidenciaMS = 0;
         let inicioReposicionMS = 0;
@@ -42,7 +44,77 @@
         let todasLasTareas = {};
         let primeraVez = true; // Para establecer filtro inicial
 
-        const obtenerFecha = () => new Date().toLocaleDateString('es-ES');
+        // NUEVA FUNCIÓN: Actualizar estado de botones según línea iniciada/parada
+        function actualizarEstadoBotones() {
+            const btnPausa = document.getElementById('btnPausa');
+            const btnIncidencia = document.getElementById('btnIncidencia');
+            const btnReposicion = document.getElementById('btnReposicion');
+            const btnMantenimiento = document.getElementById('btnMantenimiento');
+            const btnIniciarTarea = document.getElementById('btnIniciarTarea');
+            const btnEntrada = document.getElementById('btnEntrada');
+            const btnSalida = document.getElementById('btnSalida');
+            const indicadorLinea = document.getElementById('indicadorLinea');
+            
+            if (lineaIniciada) {
+                // Línea activa: habilitar desayuno e incidencia, deshabilitar mantenimiento y reposición
+                btnPausa.disabled = false;
+                btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                btnIncidencia.disabled = false;
+                btnIncidencia.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                btnReposicion.disabled = true;
+                btnReposicion.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                btnMantenimiento.disabled = true;
+                btnMantenimiento.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                btnIniciarTarea.disabled = false;
+                btnIniciarTarea.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                // Deshabilitar entrada, habilitar salida
+                btnEntrada.disabled = true;
+                btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
+                btnSalida.disabled = false;
+                btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                // Actualizar indicador
+                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
+            } else {
+                // Línea parada: solo mantenimiento y reposición activos
+                btnPausa.disabled = true;
+                btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                btnIncidencia.disabled = true;
+                btnIncidencia.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                btnReposicion.disabled = false;
+                btnReposicion.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                btnMantenimiento.disabled = false;
+                btnMantenimiento.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                btnIniciarTarea.disabled = true;
+                btnIniciarTarea.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                // Habilitar entrada, deshabilitar salida
+                btnEntrada.disabled = false;
+                btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnSalida.disabled = true;
+                btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                // Actualizar indicador
+                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
+            }
+        }
+
+        const obtenerFecha = () => {
+            const hoy = new Date();
+            const dia = String(hoy.getDate()).padStart(2, '0');
+            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+            const anio = hoy.getFullYear();
+            return `${dia}/${mes}/${anio}`;
+        };
         const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
 
         // NUEVA FUNCIÓN: Obtener fecha de hoy en formato HTML (YYYY-MM-DD)
@@ -84,6 +156,10 @@
             const tareasAdrian = [];
             const tareasAlberto = [];
             
+            console.log('=== DEBUG GRÁFICO TAREAS ===');
+            console.log('Fecha filtro:', fechaFiltro);
+            console.log('Total tareas en historial:', Object.keys(todasLasTareas).length);
+            
             if (todasLasTareas) {
                 // Filtrar solo tareas de producción finalizadas
                 const tareasProduccion = Object.entries(todasLasTareas)
@@ -92,6 +168,11 @@
                         const esProduccion = t.tipo === 'produccion';
                         const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
                         const cumpleFecha = !fechaFiltro || t.fecha === fechaFiltro;
+                        
+                        if (esProduccion && !cumpleFecha) {
+                            console.log('Tarea producción descartada por fecha:', t.fecha, 'vs filtro:', fechaFiltro);
+                        }
+                        
                         return esProduccion && tieneTiempo && cumpleFecha;
                     })
                     .map(([id, t]) => ({
@@ -100,6 +181,8 @@
                         tiempoNum: parseInt(t.total),
                         horaMinutos: convertirHoraAMinutos(t.inicio)
                     }));
+                
+                console.log('Tareas producción filtradas:', tareasProduccion.length);
                 
                 // Ordenar por hora de inicio
                 tareasProduccion.sort((a, b) => a.horaMinutos - b.horaMinutos);
@@ -123,6 +206,8 @@
                         tareasAlberto.push(punto);
                     }
                 });
+                
+                console.log('Adrian:', tareasAdrian.length, 'Alberto:', tareasAlberto.length);
             }
 
             const ctx = document.getElementById('graficoTareas').getContext('2d');
@@ -232,11 +317,35 @@
             });
         }
 
-        // GRÁFICO 2: PRODUCTIVIDAD DIARIA (de un mes)
+        // Función para calcular línea de tendencia (regresión lineal)
+        function calcularTendencia(datos) {
+            const puntos = datos
+                .map((y, x) => ({ x, y }))
+                .filter(p => p.y !== null && !isNaN(p.y));
+            
+            if (puntos.length < 2) return { tendencia: [], pendiente: 0 };
+            
+            const n = puntos.length;
+            const sumaX = puntos.reduce((sum, p) => sum + p.x, 0);
+            const sumaY = puntos.reduce((sum, p) => sum + p.y, 0);
+            const sumaXY = puntos.reduce((sum, p) => sum + p.x * p.y, 0);
+            const sumaX2 = puntos.reduce((sum, p) => sum + p.x * p.x, 0);
+            
+            const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
+            const intercept = (sumaY - pendiente * sumaX) / n;
+            
+            const tendencia = datos.map((_, x) => {
+                if (datos[x] === null) return null;
+                return pendiente * x + intercept;
+            });
+            
+            return { tendencia, pendiente };
+        }
+
+        // GRÁFICO 2: PRODUCTIVIDAD DIARIA (de un mes) - Media de ambos operarios
         function calcularProductividadDiaria(anio, mes) {
             const diasDelMes = new Date(anio, mes, 0).getDate();
-            const datosAdrian = new Array(diasDelMes).fill(null);
-            const datosAlberto = new Array(diasDelMes).fill(null);
+            const datosProductividad = new Array(diasDelMes).fill(null);
             
             const tareasPorDia = {};
             const jornadasPorDia = {};
@@ -254,9 +363,12 @@
                             if (!tareasPorDia[key]) tareasPorDia[key] = 0;
                             tareasPorDia[key]++;
                         } else if (t.tipo === 'jornada') {
-                            if (!jornadasPorDia[key]) jornadasPorDia[key] = {};
+                            if (!jornadasPorDia[key]) jornadasPorDia[key] = { entradas: [] };
                             if (t.codigo && t.codigo.includes('ENTRADA')) {
-                                jornadasPorDia[key].entrada = t.inicio;
+                                jornadasPorDia[key].entradas.push({
+                                    hora: t.inicio,
+                                    numOperarios: t.numOperarios || 1
+                                });
                             } else if (t.codigo && t.codigo.includes('SALIDA')) {
                                 jornadasPorDia[key].salida = t.inicio;
                             }
@@ -266,38 +378,93 @@
             }
             
             for (let dia = 1; dia <= diasDelMes; dia++) {
-                // Adrian
+                const productividadesDia = [];
+                
+                // Procesar Adrian
                 const keyAdrian = `${dia}-Adrian García`;
                 const tareasAdrianCount = tareasPorDia[keyAdrian] || 0;
                 const jornadaAdrian = jornadasPorDia[keyAdrian] || {};
                 
-                if (jornadaAdrian.entrada && jornadaAdrian.salida && tareasAdrianCount > 0) {
-                    const entradaMin = convertirHoraAMinutos(jornadaAdrian.entrada);
+                if (jornadaAdrian.salida && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0 && tareasAdrianCount > 0) {
                     const salidaMin = convertirHoraAMinutos(jornadaAdrian.salida);
-                    const horasTrabajadas = (salidaMin - entradaMin) / 60;
                     
-                    if (horasTrabajadas > 0) {
-                        datosAdrian[dia - 1] = (tareasAdrianCount * 7) / horasTrabajadas;
+                    let horas1Op = 0;
+                    let horas2Op = 0;
+                    
+                    // Calcular horas por cada configuración de operarios
+                    jornadaAdrian.entradas.forEach((entrada, index) => {
+                        const entradaMin = convertirHoraAMinutos(entrada.hora);
+                        let finPeriodoMin;
+                        
+                        if (index < jornadaAdrian.entradas.length - 1) {
+                            finPeriodoMin = convertirHoraAMinutos(jornadaAdrian.entradas[index + 1].hora);
+                        } else {
+                            finPeriodoMin = salidaMin;
+                        }
+                        
+                        const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+                        
+                        if (entrada.numOperarios === 1) {
+                            horas1Op += horasPeriodo;
+                        } else if (entrada.numOperarios === 2) {
+                            horas2Op += horasPeriodo;
+                        }
+                    });
+                    
+                    // Fórmula: (Tareas × 7) / (Horas1Op + (Horas2Op × 2))
+                    const denominador = horas1Op + (horas2Op * 2);
+                    if (denominador > 0) {
+                        const prodAdrian = (tareasAdrianCount * 7) / denominador;
+                        productividadesDia.push(prodAdrian);
                     }
                 }
                 
-                // Alberto
+                // Procesar Alberto
                 const keyAlberto = `${dia}-Alberto Colmenero`;
                 const tareasAlbertoCount = tareasPorDia[keyAlberto] || 0;
                 const jornadaAlberto = jornadasPorDia[keyAlberto] || {};
                 
-                if (jornadaAlberto.entrada && jornadaAlberto.salida && tareasAlbertoCount > 0) {
-                    const entradaMin = convertirHoraAMinutos(jornadaAlberto.entrada);
+                if (jornadaAlberto.salida && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0 && tareasAlbertoCount > 0) {
                     const salidaMin = convertirHoraAMinutos(jornadaAlberto.salida);
-                    const horasTrabajadas = (salidaMin - entradaMin) / 60;
                     
-                    if (horasTrabajadas > 0) {
-                        datosAlberto[dia - 1] = (tareasAlbertoCount * 7) / horasTrabajadas;
+                    let horas1Op = 0;
+                    let horas2Op = 0;
+                    
+                    // Calcular horas por cada configuración de operarios
+                    jornadaAlberto.entradas.forEach((entrada, index) => {
+                        const entradaMin = convertirHoraAMinutos(entrada.hora);
+                        let finPeriodoMin;
+                        
+                        if (index < jornadaAlberto.entradas.length - 1) {
+                            finPeriodoMin = convertirHoraAMinutos(jornadaAlberto.entradas[index + 1].hora);
+                        } else {
+                            finPeriodoMin = salidaMin;
+                        }
+                        
+                        const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+                        
+                        if (entrada.numOperarios === 1) {
+                            horas1Op += horasPeriodo;
+                        } else if (entrada.numOperarios === 2) {
+                            horas2Op += horasPeriodo;
+                        }
+                    });
+                    
+                    // Fórmula: (Tareas × 7) / (Horas1Op + (Horas2Op × 2))
+                    const denominador = horas1Op + (horas2Op * 2);
+                    if (denominador > 0) {
+                        const prodAlberto = (tareasAlbertoCount * 7) / denominador;
+                        productividadesDia.push(prodAlberto);
                     }
+                }
+                
+                // Calcular media del día (ambos operarios)
+                if (productividadesDia.length > 0) {
+                    datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
                 }
             }
             
-            return { datosAdrian, datosAlberto, diasDelMes };
+            return { datosProductividad, diasDelMes };
         }
 
         function actualizarGraficoProductividadDiaria() {
@@ -306,9 +473,9 @@
             
             const [anio, mes] = inputMes.split('-').map(Number);
             
-            const { datosAdrian, datosAlberto, diasDelMes } = calcularProductividadDiaria(anio, mes);
+            const { datosProductividad, diasDelMes } = calcularProductividadDiaria(anio, mes);
             
-            const todosLosValores = [...datosAdrian, ...datosAlberto].filter(v => v !== null && !isNaN(v));
+            const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
             const media = todosLosValores.length > 0 ? 
                 todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
             
@@ -327,6 +494,19 @@
                     labels: labels,
                     datasets: [
                         {
+                            label: 'Productividad',
+                            data: datosProductividad,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 3,
+                            pointRadius: 6,
+                            pointBackgroundColor: '#3b82f6',
+                            fill: true,
+                            tension: 0.3,
+                            spanGaps: true,
+                            order: 2
+                        },
+                        {
                             label: 'Media',
                             data: lineaMedia,
                             borderColor: '#fbbf24',
@@ -337,38 +517,34 @@
                             fill: false,
                             tension: 0,
                             order: 1
-                        },
-                        {
-                            label: 'Adrian García',
-                            data: datosAdrian,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 2,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#3b82f6',
-                            fill: false,
-                            tension: 0.3,
-                            spanGaps: true,
-                            order: 2
-                        },
-                        {
-                            label: 'Alberto Colmenero',
-                            data: datosAlberto,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            borderWidth: 2,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#ef4444',
-                            fill: false,
-                            tension: 0.3,
-                            spanGaps: true,
-                            order: 3
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: async (e) => {
+                        const points = chartProductividad.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                        if (points.length) {
+                            const firstPoint = points[0];
+                            const datasetIndex = firstPoint.datasetIndex;
+                            
+                            // No hacer nada si es la línea de media (datasetIndex === 1)
+                            if (datasetIndex === 1) return;
+                            
+                            const index = firstPoint.index;
+                            const dia = index + 1;
+                            
+                            const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
+                            const [anioSel, mesSel] = inputMes.split('-').map(Number);
+                            const fechaBuscar = `${String(dia).padStart(2, '0')}/${String(mesSel).padStart(2, '0')}/${anioSel}`;
+                            
+                            mostrarModalEliminarDiaTodos(dia, mesSel, anioSel, fechaBuscar);
+                        }
+                    },
+                    onHover: (e, activeElements) => {
+                        e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                    },
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
@@ -384,12 +560,12 @@
                     },
                     scales: {
                         x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
-                        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / horas)', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
+                        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
                     }
                 }
             });
 
-            const diasConDatos = todosLosValores.length > 0 ? Math.ceil(todosLosValores.length / 2) : 0;
+            const diasConDatos = todosLosValores.length;
             const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
             document.getElementById('mediaProductividadDiaria').textContent = `Media de ${nombreMes}: ${media.toFixed(2)}`;
             document.getElementById('diasConDatosDiaria').textContent = `Días con datos: ${diasConDatos}`;
@@ -399,41 +575,40 @@
             actualizarGraficoProductividadDiaria();
         };
 
-        // GRÁFICO 3: PRODUCTIVIDAD MENSUAL (media de cada mes completo)
+        // GRÁFICO 3: PRODUCTIVIDAD MENSUAL - Media de productividad diaria de cada mes
         let chartProductividadMensual = null;
 
         function calcularProductividadMensual(anio) {
             const meses = Array.from({length: 12}, (_, i) => i + 1);
-            const datosAdrian = new Array(12).fill(null);
-            const datosAlberto = new Array(12).fill(null);
+            const datosProductividad = new Array(12).fill(null);
             
             meses.forEach(mes => {
-                const { datosAdrian: diasAdrian, datosAlberto: diasAlberto } = calcularProductividadDiaria(anio, mes);
+                // Obtener los datos de productividad diaria del mes
+                const { datosProductividad: diasMes } = calcularProductividadDiaria(anio, mes);
                 
-                // Calcular media del mes para Adrian
-                const valoresAdrian = diasAdrian.filter(v => v !== null && !isNaN(v));
-                if (valoresAdrian.length > 0) {
-                    datosAdrian[mes - 1] = valoresAdrian.reduce((a, b) => a + b, 0) / valoresAdrian.length;
-                }
-                
-                // Calcular media del mes para Alberto
-                const valoresAlberto = diasAlberto.filter(v => v !== null && !isNaN(v));
-                if (valoresAlberto.length > 0) {
-                    datosAlberto[mes - 1] = valoresAlberto.reduce((a, b) => a + b, 0) / valoresAlberto.length;
+                // Calcular la media simple de los días con datos
+                const valoresMes = diasMes.filter(v => v !== null && !isNaN(v));
+                if (valoresMes.length > 0) {
+                    datosProductividad[mes - 1] = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
                 }
             });
             
-            return { datosAdrian, datosAlberto };
+            return { datosProductividad };
         }
 
         function actualizarGraficoProductividadMensual() {
             const anio = parseInt(document.getElementById('selectAnioProductividadMensual').value);
             
-            const { datosAdrian, datosAlberto } = calcularProductividadMensual(anio);
+            const { datosProductividad } = calcularProductividadMensual(anio);
             
-            const todosLosValores = [...datosAdrian, ...datosAlberto].filter(v => v !== null && !isNaN(v));
+            const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
             const media = todosLosValores.length > 0 ? 
                 todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
+            
+            // Calcular línea de tendencia
+            const { tendencia, pendiente } = calcularTendencia(datosProductividad);
+            const esTendenciaPositiva = pendiente > 0;
+            const colorTendencia = esTendenciaPositiva ? '#10b981' : '#ef4444'; // Verde si positivo, rojo si negativo
             
             const lineaMedia = new Array(12).fill(media);
             const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -450,19 +625,10 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Adrian García',
-                            data: datosAdrian,
+                            label: 'Productividad Mensual',
+                            data: datosProductividad,
                             backgroundColor: '#3b82f6',
                             borderColor: '#2563eb',
-                            borderWidth: 2,
-                            borderRadius: 8,
-                            order: 2
-                        },
-                        {
-                            label: 'Alberto Colmenero',
-                            data: datosAlberto,
-                            backgroundColor: '#ef4444',
-                            borderColor: '#dc2626',
                             borderWidth: 2,
                             borderRadius: 8,
                             order: 3
@@ -479,6 +645,18 @@
                             fill: false,
                             tension: 0,
                             order: 1
+                        },
+                        {
+                            label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
+                            data: tendencia,
+                            type: 'line',
+                            borderColor: colorTendencia,
+                            backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0,
+                            order: 2
                         }
                     ]
                 },
@@ -506,16 +684,20 @@
                         },
                         y: { 
                             beginAtZero: true, 
-                            title: { display: true, text: 'Productividad Media (tareas×7 / horas)', font: { weight: 'bold' } }, 
+                            title: { display: true, text: 'Productividad Media (tareas×7 / (h×op))', font: { weight: 'bold' } }, 
                             grid: { color: '#e2e8f0' } 
                         }
                     }
                 }
             });
 
-            const mesesConDatos = todosLosValores.length > 0 ? Math.ceil(todosLosValores.length / 2) : 0;
+            const mesesConDatos = todosLosValores.length;
+            const tendenciaTexto = esTendenciaPositiva ? 
+                `<span class="text-green-600">↗ Tendencia positiva</span>` : 
+                `<span class="text-red-600">↘ Tendencia negativa</span>`;
+            
             document.getElementById('mediaProductividadAnual').textContent = `Media de ${anio}: ${media.toFixed(2)}`;
-            document.getElementById('mesesConDatos').textContent = `Meses con datos: ${mesesConDatos}`;
+            document.getElementById('mesesConDatos').innerHTML = `Meses: ${mesesConDatos} | ${tendenciaTexto}`;
         }
 
         window.cambiarAnioProductividadMensual = function() {
@@ -542,6 +724,116 @@
             
             btnEliminar.onclick = () => eliminarPuntoGrafico(punto.firebaseId);
             modal.classList.remove('hidden');
+        };
+
+        window.mostrarModalEliminarDia = function(dia, mes, anio, operario, fecha) {
+            const modal = document.getElementById('modalEliminar');
+            const info = document.getElementById('infoTareaEliminar');
+            const btnEliminar = document.getElementById('btnConfirmarEliminar');
+            
+            const colorOperario = operario === 'Adrian García' ? 'text-blue-600' : 'text-red-600';
+            const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
+            
+            // Contar cuántas tareas hay ese día
+            let contadorTareas = 0;
+            if (todasLasTareas) {
+                Object.values(todasLasTareas).forEach(t => {
+                    if (t.tipo === 'produccion' && t.fecha === fecha && t.operario === operario) {
+                        contadorTareas++;
+                    }
+                });
+            }
+            
+            info.innerHTML = `
+                <div class="space-y-2">
+                    <p><span class="font-bold text-slate-600">Operario:</span> <span class="${colorOperario} font-bold">${operario}</span></p>
+                    <p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
+                    <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción</span></p>
+                    <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
+                </div>
+            `;
+            
+            btnEliminar.onclick = () => eliminarTareasDia(fecha, operario);
+            modal.classList.remove('hidden');
+        };
+
+        window.eliminarTareasDia = async function(fecha, operario) {
+            if (!confirm(`¿Estás seguro de eliminar TODAS las tareas de ${operario} del ${fecha}?`)) {
+                cerrarModalEliminar();
+                return;
+            }
+            
+            try {
+                const snapshot = await get(tareasHistorialRef);
+                const tareas = snapshot.val() || {};
+                let eliminadas = 0;
+                
+                for (const [id, tarea] of Object.entries(tareas)) {
+                    if (tarea.tipo === 'produccion' && tarea.fecha === fecha && tarea.operario === operario) {
+                        await remove(ref(db, `historial_tareas/${id}`));
+                        eliminadas++;
+                    }
+                }
+                
+                alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
+                cerrarModalEliminar();
+            } catch (error) {
+                alert('Error al eliminar: ' + error.message);
+            }
+        };
+
+        window.mostrarModalEliminarDiaTodos = function(dia, mes, anio, fecha) {
+            const modal = document.getElementById('modalEliminar');
+            const info = document.getElementById('infoTareaEliminar');
+            const btnEliminar = document.getElementById('btnConfirmarEliminar');
+            
+            const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
+            
+            // Contar cuántas tareas hay ese día (ambos operarios)
+            let contadorTareas = 0;
+            if (todasLasTareas) {
+                Object.values(todasLasTareas).forEach(t => {
+                    if (t.tipo === 'produccion' && t.fecha === fecha) {
+                        contadorTareas++;
+                    }
+                });
+            }
+            
+            info.innerHTML = `
+                <div class="space-y-2">
+                    <p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
+                    <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción (todos los operarios)</span></p>
+                    <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
+                </div>
+            `;
+            
+            btnEliminar.onclick = () => eliminarTareasDiaTodos(fecha);
+            modal.classList.remove('hidden');
+        };
+
+        window.eliminarTareasDiaTodos = async function(fecha) {
+            if (!confirm(`¿Estás seguro de eliminar TODAS las tareas del ${fecha}?`)) {
+                cerrarModalEliminar();
+                return;
+            }
+            
+            try {
+                const snapshot = await get(tareasHistorialRef);
+                const tareas = snapshot.val() || {};
+                let eliminadas = 0;
+                
+                for (const [id, tarea] of Object.entries(tareas)) {
+                    if (tarea.tipo === 'produccion' && tarea.fecha === fecha) {
+                        await remove(ref(db, `historial_tareas/${id}`));
+                        eliminadas++;
+                    }
+                }
+                
+                alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
+                cerrarModalEliminar();
+            } catch (error) {
+                alert('Error al eliminar: ' + error.message);
+            }
         };
 
         window.cerrarModalEliminar = function() {
@@ -674,7 +966,7 @@
                 const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
                 
                 // Tabla temporal
-                push(tareasRef, { 
+                await push(tareasRef, { 
                     operario: infoR.operario || "SISTEMA", 
                     numSerie: "---", 
                     codigo: "📦 REPOSICIÓN", 
@@ -687,7 +979,7 @@
                 });
                 
                 // Historial
-                push(tareasHistorialRef, {
+                await push(tareasHistorialRef, {
                     operario: infoR.operario || "SISTEMA",
                     numSerie: "---",
                     codigo: "📦 REPOSICIÓN",
@@ -711,6 +1003,11 @@
         };
 
         window.toggleIncidencia = async function() {
+            if (!lineaIniciada && !hayIncidenciaGlobal) {
+                alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias');
+                return;
+            }
+            
             const ahora = Date.now();
             const snapTareas = await get(tareasRef);
             const tareas = snapTareas.val() || {};
@@ -719,6 +1016,14 @@
             if (!hayIncidenciaGlobal) {
                 const motivo = prompt("Motivo de la incidencia:"); 
                 if (!motivo) return;
+                
+                // Guardar en tabla de incidencias (registro permanente)
+                await push(incidenciasTextoRef, {
+                    descripcion: motivo.trim(),
+                    fecha: obtenerFecha(),
+                    timestamp: Date.now()
+                });
+                
                 update(incidenciaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual() });
                 Object.keys(tareas).forEach(id => {
                     if (tareas[id].estado === "activo") {
@@ -733,7 +1038,7 @@
                 const horaFin = new Date().toLocaleTimeString('es-ES');
                 const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
                 
-                push(tareasRef, { 
+                await push(tareasRef, { 
                     operario: infoInc.operario || "SISTEMA", 
                     numSerie: "---", 
                     codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, 
@@ -745,7 +1050,7 @@
                     tipo: "incidencia" 
                 });
                 
-                push(tareasHistorialRef, {
+                await push(tareasHistorialRef, {
                     operario: infoInc.operario || "SISTEMA",
                     numSerie: "---",
                     codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
@@ -769,6 +1074,11 @@
         };
 
         window.togglePausa = async function() {
+            if (!lineaIniciada && !estaPausadoGlobal) {
+                alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno');
+                return;
+            }
+            
             const ahora = Date.now(); 
             const snapTareas = await get(tareasRef); 
             const tareas = snapTareas.val() || {}; 
@@ -789,7 +1099,7 @@
                 const horaFin = new Date().toLocaleTimeString('es-ES');
                 const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
                 
-                push(tareasRef, { 
+                await push(tareasRef, { 
                     operario: infoP.operario || "SISTEMA", 
                     numSerie: "---", 
                     codigo: "☕ DESAYUNO", 
@@ -801,7 +1111,7 @@
                     tipo: "descanso" 
                 });
                 
-                push(tareasHistorialRef, {
+                await push(tareasHistorialRef, {
                     operario: infoP.operario || "SISTEMA",
                     numSerie: "---",
                     codigo: "☕ DESAYUNO",
@@ -825,55 +1135,143 @@
         };
 
         window.registrarJornada = async (tipo) => {
+            const esEntrada = tipo === 'INICIO';
+            
+            // Validaciones
+            if (esEntrada && lineaIniciada) {
+                alert('⚠️ La línea ya está activa. Debes registrar SALIDA primero.');
+                return;
+            }
+            
+            if (!esEntrada && !lineaIniciada) {
+                alert('⚠️ La línea ya está parada. Debes registrar ENTRADA primero.');
+                return;
+            }
+            
+            // Si es entrada, mostrar modal para seleccionar operarios
+            if (esEntrada) {
+                document.getElementById('modalOperarios').classList.remove('hidden');
+            } else {
+                // Si es salida, registrar directamente
+                await ejecutarRegistroJornada('FIN', 0);
+            }
+        };
+
+        window.confirmarEntradaOperarios = async function(numOperarios) {
+            cerrarModalOperarios();
+            await ejecutarRegistroJornada('INICIO', numOperarios);
+        };
+
+        window.cerrarModalOperarios = function() {
+            document.getElementById('modalOperarios').classList.add('hidden');
+        };
+
+        async function ejecutarRegistroJornada(tipo, numOperarios) {
             const operario = document.getElementById('selectOperario').value;
             const horaActual = new Date().toLocaleTimeString('es-ES');
             const fechaActual = obtenerFecha();
             const esEntrada = tipo === 'INICIO';
+            const ahora = Date.now();
+            
+            // Si es entrada, activar la línea y reactivar tareas pausadas
+            if (esEntrada) {
+                numOperariosActivos = numOperarios;
+                lineaIniciada = true;
+                
+                // Reactivar todas las tareas que fueron pausadas por salida de línea
+                const snapTareas = await get(tareasRef);
+                const tareas = snapTareas.val() || {};
+                const updates = {};
+                
+                Object.keys(tareas).forEach(id => {
+                    if (tareas[id].estado === "pausa_salida_linea") {
+                        updates[`tareas/${id}/estado`] = "activo";
+                        updates[`tareas/${id}/inicioMS`] = ahora;
+                    }
+                });
+                
+                if (Object.keys(updates).length > 0) {
+                    await update(ref(db), updates);
+                }
+            } else {
+                // Si es salida, pausar todas las tareas activas
+                const snapTareas = await get(tareasRef);
+                const tareas = snapTareas.val() || {};
+                const updates = {};
+                
+                Object.keys(tareas).forEach(id => {
+                    if (tareas[id].estado === "activo") {
+                        const acumuladoSesion = ahora - tareas[id].inicioMS;
+                        updates[`tareas/${id}/estado`] = "pausa_salida_linea";
+                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+                    }
+                });
+                
+                if (Object.keys(updates).length > 0) {
+                    await update(ref(db), updates);
+                }
+                
+                // Desactivar la línea
+                lineaIniciada = false;
+                numOperariosActivos = 1; // Reset
+            }
+            
+            // Actualizar estado de botones
+            actualizarEstadoBotones();
             
             // Tabla temporal
             await push(tareasRef, { 
                 operario, 
                 numSerie: "---", 
-                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA", 
+                codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA", 
                 fecha: fechaActual, 
                 inicio: horaActual, 
                 fin: "---", 
                 total: "REGISTRO",
                 estado: "finalizado", 
-                tipo: "jornada" 
+                tipo: "jornada",
+                numOperarios: esEntrada ? numOperariosActivos : 0
             });
             
             // Historial persistente
             await push(tareasHistorialRef, {
                 operario: operario,
                 numSerie: "---",
-                codigo: esEntrada ? "🟢 ENTRADA" : "🔴 SALIDA",
+                codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
                 fecha: fechaActual,
                 inicio: horaActual,
                 fin: "---",
                 total: 0,
                 tipo: "jornada",
+                numOperarios: esEntrada ? numOperariosActivos : 0,
                 timestamp: Date.now()
             });
-        };
+        }
 
         window.iniciarTarea = function() {
+            // Verificar que la línea esté iniciada
+            if (!lineaIniciada) {
+                alert('⚠️ Debes registrar la ENTRADA antes de iniciar tareas');
+                return;
+            }
+            
             const operario = document.getElementById('selectOperario').value;
-            const serie = document.getElementById('numSerie').value.trim();
-            const cod = document.getElementById('codigo').value.trim();
+            const serie = document.getElementById('numSerie').value.trim().toUpperCase();
+            const cod = document.getElementById('codigo').value.trim().toUpperCase();
             if (!serie || !cod) return;
+            
             push(tareasRef, { 
                 operario, 
                 numSerie: serie, 
                 codigo: cod, 
                 fecha: obtenerFecha(), 
-                operarios: document.getElementById('numOperarios').value, 
                 inicio: new Date().toLocaleTimeString('es-ES'), 
                 inicioMS: Date.now(), 
                 acumuladoMS: 0, 
                 estado: "activo", 
                 tipo: "produccion" 
             });
+            
             document.getElementById('numSerie').value = ''; 
             document.getElementById('codigo').value = ''; 
             document.getElementById('numSerie').focus();
@@ -887,7 +1285,6 @@
             await push(mantenimientoRef, {
                 descripcion: descripcion.trim(),
                 fecha: obtenerFecha(),
-                hora: new Date().toLocaleTimeString('es-ES'),
                 completada: false,
                 timestamp: Date.now()
             });
@@ -895,25 +1292,17 @@
 
         window.completarMantenimiento = async function(id) {
             if (!confirm('¿Marcar tarea como realizada?')) return;
-            await remove(ref(db, `tareas_mantenimiento/${id}`));
+            const tareaRef = ref(db, `tareas_mantenimiento/${id}`);
+            await update(tareaRef, { 
+                completada: true,
+                fechaCompletada: obtenerFecha(),
+                horaCompletada: new Date().toLocaleTimeString('es-ES')
+            });
         };
 
         window.borrarMantenimiento = async function(id) {
             if (!confirm('¿Eliminar esta tarea de mantenimiento?')) return;
             await remove(ref(db, `tareas_mantenimiento/${id}`));
-        };
-
-        // INCIDENCIAS TEXTO
-        window.registrarIncidenciaTexto = async function() {
-            const descripcion = prompt("Descripción de la incidencia:");
-            if (!descripcion || !descripcion.trim()) return;
-            
-            await push(incidenciasTextoRef, {
-                descripcion: descripcion.trim(),
-                fecha: obtenerFecha(),
-                hora: new Date().toLocaleTimeString('es-ES'),
-                timestamp: Date.now()
-            });
         };
 
         window.borrarIncidenciaTexto = async function(id) {
@@ -928,47 +1317,88 @@
             const datos = snapshot.val();
             
             if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento pendientes</td></tr>';
+                cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento</td></tr>';
                 return;
             }
             
+            // Separar pendientes y completadas
+            const tareasPendientes = [];
+            const tareasCompletadas = [];
+            
             Object.keys(datos).forEach(id => {
                 const t = datos[id];
+                if (t.completada) {
+                    tareasCompletadas.push({ id, ...t });
+                } else {
+                    tareasPendientes.push({ id, ...t });
+                }
+            });
+            
+            // Ordenar por timestamp (más recientes primero)
+            tareasPendientes.sort((a, b) => b.timestamp - a.timestamp);
+            tareasCompletadas.sort((a, b) => b.timestamp - a.timestamp);
+            
+            // Mostrar pendientes primero
+            tareasPendientes.forEach(t => {
                 cuerpo.innerHTML += `
                     <tr class="bg-white border-b border-slate-100 hover:bg-blue-50 transition-all">
                         <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.hora}</td>
-                        <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+                        <td class="p-4 text-slate-800 font-semibold">
+                            <span class="inline-flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                ${t.descripcion}
+                            </span>
+                        </td>
                         <td class="p-4 text-right flex justify-end gap-2">
-                            <button onclick="completarMantenimiento('${id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
+                            <button onclick="completarMantenimiento('${t.id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
                                 ✓ Realizada
                             </button>
-                            <button onclick="borrarMantenimiento('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
+                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
+                        </td>
+                    </tr>`;
+            });
+            
+            // Mostrar completadas
+            tareasCompletadas.forEach(t => {
+                cuerpo.innerHTML += `
+                    <tr class="bg-green-50 border-b border-slate-100 opacity-60">
+                        <td class="p-4 text-slate-500 font-medium text-sm line-through">${t.fecha}</td>
+                        <td class="p-4 text-slate-600 font-semibold line-through">
+                            <span class="inline-flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                ${t.descripcion}
+                            </span>
+                            <div class="text-xs text-green-600 mt-1">✓ Completada el ${t.fechaCompletada} a las ${t.horaCompletada}</div>
+                        </td>
+                        <td class="p-4 text-right flex justify-end gap-2">
+                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
                         </td>
                     </tr>`;
             });
         });
 
-        // ESCUCHADOR: INCIDENCIAS TEXTO
+        // ESCUCHADOR: INCIDENCIAS
         onValue(incidenciasTextoRef, (snapshot) => {
             const cuerpo = document.getElementById('cuerpoIncidencias');
             cuerpo.innerHTML = "";
             const datos = snapshot.val();
             
             if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
+                cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
                 return;
             }
             
-            Object.keys(datos).forEach(id => {
-                const t = datos[id];
+            // Convertir a array y ordenar por timestamp (más recientes primero)
+            const incidenciasArray = Object.keys(datos).map(id => ({ id, ...datos[id] }));
+            incidenciasArray.sort((a, b) => b.timestamp - a.timestamp);
+            
+            incidenciasArray.forEach(t => {
                 cuerpo.innerHTML += `
                     <tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
                         <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.hora}</td>
                         <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
                         <td class="p-4 text-right">
-                            <button onclick="borrarIncidenciaTexto('${id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
+                            <button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
                         </td>
                     </tr>`;
             });
@@ -1023,6 +1453,7 @@
                 let rowClass = "bg-white";
                 if(activo) rowClass = "bg-amber-50";
                 if(t.estado === "pausa_manual") rowClass = "bg-blue-50";
+                if(t.estado === "pausa_salida_linea") rowClass = "bg-purple-50";
                 if(t.estado === "pausa_incidencia") rowClass = "bg-red-50";
                 if(t.estado === "pausado_desayuno") rowClass = "bg-orange-50";
                 if(t.estado === "pausa_reposicion") rowClass = "bg-yellow-50";
@@ -1032,6 +1463,8 @@
                     tiempoMostrado = `<span class="contador-vivo text-amber-600" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
                 } else if (t.estado === "pausa_manual") {
                     tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumuladoMS)}</span>`;
+                } else if (t.estado === "pausa_salida_linea") {
+                    tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
                 } else if (t.estado === "pausa_incidencia") {
                     tiempoMostrado = `<span class="text-red-400 italic">🛠️ En Incidencia</span>`;
                 } else if (t.estado === "pausa_reposicion") {
@@ -1050,15 +1483,11 @@
                         <td class="p-4 text-slate-600 font-medium">${t.fecha || '-'}</td>
                         <td class="p-4 font-mono text-slate-500">${t.numSerie}</td>
                         <td class="p-4 font-bold text-slate-800">${t.codigo}</td>
-                        <td class="p-4 text-center font-bold text-xs">${t.operarios || '-'}</td>
                         <td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
                         <td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
                         <td class="p-4 font-black text-center">${tiempoMostrado}</td>
                         <td class="p-4 text-right flex justify-end gap-2">
-                            ${(activo || t.estado === "pausa_manual") ? `
-                                <button onclick="togglePausaTarea('${id}')" class="${activo ? 'bg-blue-500' : 'bg-emerald-500'} text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">
-                                    ${activo ? 'Pausa' : 'Seguir'}
-                                </button>
+                            ${activo ? `
                                 <button onclick="finalizarTarea('${id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>
                             ` : (t.estado && t.estado.includes('pausa_') ? '⏸️' : '✓')}
                             <button onclick="borrarTarea('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
@@ -1071,19 +1500,27 @@
             const d = s.val(); hayIncidenciaGlobal = d?.activa; inicioIncidenciaMS = d?.inicioMS;
             document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
             document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
+            actualizarEstadoBotones();
         });
         
         onValue(pausaRef, s => {
             const d = s.val(); estaPausadoGlobal = d?.activa; inicioPausaMS = d?.inicioMS;
             document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
             document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
+            actualizarEstadoBotones();
         });
         
         onValue(reposicionRef, s => {
             const d = s.val(); hayReposicionGlobal = d?.activa; inicioReposicionMS = d?.inicioMS;
             document.getElementById('btnReposicion').innerHTML = hayReposicionGlobal ? "📦 LISTO" : "📦 REPOSICIÓN";
             document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposicionGlobal);
+            actualizarEstadoBotones();
         });
+
+        // Inicializar estado de botones al cargar la página
+        setTimeout(() => {
+            actualizarEstadoBotones();
+        }, 500);
 
         window.handleKeyPress = (e, nextId) => { 
             if (e.key === 'Enter') { 
@@ -1115,6 +1552,40 @@
         </div>
     </div>
 
+    <!-- Modal para seleccionar número de operarios -->
+    <div id="modalOperarios" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
+            <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">👥 Registro de Entrada</h3>
+            <p class="text-slate-600 text-center mb-8">¿Cuántos operarios van a trabajar?</p>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <!-- 1 Operario -->
+                <button onclick="confirmarEntradaOperarios(1)" class="group relative bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="text-6xl">👤</div>
+                        <div class="text-3xl font-black">1</div>
+                        <div class="text-sm font-bold uppercase tracking-wider">Operario</div>
+                    </div>
+                    <div class="absolute inset-0 rounded-2xl ring-4 ring-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </button>
+                
+                <!-- 2 Operarios -->
+                <button onclick="confirmarEntradaOperarios(2)" class="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="text-6xl">👥</div>
+                        <div class="text-3xl font-black">2</div>
+                        <div class="text-sm font-bold uppercase tracking-wider">Operarios</div>
+                    </div>
+                    <div class="absolute inset-0 rounded-2xl ring-4 ring-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </button>
+            </div>
+            
+            <button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
+                Cancelar
+            </button>
+        </div>
+    </div>
+
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -1129,27 +1600,24 @@
                 <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
                 <div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
                 
-                <button onclick="agregarMantenimiento()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors">
+                <button onclick="agregarMantenimiento()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors" id="btnMantenimiento">
                     🔧 Mantenimiento
-                </button>
-                <button onclick="registrarIncidenciaTexto()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors">
-                    📝 Incidencia
                 </button>
                 <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
                 <button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
                 <button id="btnPausa" onclick="togglePausa()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs"></button>
-                <button onclick="exportarExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase">Excel</button>
+                <button onclick="exportarExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase">Exportar a Excel</button>
             </div>
         </div>
 
         <!-- Botones Entrada/Salida -->
         <div class="grid grid-cols-2 gap-4 mb-6">
-            <button onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
-            <button onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors">🌙 Salida</button>
+            <button id="btnEntrada" onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
+            <button id="btnSalida" onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
         </div>
 
         <!-- Formulario Nueva Tarea -->
-        <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="flex flex-col">
                 <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
                 <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
@@ -1159,21 +1627,18 @@
             </div>
             <div class="flex flex-col">
                 <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
-                <input id="numSerie" type="text" onkeypress="handleKeyPress(event, 'codigo')" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
+                <input id="numSerie" type="text" onkeypress="handleKeyPress(event, 'codigo')" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
             </div>
             <div class="flex flex-col">
                 <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Tarea</label>
-                <input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
+                <input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
             </div>
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Equipo</label>
-                <select id="numOperarios" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none">
-                    <option value="1">1 Pers.</option>
-                    <option value="2">2 Pers.</option>
-                    <option value="3">3 Pers.</option>
-                </select>
-            </div>
-            <button onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
+            <button id="btnIniciarTarea" onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
+        </div>
+
+        <!-- Indicador Estado Línea -->
+        <div id="indicadorLinea" class="flex justify-center mb-6">
+            <span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>
         </div>
 
         <!-- TABLA TEMPORAL -->
@@ -1189,7 +1654,6 @@
                         <th class="p-4">Fecha</th>
                         <th class="p-4">Serie</th>
                         <th class="p-4">Tarea</th>
-                        <th class="p-4 text-center">EQ</th>
                         <th class="p-4">H. Inicio</th>
                         <th class="p-4">H. Fin</th>
                         <th class="p-4 text-center">Tiempo</th>
@@ -1206,6 +1670,7 @@
                 <div>
                     <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
                     <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos | Eje X = orden cronológico</p>
+                    <p class="text-xs text-amber-600 font-bold mt-1">💡 Solo muestra tareas finalizadas con el botón "Fin"</p>
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
@@ -1241,7 +1706,8 @@
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
                     <h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
-                    <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / Horas trabajadas por día</p>
+                    <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / ((Salida - Entrada) × Nº Operarios)</p>
+                    <p class="text-xs text-amber-600 font-bold mt-1">💡 Haz clic en un punto para eliminar TODAS las tareas de ese día</p>
                 </div>
                 
                 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
@@ -1259,11 +1725,7 @@
                 <div class="flex justify-center gap-8">
                     <div class="flex items-center gap-2">
                         <div class="w-4 h-4 rounded-full bg-blue-500"></div>
-                        <span class="font-bold text-slate-700">Adrian García</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded-full bg-red-500"></div>
-                        <span class="font-bold text-slate-700">Alberto Colmenero</span>
+                        <span class="font-bold text-slate-700">Productividad</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
@@ -1305,18 +1767,18 @@
             </div>
             
             <div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
-                <div class="flex justify-center gap-8">
+                <div class="flex justify-center gap-6">
                     <div class="flex items-center gap-2">
                         <div class="w-4 h-4 rounded bg-blue-500"></div>
-                        <span class="font-bold text-slate-700">Adrian García</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded bg-red-500"></div>
-                        <span class="font-bold text-slate-700">Alberto Colmenero</span>
+                        <span class="font-bold text-slate-700 text-sm">Productividad</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
-                        <span class="font-bold text-slate-700">Media Anual</span>
+                        <span class="font-bold text-slate-700 text-sm">Media</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-1 bg-gradient-to-r from-green-500 to-red-500"></div>
+                        <span class="font-bold text-slate-700 text-sm">Tendencia</span>
                     </div>
                 </div>
                 <div class="text-right">
@@ -1328,16 +1790,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Botones de borrado -->
-        <div class="flex justify-center gap-4 p-8">
-            <button onclick="borrarTodoElRegistro()" class="text-red-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-600 transition-colors border border-red-200 px-4 py-2 rounded-lg">
-                🗑️ Borrar Tabla Temporal
-            </button>
-            <button onclick="borrarHistorialGrafico()" class="text-orange-600 font-bold text-[10px] uppercase tracking-widest hover:text-orange-800 transition-colors bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg">
-                ⚠️ Borrar Historial Permanente
-            </button>
         </div>
 
         <!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
@@ -1353,14 +1805,13 @@
                     <table class="w-full text-left">
                         <thead class="bg-blue-100 text-blue-800 text-[10px] font-black uppercase sticky top-0">
                             <tr>
-                                <th class="p-4 w-24">Fecha</th>
-                                <th class="p-4 w-24">Hora</th>
+                                <th class="p-4 w-32">Fecha</th>
                                 <th class="p-4">Descripción</th>
-                                <th class="p-4 text-right w-32">Acción</th>
+                                <th class="p-4 text-right w-40">Acción</th>
                             </tr>
                         </thead>
                         <tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+                            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1370,21 +1821,20 @@
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
                 <div class="bg-orange-500 p-4">
                     <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        📝 Registro de Incidencias
+                        ⚠️ Registro de Incidencias
                     </h3>
                 </div>
                 <div class="max-h-96 overflow-y-auto">
                     <table class="w-full text-left">
                         <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
                             <tr>
-                                <th class="p-4 w-24">Fecha</th>
-                                <th class="p-4 w-24">Hora</th>
-                                <th class="p-4">Descripción</th>
+                                <th class="p-4 w-32">Fecha</th>
+                                <th class="p-4">Causa</th>
                                 <th class="p-4 text-right w-20">Acción</th>
                             </tr>
                         </thead>
                         <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+                            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
                         </tbody>
                     </table>
                 </div>
