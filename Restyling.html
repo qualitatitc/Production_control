@@ -76,11 +76,6 @@
             return snapshot.val() || {};
         };
 
-        const guardarProductividadDiaria = async (fecha, datos) => {
-            const fechaKey = fecha.replace(/-/g, '_');
-            await update(ref(db, `productividadDiaria/${fechaKey}`), datos);
-        };
-
         // Funciones para manejar datos del gráfico tiempo por tarea
         const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
             const fechaKey = fechaToKey(fecha);
@@ -99,11 +94,38 @@
             return datos;
         };
 
-        const calcularProductividadDiaria = (tareasHoy, entradaMS, salidaMS, operariosPromedio) => {
-            if (operariosPromedio === 0 || !entradaMS || !salidaMS) return 0;
-            const horasDiferencia = (salidaMS - entradaMS) / (1000 * 3600);
-            const productividad = (tareasHoy * 7) / (horasDiferencia * operariosPromedio);
-            return isFinite(productividad) ? productividad : 0;
+        // Nueva fórmula:
+        // ((tareas1op + tareas2op) * 7) / (horas1op + horas2op * 2)
+        const calcularProductividadDiaria = (t1, t2, h1, h2) => {
+            const divisor = h1 + h2 * 2;
+            if (divisor <= 0) return 0;
+            const prod = ((t1 + t2) * 7) / divisor;
+            return isFinite(prod) ? Math.round(prod * 10) / 10 : 0;
+        };
+
+        // Guarda o acumula la sesión del día en Firebase
+        // La estructura acumula: tareas1op, tareas2op, horas1op, horas2op
+        const guardarSesionDiaria = async (fecha, operarios, tareasEnSesion, horasEnSesion) => {
+            const fechaKey = fechaToKey(fecha);
+            const snapDia = await get(ref(db, `productividadDiaria/${fechaKey}`));
+            const diaActual = snapDia.val() || { tareas1op: 0, tareas2op: 0, horas1op: 0, horas2op: 0 };
+
+            // Acumular según número de operarios de esta sesión
+            if (operarios === 1) {
+                diaActual.tareas1op = (diaActual.tareas1op || 0) + tareasEnSesion;
+                diaActual.horas1op  = (diaActual.horas1op  || 0) + horasEnSesion;
+            } else if (operarios === 2) {
+                diaActual.tareas2op = (diaActual.tareas2op || 0) + tareasEnSesion;
+                diaActual.horas2op  = (diaActual.horas2op  || 0) + horasEnSesion;
+            }
+
+            // Recalcular productividad con datos acumulados
+            diaActual.productividad = calcularProductividadDiaria(
+                diaActual.tareas1op, diaActual.tareas2op,
+                diaActual.horas1op,  diaActual.horas2op
+            );
+
+            await update(ref(db, `productividadDiaria/${fechaKey}`), diaActual);
         };
 
         const festivosEspa = [
@@ -648,13 +670,31 @@
         window.registrarSalida = async () => {
             if (state.operarios === 0) { alert("La línea ya está cerrada."); return; }
             const ahoraMSTime = Date.now();
-            state.salidaLineaHoy = ahoraMSTime;
+            const fechaHoy = tsToFechaLocal(ahoraMSTime);
+            
             await push(tareasRef, { numSerie: "SALIDA LÍNEA", codigo: "SISTEMA", notas: "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: ahoraMSTime, fin: "--:--", total: 0, estado: "finalizado" });
+            
+            // Calcular tareas y horas de esta sesión
             const snapshot = await get(tareasRef);
-            const hoy = new Date().toISOString().split('T')[0];
-            const tareasHoy = snapshot.val() ? Object.values(snapshot.val()).filter(t => new Date(t.inicioMS).toISOString().split('T')[0] === hoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0).length : 0;
-            const producHoy = calcularProductividadDiaria(tareasHoy, state.entradaLineaHoy, ahoraMSTime, state.operarios);
-            await guardarProductividadDiaria(hoy, { productividad: producHoy, tareas: tareasHoy, operarios: state.operarios, entrada: state.entradaLineaHoy, salida: ahoraMSTime });
+            const entradaMS = state.entradaLineaHoy;
+            const operariosSesion = state.operarios;
+            
+            let tareasEnSesion = 0;
+            if (snapshot.exists()) {
+                Object.values(snapshot.val()).forEach(t => {
+                    const fechaTarea = tsToFechaLocal(t.inicioMS);
+                    // Solo tareas de esta sesión: mismo día, mismos operarios, finalizadas, no sistema
+                    if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0 && t.operarios === operariosSesion) {
+                        tareasEnSesion++;
+                    }
+                });
+            }
+            
+            const horasEnSesion = entradaMS ? (ahoraMSTime - entradaMS) / (1000 * 3600) : 0;
+            
+            // Guardar sesión acumulada en Firebase
+            await guardarSesionDiaria(fechaHoy, operariosSesion, tareasEnSesion, horasEnSesion);
+            
             state.operarios = 0;
             state.entradaLineaHoy = null;
             state.salidaLineaHoy = null;
