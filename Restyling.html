@@ -30,6 +30,8 @@
         const estadoSesionRef = ref(db, 'estadoSesion');
         const preferenciasRef = ref(db, 'preferencias');
         const tiempoPorTareaRef = ref(db, 'tiempoPorTarea');
+        const mantenimientoRef = ref(db, 'mantenimiento');
+        const incidenciasLogRef = ref(db, 'incidenciasLog');
 
         const state = {
             operarios: 0,
@@ -721,6 +723,8 @@
                 const nuevaInc = await push(tareasRef, { numSerie: "INCIDENCIA", codigo: "SISTEMA", notas: motivo, operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "en_incidencia_sistema" });
                 state.ids.incidencia = nuevaInc.key;
                 state.incidencia = true;
+                // Guardar en log de incidencias
+                push(incidenciasLogRef, { texto: motivo, fecha: tsToFechaLocal(Date.now()), hora: new Date().toLocaleTimeString('es-ES'), timestamp: Date.now() });
             } else {
                 if (snapshot.exists()) {
                     snapshot.forEach((child) => {
@@ -779,7 +783,42 @@
         window.exportarAExcel = () => {
             const tabla = document.getElementById("tablaProceso");
             const wb = XLSX.utils.table_to_book(tabla, { sheet: "Producción" });
-            XLSX.writeFile(wb, `Produccion_Dostec_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.writeFile(wb, `Produccion_Dostec_${tsToFechaLocal(Date.now())}.xlsx`);
+            // Borrar tabla tras exportar
+            if (confirm("✅ Excel exportado. ¿Borrar toda la tabla de Pedidos en Proceso?")) {
+                borrarTodoProceso(true);
+            }
+        };
+
+        window.borrarTodoProceso = async (sinConfirm = false) => {
+            if (!sinConfirm && !confirm("¿Borrar TODOS los registros de Pedidos en Proceso?")) return;
+            const snap = await get(tareasRef);
+            if (snap.exists()) {
+                const updates = {};
+                Object.keys(snap.val()).forEach(id => { updates[id] = null; });
+                await update(tareasRef, updates);
+            }
+        };
+
+        // Mantenimiento
+        window.abrirMantenimiento = () => {
+            const texto = prompt("📝 Descripción de la tarea de mantenimiento:");
+            if (!texto || !texto.trim()) return;
+            const fecha = tsToFechaLocal(Date.now());
+            push(mantenimientoRef, { texto: texto.trim(), fecha, realizado: false, timestamp: Date.now() });
+        };
+
+        window.toggleMantenimiento = async (id, actual) => {
+            await update(ref(db, `mantenimiento/${id}`), { realizado: !actual });
+        };
+
+        window.borrarMantenimiento = async (id) => {
+            if (confirm("¿Eliminar esta tarea de mantenimiento?")) await remove(ref(db, `mantenimiento/${id}`));
+        };
+
+        // Incidencias log
+        window.borrarIncidenciaLog = async (id) => {
+            if (confirm("¿Eliminar este registro de incidencia?")) await remove(ref(db, `incidenciasLog/${id}`));
         };
 
         window.toggleGrupo = (pedidoId) => {
@@ -1052,6 +1091,49 @@
             await actualizarGraficoMensual(state.anioSeleccionado);
         });
 
+        onValue(mantenimientoRef, (snap) => {
+            const data = snap.val() || {};
+            const tbody = document.getElementById('tablaMantenimientoBody');
+            if (!tbody) return;
+            const items = Object.entries(data).sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            tbody.innerHTML = items.length === 0
+                ? '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin tareas de mantenimiento</td></tr>'
+                : items.map(([id, t]) => `
+                    <tr class="border-b border-slate-100 ${t.realizado ? 'bg-emerald-50' : 'bg-white'} hover:bg-slate-50">
+                        <td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">${t.fecha || ''}</td>
+                        <td class="p-2 text-xs font-bold ${t.realizado ? 'line-through text-slate-400' : 'text-slate-700'}">${t.texto || ''}</td>
+                        <td class="p-2 text-center">
+                            <button onclick="toggleMantenimiento('${id}', ${t.realizado})" class="text-[9px] font-black px-2 py-0.5 rounded-full border ${t.realizado ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-500 border-slate-300'} hover:opacity-80">
+                                ${t.realizado ? '✅ Hecho' : '⬜ Pendiente'}
+                            </button>
+                        </td>
+                        <td class="p-2 text-right">
+                            <button onclick="borrarMantenimiento('${id}')" class="text-slate-300 hover:text-red-500">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                            </button>
+                        </td>
+                    </tr>`).join('');
+        });
+
+        onValue(incidenciasLogRef, (snap) => {
+            const data = snap.val() || {};
+            const tbody = document.getElementById('tablaIncidenciasBody');
+            if (!tbody) return;
+            const items = Object.entries(data).sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            tbody.innerHTML = items.length === 0
+                ? '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias registradas</td></tr>'
+                : items.map(([id, t]) => `
+                    <tr class="border-b border-slate-100 bg-white hover:bg-red-50">
+                        <td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">${t.fecha || ''}</td>
+                        <td class="p-2 text-xs font-bold text-slate-700">${t.texto || ''}</td>
+                        <td class="p-2 text-right">
+                            <button onclick="borrarIncidenciaLog('${id}')" class="text-slate-300 hover:text-red-500">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                            </button>
+                        </td>
+                    </tr>`).join('');
+        });
+
         window.addEventListener('load', async () => {
             actualizarEstadoLineaUI();
             const preferencias = await obtenerPreferencias();
@@ -1108,9 +1190,15 @@
 
     <div class="max-w-6xl mx-auto space-y-6">
         <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
-            <div>
-                <h1 class="text-4xl font-[1000] uppercase italic tracking-tighter"><span class="text-black">Restyling</span> <span class="text-red-600">Production</span></h1>
-                <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-xl transition-colors flex items-center gap-2 text-[10px] font-black uppercase border border-slate-200" title="Volver al inicio">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Inicio
+                </a>
+                <div>
+                    <h1 class="text-4xl font-[1000] uppercase italic tracking-tighter"><span class="text-black">Restyling</span> <span class="text-red-600">Production</span></h1>
+                    <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
+                </div>
             </div>
             <div class="flex items-center gap-3 flex-wrap">
                 <button id="btnReposicion" onclick="mostrarSelectorOperarios('reposicion')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
@@ -1125,12 +1213,6 @@
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M2 21h18v-2H2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg>
                     Desayuno
                 </button>
-                <div class="w-px h-8 bg-stone-200 mx-1"></div>
-                <input type="file" id="file-input" class="hidden" accept=".xlsx, .xls" onchange="procesarArchivo(event)">
-                <button onclick="dispararSelector()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-[11px] uppercase shadow-md flex items-center gap-3">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8 8m4-4l4 4"></path></svg>
-                    Cargar Excel
-                </button>
             </div>
         </div>
 
@@ -1141,18 +1223,22 @@
             <button onclick="registrarSalida()" class="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
                 <span class="w-3 h-3 bg-white rounded-full"></span> Salida Línea
             </button>
-            <div class="flex-grow"></div>
-            <button onclick="exportarAExcel()" class="bg-slate-900 hover:bg-black text-white px-6 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
-                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Exportar Reporte
-            </button>
         </div>
 
         <div class="grid grid-cols-1 gap-6">
             <div id="sec-plan" class="hidden">
-                <h2 class="text-base font-black mb-3 uppercase tracking-widest text-red-600 flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></span> Pedidos pendientes
-                </h2>
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></span> Pedidos pendientes
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <input type="file" id="file-input" class="hidden" accept=".xlsx, .xls" onchange="procesarArchivo(event)">
+                        <button onclick="dispararSelector()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8 8m4-4l4 4"></path></svg>
+                            Cargar Excel
+                        </button>
+                    </div>
+                </div>
                 <div class="bg-white rounded-3xl shadow-sm overflow-hidden border">
                     <table class="w-full text-left text-xs">
                         <tbody id="cuerpoPlan"></tbody>
@@ -1161,12 +1247,22 @@
             </div>
 
             <div>
-                <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <h2 class="text-base font-black uppercase tracking-widest text-emerald-600 flex items-center gap-2">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
                         Pedidos en proceso
                     </h2>
-                    <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
+                    <div class="flex items-center gap-2">
+                        <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
+                        <button onclick="exportarAExcel()" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow flex items-center gap-2">
+                            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Exportar Excel
+                        </button>
+                        <button onclick="borrarTodoProceso()" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow flex items-center gap-2 transition-all border border-red-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            Borrar Todo
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border">
@@ -1281,6 +1377,65 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- TABLAS MANTENIMIENTO E INCIDENCIAS -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+
+            <!-- TABLA MANTENIMIENTO -->
+            <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
+                <div class="bg-blue-600 px-5 py-3 flex items-center justify-between">
+                    <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+                        Mantenimiento
+                    </h3>
+                    <button onclick="abrirMantenimiento()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg font-black text-[10px] uppercase flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                        Añadir
+                    </button>
+                </div>
+                <div class="overflow-auto max-h-64">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-blue-50 text-blue-700 font-black uppercase text-[10px] sticky top-0">
+                            <tr>
+                                <th class="p-2">Fecha</th>
+                                <th class="p-2">Descripción</th>
+                                <th class="p-2 text-center">Estado</th>
+                                <th class="p-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaMantenimientoBody">
+                            <tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin tareas de mantenimiento</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TABLA INCIDENCIAS LOG -->
+            <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
+                <div class="bg-red-600 px-5 py-3 flex items-center justify-between">
+                    <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                        Registro de Incidencias
+                    </h3>
+                    <span class="bg-white/20 text-white px-2 py-0.5 rounded-lg text-[10px] font-black">Automático</span>
+                </div>
+                <div class="overflow-auto max-h-64">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-red-50 text-red-700 font-black uppercase text-[10px] sticky top-0">
+                            <tr>
+                                <th class="p-2">Fecha</th>
+                                <th class="p-2">Motivo</th>
+                                <th class="p-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaIncidenciasBody">
+                            <tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias registradas</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
     </div>
 </body>
