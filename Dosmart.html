@@ -44,19 +44,16 @@
         let todasLasTareas = {};
         let primeraVez = true; // Para establecer filtro inicial
 
-        // NUEVA FUNCIÓN: Actualizar estado de botones según línea iniciada/parada
         function actualizarEstadoBotones() {
             const btnPausa = document.getElementById('btnPausa');
             const btnIncidencia = document.getElementById('btnIncidencia');
             const btnReposicion = document.getElementById('btnReposicion');
-            const btnMantenimiento = document.getElementById('btnMantenimiento');
             const btnIniciarTarea = document.getElementById('btnIniciarTarea');
             const btnEntrada = document.getElementById('btnEntrada');
             const btnSalida = document.getElementById('btnSalida');
             const indicadorLinea = document.getElementById('indicadorLinea');
             
             if (lineaIniciada) {
-                // Línea activa: habilitar desayuno e incidencia, deshabilitar mantenimiento y reposición
                 btnPausa.disabled = false;
                 btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
                 
@@ -66,22 +63,16 @@
                 btnReposicion.disabled = true;
                 btnReposicion.classList.add('opacity-50', 'cursor-not-allowed');
                 
-                btnMantenimiento.disabled = true;
-                btnMantenimiento.classList.add('opacity-50', 'cursor-not-allowed');
-                
                 btnIniciarTarea.disabled = false;
                 btnIniciarTarea.classList.remove('opacity-50', 'cursor-not-allowed');
                 
-                // Deshabilitar entrada, habilitar salida
                 btnEntrada.disabled = true;
                 btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = false;
                 btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
                 
-                // Actualizar indicador
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
             } else {
-                // Línea parada: solo mantenimiento y reposición activos
                 btnPausa.disabled = true;
                 btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
                 
@@ -91,19 +82,14 @@
                 btnReposicion.disabled = false;
                 btnReposicion.classList.remove('opacity-50', 'cursor-not-allowed');
                 
-                btnMantenimiento.disabled = false;
-                btnMantenimiento.classList.remove('opacity-50', 'cursor-not-allowed');
-                
                 btnIniciarTarea.disabled = true;
                 btnIniciarTarea.classList.add('opacity-50', 'cursor-not-allowed');
                 
-                // Habilitar entrada, deshabilitar salida
                 btnEntrada.disabled = false;
                 btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = true;
                 btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
                 
-                // Actualizar indicador
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
             }
         }
@@ -1384,11 +1370,10 @@
             const datos = snapshot.val();
             
             if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
+                cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
                 return;
             }
             
-            // Convertir a array y ordenar por timestamp (más recientes primero)
             const incidenciasArray = Object.keys(datos).map(id => ({ id, ...datos[id] }));
             incidenciasArray.sort((a, b) => b.timestamp - a.timestamp);
             
@@ -1397,9 +1382,6 @@
                     <tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
                         <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
                         <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
-                        <td class="p-4 text-right">
-                            <button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
-                        </td>
                     </tr>`;
             });
         });
@@ -1600,9 +1582,6 @@
                 <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
                 <div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
                 
-                <button onclick="agregarMantenimiento()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors" id="btnMantenimiento">
-                    🔧 Mantenimiento
-                </button>
                 <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
                 <button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
                 <button id="btnPausa" onclick="togglePausa()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs"></button>
@@ -1796,10 +1775,13 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
             <!-- TABLA MANTENIMIENTO -->
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
-                <div class="bg-blue-500 p-4">
+                <div class="bg-blue-500 p-4 flex items-center justify-between">
                     <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        🔧 Tareas de Mantenimiento Pendientes
+                        🔧 Mantenimiento
                     </h3>
+                    <button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">
+                        + Añadir tarea
+                    </button>
                 </div>
                 <div class="max-h-96 overflow-y-auto">
                     <table class="w-full text-left">
@@ -1807,7 +1789,7 @@
                             <tr>
                                 <th class="p-4 w-32">Fecha</th>
                                 <th class="p-4">Descripción</th>
-                                <th class="p-4 text-right w-40">Acción</th>
+                                <th class="p-4 text-right w-40">Estado</th>
                             </tr>
                         </thead>
                         <tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
@@ -1829,12 +1811,11 @@
                         <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
                             <tr>
                                 <th class="p-4 w-32">Fecha</th>
-                                <th class="p-4">Causa</th>
-                                <th class="p-4 text-right w-20">Acción</th>
+                                <th class="p-4">Motivo</th>
                             </tr>
                         </thead>
                         <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-                            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+                            <tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
                         </tbody>
                     </table>
                 </div>
