@@ -50,7 +50,8 @@
             mesSeleccionado: null,
             fechaProdSeleccionada: null,
             anioSeleccionado: null,
-            inicializado: false
+            inicializado: false,
+            modoEdicionGrafico: false,
         };
 
         const guardarEstadoSesion = async (datos) => {
@@ -79,19 +80,15 @@
         // Funciones para manejar datos del gráfico tiempo por tarea
         const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
             const fechaKey = fechaToKey(fecha);
-            console.log('💾 Guardando tiempoPorTarea:', { fecha, fechaKey, serie, tiempo });
             await push(ref(db, `tiempoPorTarea/${fechaKey}`), {
                 serie, tiempo, finMS, timestamp: Date.now()
             });
-            console.log('✅ Guardado OK');
         };
 
         const obtenerTiempoPorTarea = async (fecha) => {
             const fechaKey = fechaToKey(fecha);
             const snapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
-            const datos = snapshot.val() || {};
-            console.log('📊 tiempoPorTarea obtenido para', fecha, '(key:', fechaKey, '):', datos);
-            return datos;
+            return snapshot.val() || {};
         };
 
         // Nueva fórmula:
@@ -154,39 +151,21 @@
         // Convierte fecha YYYY-MM-DD a clave Firebase YYYY_MM_DD
         const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
-        // GRÁFICO DE TIEMPO POR TAREA - CAMBIO PRINCIPAL
+        // GRÁFICO DE TIEMPO POR TAREA
         const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
-            console.log('═══════════════════════════════════════');
-            console.log('📊 ACTUALIZANDO GRÁFICO TIEMPO POR TAREA');
-            console.log('Datos recibidos:', datosProd);
-            console.log('Fecha seleccionada:', fechaSeleccionada);
-            console.log('Cantidad de datos:', datosProd ? datosProd.length : 0);
-            
             const ctx = document.getElementById('graficoProd');
             const container = document.getElementById('graficoContainer');
-            
-            if (!ctx || !container) {
-                console.error('❌ ERROR: No se encontró el canvas del gráfico');
-                console.log('ctx:', ctx);
-                console.log('container:', container);
-                return;
-            }
-            
-            console.log('✅ Canvas encontrado correctamente');
+            if (!ctx || !container) return;
             
             const tituloFecha = document.getElementById('tituloFechaProd');
             if (tituloFecha && fechaSeleccionada) {
-                const fecha = new Date(fechaSeleccionada);
-                const hoy = new Date().toISOString().split('T')[0];
-                tituloFecha.textContent = fechaSeleccionada === hoy ? 'Hoy' : fecha.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                const hoy = tsToFechaLocal(Date.now());
+                tituloFecha.textContent = fechaSeleccionada === hoy ? 'Hoy' : 
+                    new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             }
             
             if (!datosProd || datosProd.length === 0) {
-                console.log('⚠️ No hay datos para mostrar, creando gráfico vacío');
-                if (state.chart) {
-                    console.log('🗑️ Destruyendo gráfico anterior');
-                    state.chart.destroy();
-                }
+                if (state.chart) state.chart.destroy();
                 const mediaIndicator = document.getElementById('mediaValor');
                 if (mediaIndicator) mediaIndicator.textContent = '--';
                 
@@ -206,30 +185,19 @@
                 return;
             }
             
-            console.log('✅ HAY DATOS PARA GRAFICAR');
             const tiempos = datosProd.map(d => d.tiempo);
             const series = datosProd.map(d => d.serie);
-            console.log('⏱️ Tiempos extraídos:', tiempos);
-            console.log('🏷️ Series extraídas:', series);
-            
             const media = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
-            console.log('📊 Media calculada:', media);
-            
             const tiempoObjetivo = 420 / 19;
             
             const mediaIndicator = document.getElementById('mediaValor');
             if (mediaIndicator) {
                 mediaIndicator.textContent = media.toFixed(1) + ' min';
                 mediaIndicator.className = 'font-black text-lg text-yellow-700';
-                console.log('📝 Indicador de media actualizado');
             }
             
-            if (state.chart) {
-                console.log('🗑️ Destruyendo gráfico anterior');
-                state.chart.destroy();
-            }
+            if (state.chart) state.chart.destroy();
             
-            console.log('🎨 Creando nuevo gráfico Chart.js...');
             state.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -303,20 +271,85 @@
                     }
                 }
             });
-            console.log('✅ GRÁFICO CREADO EXITOSAMENTE');
-            console.log('═══════════════════════════════════════');
         };
 
         window.seleccionarFechaProd = async (fecha) => {
             state.fechaProdSeleccionada = fecha;
             await guardarPreferencias('fechaProdSeleccionada', fecha);
-            
             const datosGuardados = await obtenerTiempoPorTarea(fecha);
             const datosProd = Object.values(datosGuardados)
                 .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
                 .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-            
             actualizarGraficoProd(datosProd, fecha);
+            renderizarListaPuntos(fecha);
+        };
+
+        const renderizarListaPuntos = async (fecha) => {
+            const lista = document.getElementById('listaPuntosTiempo');
+            if (!lista || lista.classList.contains('hidden')) return;
+            const datos = await obtenerTiempoPorTarea(fecha);
+            const items = Object.entries(datos).sort((a, b) => (a[1].finMS || 0) - (b[1].finMS || 0));
+            if (items.length === 0) {
+                lista.innerHTML = '<p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Modo edición — sin puntos para este día</p>';
+                return;
+            }
+            lista.innerHTML = `
+                <p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    Modo edición — pulsa 🗑️ para borrar un punto
+                </p>
+                <table class="w-full text-xs">
+                    <thead><tr class="bg-slate-100 text-slate-500 font-black uppercase text-[9px]">
+                        <th class="p-1.5 text-left">#</th>
+                        <th class="p-1.5 text-left">Serie</th>
+                        <th class="p-1.5 text-center">Tiempo</th>
+                        <th class="p-1.5"></th>
+                    </tr></thead>
+                    <tbody>
+                        ${items.map(([id, t], i) => `
+                        <tr class="border-b border-slate-100 hover:bg-red-50">
+                            <td class="p-1.5 text-slate-400 font-bold">${i + 1}</td>
+                            <td class="p-1.5 font-black text-slate-700">${t.serie || '—'}</td>
+                            <td class="p-1.5 text-center"><span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-black">${t.tiempo} min</span></td>
+                            <td class="p-1.5 text-right">
+                                <button onclick="borrarPuntoTiempo('${fecha}', '${id}')" class="bg-red-100 hover:bg-red-600 text-red-500 hover:text-white p-1 rounded-lg transition-all" title="Borrar punto">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+        };
+
+        window.borrarPuntoTiempo = async (fecha, puntoId) => {
+            const fechaKey = fechaToKey(fecha);
+            await remove(ref(db, `tiempoPorTarea/${fechaKey}/${puntoId}`));
+            const datosGuardados = await obtenerTiempoPorTarea(fecha);
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
+            actualizarGraficoProd(datosProd, fecha);
+            renderizarListaPuntos(fecha);
+        };
+
+        window.toggleModoEdicionGrafico = () => {
+            state.modoEdicionGrafico = !state.modoEdicionGrafico;
+            const btn = document.getElementById('btnEditarGrafico');
+            const lista = document.getElementById('listaPuntosTiempo');
+            if (state.modoEdicionGrafico) {
+                btn.classList.replace('bg-slate-100', 'bg-red-100');
+                btn.classList.replace('text-slate-600', 'text-red-600');
+                btn.classList.replace('border-slate-200', 'border-red-300');
+                btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg> Salir edición`;
+                lista.classList.remove('hidden');
+                renderizarListaPuntos(state.fechaProdSeleccionada || tsToFechaLocal(Date.now()));
+            } else {
+                btn.classList.replace('bg-red-100', 'bg-slate-100');
+                btn.classList.replace('text-red-600', 'text-slate-600');
+                btn.classList.replace('border-red-300', 'border-slate-200');
+                btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg> Editar puntos`;
+                lista.classList.add('hidden');
+            }
         };
 
         window.mostrarSelectorFechaProd = () => {
@@ -885,42 +918,24 @@
         };
 
         window.finalizarTarea = async (id, inicioMS) => {
-            console.log('========================================');
-            console.log('🎯 FINALIZANDO TAREA id:', id, 'inicioMS:', inicioMS);
-            
-            const inicioMSNum = Number(inicioMS); // Asegurar que es número
+            const inicioMSNum = Number(inicioMS);
             const minutos = Math.max(1, Math.round((Date.now() - inicioMSNum) / 60000));
             const finMS = Date.now();
-            console.log('⏱️ Minutos calculados:', minutos);
             
             const snapshot = await get(ref(db, `tareas/${id}`));
-            if (!snapshot.exists()) {
-                console.error('❌ Tarea no encontrada en Firebase');
-                return;
-            }
+            if (!snapshot.exists()) return;
             
             const tarea = snapshot.val();
-            const fecha = tsToFechaLocal(tarea.inicioMS); // ← Fecha LOCAL correcta
-            const fechaSeleccionada = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
-            
-            console.log('📅 Fecha tarea (local):', fecha);
-            console.log('📅 Fecha seleccionada en gráfico:', fechaSeleccionada);
-            console.log('🏷️ Código:', tarea.codigo, '| Serie:', tarea.numSerie);
+            const fecha = tsToFechaLocal(tarea.inicioMS);
             
             if (tarea.codigo !== "SISTEMA") {
                 await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
                 
-                // Actualizar gráfico si coincide la fecha
-                if (fecha === fechaSeleccionada) {
-                    const datosGuardados = await obtenerTiempoPorTarea(fecha);
-                    const tareasFinalizadas = Object.values(datosGuardados)
-                        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
-                    const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-                    console.log('📈 Actualizando gráfico con', datosProd.length, 'puntos');
-                    actualizarGraficoProd(datosProd, fecha);
-                } else {
-                    console.log('⚠️ Fechas distintas → gráfico no actualizado ahora');
-                }
+                const datosGuardados = await obtenerTiempoPorTarea(fecha);
+                const datosProd = Object.values(datosGuardados)
+                    .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                    .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
+                actualizarGraficoProd(datosProd, fecha);
             }
             
             await update(ref(db, `tareas/${id}`), {
@@ -929,8 +944,6 @@
                 total: minutos,
                 estado: "finalizado"
             });
-            console.log('✅ Tarea finalizada OK');
-            console.log('========================================');
         };
 
         window.borrarRegistro = (id) => {
@@ -1211,6 +1224,19 @@
                     </tr>`).join('');
         });
 
+        // Listener en tiempo real para el gráfico tiempo por tarea
+        onValue(tiempoPorTareaRef, (snap) => {
+            if (!state.inicializado) return;
+            const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
+            const fechaKey = fechaToKey(fecha);
+            const todosDatos = snap.val() || {};
+            const datosFecha = todosDatos[fechaKey] || {};
+            const datosProd = Object.values(datosFecha)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            actualizarGraficoProd(datosProd, fecha);
+        });
+
         window.addEventListener('load', async () => {
             actualizarEstadoLineaUI();
             const preferencias = await obtenerPreferencias();
@@ -1237,10 +1263,10 @@
             if (inputFechaProd) inputFechaProd.value = fechaProdGuardada;
             const tituloFecha = document.getElementById('tituloFechaProd');
             if (tituloFecha) {
-                const hoy = new Date().toISOString().split('T')[0];
-                tituloFecha.textContent = fechaProdGuardada === hoy ? 'Hoy' : new Date(fechaProdGuardada).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                const hoy = tsToFechaLocal(Date.now());
+                tituloFecha.textContent = fechaProdGuardada === hoy ? 'Hoy' : new Date(fechaProdGuardada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             }
-            setTimeout(() => { state.inicializado = true; }, 100);
+            state.inicializado = true;
         });
     </script>
     
@@ -1376,10 +1402,20 @@
                                 <span class="w-4 h-1 bg-yellow-400 rounded"></span>
                                 <span class="text-yellow-700">Media: <span id="mediaValor">--</span></span>
                             </div>
+                            <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border border-slate-200 hover:border-red-300 flex items-center gap-1.5 transition-all">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+                                Editar puntos
+                            </button>
                         </div>
                     </div>
                     <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
                         <canvas id="graficoProd"></canvas>
+                    </div>
+                    <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2">
+                        <p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                            Modo edición — pulsa 🗑️ para borrar un punto
+                        </p>
                     </div>
                     <p class="text-[10px] text-slate-400 mt-2 text-center">Puntos ordenados por finalización de tarea (de izquierda a derecha) | Línea amarilla: Media del día</p>
                 </div>
