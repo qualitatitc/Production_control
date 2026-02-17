@@ -51,6 +51,7 @@
             const btnIniciarTarea = document.getElementById('btnIniciarTarea');
             const btnEntrada = document.getElementById('btnEntrada');
             const btnSalida = document.getElementById('btnSalida');
+            const btnForzarParada = document.getElementById('btnForzarParada');
             const indicadorLinea = document.getElementById('indicadorLinea');
             
             if (lineaIniciada) {
@@ -70,6 +71,10 @@
                 btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = false;
                 btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
+
+                // Forzar parada solo activo cuando la línea está activa
+                btnForzarParada.disabled = false;
+                btnForzarParada.classList.remove('opacity-50', 'cursor-not-allowed');
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
             } else {
@@ -89,10 +94,73 @@
                 btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = true;
                 btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
+
+                // Forzar parada desactivado cuando la línea ya está parada
+                btnForzarParada.disabled = true;
+                btnForzarParada.classList.add('opacity-50', 'cursor-not-allowed');
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
             }
         }
+
+        // FORZAR PARADA DE LÍNEA
+        window.forzarParadaLinea = async function() {
+            if (!lineaIniciada) return;
+            
+            if (!confirm('⛔ ¿Forzar parada de línea?\n\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
+
+            const operario = document.getElementById('selectOperario').value;
+            const horaActual = new Date().toLocaleTimeString('es-ES');
+            const fechaActual = obtenerFecha();
+            const ahora = Date.now();
+
+            // Pausar tareas activas
+            const snapTareas = await get(tareasRef);
+            const tareas = snapTareas.val() || {};
+            const updates = {};
+
+            Object.keys(tareas).forEach(id => {
+                if (tareas[id].estado === "activo") {
+                    const acumuladoSesion = ahora - tareas[id].inicioMS;
+                    updates[`tareas/${id}/estado`] = "pausa_salida_linea";
+                    updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+                }
+            });
+            if (Object.keys(updates).length > 0) await update(ref(db), updates);
+
+            // Registrar SALIDA en tabla temporal
+            await push(tareasRef, {
+                operario,
+                numSerie: "---",
+                codigo: "⛔ SALIDA FORZADA",
+                fecha: fechaActual,
+                inicio: horaActual,
+                fin: "---",
+                total: "REGISTRO",
+                estado: "finalizado",
+                tipo: "jornada",
+                numOperarios: 0
+            });
+
+            // Registrar SALIDA en historial (para que el cálculo de productividad lo tome)
+            await push(tareasHistorialRef, {
+                operario,
+                numSerie: "---",
+                codigo: "🔴 SALIDA",
+                fecha: fechaActual,
+                inicio: horaActual,
+                fin: "---",
+                total: 0,
+                tipo: "jornada",
+                numOperarios: 0,
+                timestamp: Date.now()
+            });
+
+            // Actualizar estado local
+            lineaIniciada = false;
+            numOperariosActivos = 1;
+            actualizarEstadoBotones();
+        };
 
         const obtenerFecha = () => {
             const hoy = new Date();
@@ -1641,6 +1709,13 @@
                 </thead>
                 <tbody id="cuerpoTabla" class="divide-y divide-slate-100"></tbody>
             </table>
+        </div>
+
+        <!-- BOTÓN FORZAR PARADA -->
+        <div class="flex justify-end mb-6">
+            <button onclick="forzarParadaLinea()" id="btnForzarParada" class="opacity-50 cursor-not-allowed bg-slate-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 hover:bg-red-700 transition-colors" disabled>
+                ⛔ Forzar Parada de Línea
+            </button>
         </div>
 
         <!-- GRÁFICO 1: TAREAS INDIVIDUALES -->
