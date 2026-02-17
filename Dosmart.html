@@ -51,7 +51,6 @@
             const btnIniciarTarea = document.getElementById('btnIniciarTarea');
             const btnEntrada = document.getElementById('btnEntrada');
             const btnSalida = document.getElementById('btnSalida');
-            const btnForzarParada = document.getElementById('btnForzarParada');
             const indicadorLinea = document.getElementById('indicadorLinea');
             
             if (lineaIniciada) {
@@ -71,10 +70,6 @@
                 btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = false;
                 btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
-
-                // Forzar parada solo activo cuando la línea está activa
-                btnForzarParada.disabled = false;
-                btnForzarParada.classList.remove('opacity-50', 'cursor-not-allowed');
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
             } else {
@@ -94,10 +89,6 @@
                 btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
                 btnSalida.disabled = true;
                 btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
-
-                // Forzar parada desactivado cuando la línea ya está parada
-                btnForzarParada.disabled = true;
-                btnForzarParada.classList.add('opacity-50', 'cursor-not-allowed');
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
             }
@@ -105,8 +96,6 @@
 
         // FORZAR PARADA DE LÍNEA
         window.forzarParadaLinea = async function() {
-            if (!lineaIniciada) return;
-            
             if (!confirm('⛔ ¿Forzar parada de línea?\n\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
 
             const operario = document.getElementById('selectOperario').value;
@@ -1713,7 +1702,7 @@
 
         <!-- BOTÓN FORZAR PARADA -->
         <div class="flex justify-end mb-6">
-            <button onclick="forzarParadaLinea()" id="btnForzarParada" class="opacity-50 cursor-not-allowed bg-slate-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 hover:bg-red-700 transition-colors" disabled>
+            <button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">
                 ⛔ Forzar Parada de Línea
             </button>
         </div>
