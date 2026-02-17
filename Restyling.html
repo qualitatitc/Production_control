@@ -81,22 +81,19 @@
 
         // Funciones para manejar datos del gráfico tiempo por tarea
         const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
-            const fechaKey = fecha.replace(/-/g, '_');
-            console.log('💾 Guardando en Firebase:', { fecha, fechaKey, serie, tiempo, finMS });
+            const fechaKey = fechaToKey(fecha);
+            console.log('💾 Guardando tiempoPorTarea:', { fecha, fechaKey, serie, tiempo });
             await push(ref(db, `tiempoPorTarea/${fechaKey}`), {
-                serie: serie,
-                tiempo: tiempo,
-                finMS: finMS,
-                timestamp: Date.now()
+                serie, tiempo, finMS, timestamp: Date.now()
             });
-            console.log('✅ Guardado exitoso');
+            console.log('✅ Guardado OK');
         };
 
         const obtenerTiempoPorTarea = async (fecha) => {
-            const fechaKey = fecha.replace(/-/g, '_');
+            const fechaKey = fechaToKey(fecha);
             const snapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
             const datos = snapshot.val() || {};
-            console.log('📊 Datos obtenidos de Firebase para', fecha, ':', datos);
+            console.log('📊 tiempoPorTarea obtenido para', fecha, '(key:', fechaKey, '):', datos);
             return datos;
         };
 
@@ -121,12 +118,37 @@
             return diaSemana === 0 || diaSemana === 6;
         };
 
+        // Función CENTRAL para convertir cualquier timestamp a fecha YYYY-MM-DD local
+        const tsToFechaLocal = (ms) => {
+            const d = new Date(Number(ms));
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day   = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // Convierte fecha YYYY-MM-DD a clave Firebase YYYY_MM_DD
+        const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
+
         // GRÁFICO DE TIEMPO POR TAREA - CAMBIO PRINCIPAL
         const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
+            console.log('═══════════════════════════════════════');
+            console.log('📊 ACTUALIZANDO GRÁFICO TIEMPO POR TAREA');
+            console.log('Datos recibidos:', datosProd);
+            console.log('Fecha seleccionada:', fechaSeleccionada);
+            console.log('Cantidad de datos:', datosProd ? datosProd.length : 0);
+            
             const ctx = document.getElementById('graficoProd');
             const container = document.getElementById('graficoContainer');
             
-            if (!ctx || !container) return;
+            if (!ctx || !container) {
+                console.error('❌ ERROR: No se encontró el canvas del gráfico');
+                console.log('ctx:', ctx);
+                console.log('container:', container);
+                return;
+            }
+            
+            console.log('✅ Canvas encontrado correctamente');
             
             const tituloFecha = document.getElementById('tituloFechaProd');
             if (tituloFecha && fechaSeleccionada) {
@@ -136,7 +158,11 @@
             }
             
             if (!datosProd || datosProd.length === 0) {
-                if (state.chart) state.chart.destroy();
+                console.log('⚠️ No hay datos para mostrar, creando gráfico vacío');
+                if (state.chart) {
+                    console.log('🗑️ Destruyendo gráfico anterior');
+                    state.chart.destroy();
+                }
                 const mediaIndicator = document.getElementById('mediaValor');
                 if (mediaIndicator) mediaIndicator.textContent = '--';
                 
@@ -156,19 +182,30 @@
                 return;
             }
             
+            console.log('✅ HAY DATOS PARA GRAFICAR');
             const tiempos = datosProd.map(d => d.tiempo);
             const series = datosProd.map(d => d.serie);
+            console.log('⏱️ Tiempos extraídos:', tiempos);
+            console.log('🏷️ Series extraídas:', series);
+            
             const media = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
+            console.log('📊 Media calculada:', media);
+            
             const tiempoObjetivo = 420 / 19;
             
             const mediaIndicator = document.getElementById('mediaValor');
             if (mediaIndicator) {
                 mediaIndicator.textContent = media.toFixed(1) + ' min';
                 mediaIndicator.className = 'font-black text-lg text-yellow-700';
+                console.log('📝 Indicador de media actualizado');
             }
             
-            if (state.chart) state.chart.destroy();
+            if (state.chart) {
+                console.log('🗑️ Destruyendo gráfico anterior');
+                state.chart.destroy();
+            }
             
+            console.log('🎨 Creando nuevo gráfico Chart.js...');
             state.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -242,27 +279,18 @@
                     }
                 }
             });
+            console.log('✅ GRÁFICO CREADO EXITOSAMENTE');
+            console.log('═══════════════════════════════════════');
         };
 
         window.seleccionarFechaProd = async (fecha) => {
             state.fechaProdSeleccionada = fecha;
             await guardarPreferencias('fechaProdSeleccionada', fecha);
             
-            // Obtener datos del gráfico desde Firebase
             const datosGuardados = await obtenerTiempoPorTarea(fecha);
-            
-            // Convertir a array y ordenar por finMS
-            const tareasFinalizadas = [];
-            Object.keys(datosGuardados).forEach(id => {
-                const t = datosGuardados[id];
-                tareasFinalizadas.push({ serie: t.serie, tiempo: t.tiempo, finMS: t.finMS });
-            });
-            
-            // Ordenar por orden de finalización
-            tareasFinalizadas.sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
-            
-            // Crear array de datos para el gráfico
-            const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
             
             actualizarGraficoProd(datosProd, fecha);
         };
@@ -778,48 +806,52 @@
         };
 
         window.finalizarTarea = async (id, inicioMS) => {
-            console.log('🎯 Finalizando tarea:', id);
-            const minutos = Math.max(1, Math.round((Date.now() - inicioMS) / 60000));
-            const finMS = Date.now();
+            console.log('========================================');
+            console.log('🎯 FINALIZANDO TAREA id:', id, 'inicioMS:', inicioMS);
             
-            // Obtener datos de la tarea antes de actualizarla
+            const inicioMSNum = Number(inicioMS); // Asegurar que es número
+            const minutos = Math.max(1, Math.round((Date.now() - inicioMSNum) / 60000));
+            const finMS = Date.now();
+            console.log('⏱️ Minutos calculados:', minutos);
+            
             const snapshot = await get(ref(db, `tareas/${id}`));
-            if (snapshot.exists()) {
-                const tarea = snapshot.val();
-                const fecha = new Date(tarea.inicioMS).toISOString().split('T')[0];
-                console.log('📅 Fecha de la tarea:', fecha);
-                console.log('🔍 Es sistema?', tarea.codigo === "SISTEMA");
+            if (!snapshot.exists()) {
+                console.error('❌ Tarea no encontrada en Firebase');
+                return;
+            }
+            
+            const tarea = snapshot.val();
+            const fecha = tsToFechaLocal(tarea.inicioMS); // ← Fecha LOCAL correcta
+            const fechaSeleccionada = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
+            
+            console.log('📅 Fecha tarea (local):', fecha);
+            console.log('📅 Fecha seleccionada en gráfico:', fechaSeleccionada);
+            console.log('🏷️ Código:', tarea.codigo, '| Serie:', tarea.numSerie);
+            
+            if (tarea.codigo !== "SISTEMA") {
+                await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
                 
-                // Guardar en tiempoPorTarea si no es un evento del sistema
-                if (tarea.codigo !== "SISTEMA") {
-                    console.log('💾 Guardando en tiempoPorTarea...');
-                    await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
-                    
-                    // Actualizar gráfico si es la fecha actualmente seleccionada
-                    if (state.inicializado && fecha === state.fechaProdSeleccionada) {
-                        console.log('📊 Actualizando gráfico...');
-                        const datosGuardados = await obtenerTiempoPorTarea(fecha);
-                        const tareasFinalizadas = [];
-                        Object.keys(datosGuardados).forEach(key => {
-                            const t = datosGuardados[key];
-                            tareasFinalizadas.push({ serie: t.serie, tiempo: t.tiempo, finMS: t.finMS });
-                        });
-                        tareasFinalizadas.sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
-                        const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-                        console.log('📈 Datos para gráfico:', datosProd);
-                        actualizarGraficoProd(datosProd, fecha);
-                    }
+                // Actualizar gráfico si coincide la fecha
+                if (fecha === fechaSeleccionada) {
+                    const datosGuardados = await obtenerTiempoPorTarea(fecha);
+                    const tareasFinalizadas = Object.values(datosGuardados)
+                        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
+                    const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+                    console.log('📈 Actualizando gráfico con', datosProd.length, 'puntos');
+                    actualizarGraficoProd(datosProd, fecha);
+                } else {
+                    console.log('⚠️ Fechas distintas → gráfico no actualizado ahora');
                 }
             }
             
-            // Actualizar la tarea
-            await update(ref(db, `tareas/${id}`), { 
-                fin: new Date().toLocaleTimeString('es-ES'), 
-                finMS: finMS,
-                total: minutos, 
-                estado: "finalizado" 
+            await update(ref(db, `tareas/${id}`), {
+                fin: new Date().toLocaleTimeString('es-ES'),
+                finMS,
+                total: minutos,
+                estado: "finalizado"
             });
-            console.log('✅ Tarea finalizada');
+            console.log('✅ Tarea finalizada OK');
+            console.log('========================================');
         };
 
         window.borrarRegistro = (id) => {
@@ -1025,7 +1057,7 @@
             const preferencias = await obtenerPreferencias();
             const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
             state.mesSeleccionado = mesGuardado;
-            const fechaProdGuardada = preferencias.fechaProdSeleccionada?.valor || new Date().toISOString().split('T')[0];
+            const fechaProdGuardada = preferencias.fechaProdSeleccionada?.valor || tsToFechaLocal(Date.now());
             state.fechaProdSeleccionada = fechaProdGuardada;
             const anioGuardado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
             state.anioSeleccionado = anioGuardado;
@@ -1034,19 +1066,9 @@
             
             // Cargar datos del gráfico tiempo por tarea desde Firebase
             const datosGuardados = await obtenerTiempoPorTarea(fechaProdGuardada);
-            
-            // Convertir a array y ordenar
-            const tareasFinalizadas = [];
-            Object.keys(datosGuardados).forEach(id => {
-                const t = datosGuardados[id];
-                tareasFinalizadas.push({ serie: t.serie, tiempo: t.tiempo, finMS: t.finMS });
-            });
-            
-            // Ordenar por orden de finalización
-            tareasFinalizadas.sort((a, b) => (a.finMS || 0) - (b.finMS || 0));
-            
-            // Crear array de datos para el gráfico
-            const datosProd = tareasFinalizadas.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
             
             actualizarGraficoProd(datosProd, fechaProdGuardada);
             actualizarTextoMiniCalendario(mesGuardado);
