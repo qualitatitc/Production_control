@@ -996,20 +996,57 @@
                 } else if(esPausaSistema) tiempoTexto = "EN CURSO...";
                 else if(esHito) tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
                 else tiempoTexto = `${t.total}m`;
-                const filaClase = t.numSerie === "ENTRADA LÍNEA" ? "bg-emerald-50 border-emerald-200" :
-                                 t.numSerie === "SALIDA LÍNEA" ? "bg-red-50 border-red-200" :
-                                 t.numSerie === "PAUSA DESAYUNO" ? "bg-orange-50 border-orange-200" :
-                                 t.numSerie === "INCIDENCIA" ? "bg-red-50 border-red-200" :
-                                 t.numSerie === "REPOSICIÓN" ? "bg-purple-50 border-purple-200" :
-                                 esActivo ? "bg-red-50 border-red-100" :
-                                 esPausado ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
+
+                // Colores de fila y texto según tipo
+                const esIncidencia  = t.numSerie === "INCIDENCIA";
+                const esDesayuno    = t.numSerie === "PAUSA DESAYUNO";
+                const esReposicion  = t.numSerie === "REPOSICIÓN";
+                const esEntrada     = t.numSerie === "ENTRADA LÍNEA";
+                const esSalida      = t.numSerie === "SALIDA LÍNEA";
+
+                const filaClase = esEntrada    ? "bg-emerald-50 border-emerald-200" :
+                                  esSalida     ? "bg-red-50 border-red-200" :
+                                  esDesayuno   ? "bg-orange-50 border-orange-200" :
+                                  esIncidencia ? "bg-red-50 border-red-200" :
+                                  esReposicion ? "bg-purple-50 border-purple-200" :
+                                  esActivo     ? "bg-red-50 border-red-100" :
+                                  esPausado    ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
+
+                // Color del texto de la columna Serie según tipo especial
+                const serieColorClase = esIncidencia  ? "text-red-600" :
+                                        esDesayuno    ? "text-orange-500" :
+                                        esReposicion  ? "text-purple-600" :
+                                        esEntrada     ? "text-emerald-600" :
+                                        esSalida      ? "text-red-600" : "";
+
+                // Nombre del cliente: visible siempre que exista (incluso tareas terminadas)
+                const clienteHtml = (!esHito && t.cliente && t.cliente.trim() && t.cliente !== "Sin cliente")
+                    ? `<span class="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">👤 ${t.cliente}</span>`
+                    : '';
+                const pedidoHtml = (!esHito && t.pedido)
+                    ? `<span class="ml-1 text-[10px] text-slate-400">PED: ${t.pedido}</span>`
+                    : '';
+
                 const prodHtml = (!esHito && t.total > 0) ? `<span class="${(420/t.total) >= 19 ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-indigo-100 text-indigo-700 border-indigo-300'} px-2 py-1 rounded font-black text-sm border">${(420 / t.total).toFixed(1)}</span>` : '<span class="text-stone-300">—</span>';
                 let accionHtml = '';
                 if (esActivo) accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase">Finalizar</button>`;
                 else if(esPausado) accionHtml = '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>';
                 else if(esHito) accionHtml = '<span class="text-[10px] font-bold text-stone-400 uppercase">REGISTRO</span>';
                 else accionHtml = `<div class="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black text-[10px] border border-emerald-300"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Hecho</div>`;
-                cuerpo.innerHTML += `<tr class="${filaClase} border-b"><td class="p-3 font-black text-[15px]">${t.numSerie}${!esHito && t.pedido ? `<span class="ml-2 text-[10px] text-slate-500">PED: ${t.pedido}</span>` : ''}</td><td class="p-3 font-bold text-sm">${t.codigo}</td><td class="p-3 text-center"><span class="bg-slate-100 px-2 py-1 rounded font-black text-xs">${t.operarios || 0}</span></td><td class="p-3">${t.notas && t.notas.trim() ? `<div class="bg-yellow-100 border-yellow-500 p-2 rounded text-[12px] font-black">⚠️ ${t.notas}</div>` : '<span class="text-stone-300 text-[10px]">-</span>'}</td><td class="p-3 font-[1000] text-lg ${esActivo ? 'text-red-600' : esPausado || esPausaSistema ? 'text-blue-600' : ''}" ${esActivo || esPausaSistema ? `data-inicio-ms="${t.inicioMS}"` : ''}>${tiempoTexto}</td><td class="p-3 text-center">${prodHtml}</td><td class="p-3 text-right flex gap-3">${accionHtml}<button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td></tr>`;
+
+                cuerpo.innerHTML += `<tr class="${filaClase} border-b">
+                    <td class="p-3 font-black text-[15px] ${serieColorClase}">
+                        ${t.numSerie}
+                        ${pedidoHtml}
+                        ${clienteHtml}
+                    </td>
+                    <td class="p-3 font-bold text-sm">${t.codigo}</td>
+                    <td class="p-3 text-center"><span class="bg-slate-100 px-2 py-1 rounded font-black text-xs">${t.operarios || 0}</span></td>
+                    <td class="p-3">${t.notas && t.notas.trim() ? `<div class="bg-yellow-100 border-yellow-500 p-2 rounded text-[12px] font-black">⚠️ ${t.notas}</div>` : '<span class="text-stone-300 text-[10px]">-</span>'}</td>
+                    <td class="p-3 font-[1000] text-lg ${esActivo ? 'text-red-600' : esPausado || esPausaSistema ? 'text-blue-600' : ''}" ${esActivo || esPausaSistema ? `data-inicio-ms="${t.inicioMS}"` : ''}>${tiempoTexto}</td>
+                    <td class="p-3 text-center">${prodHtml}</td>
+                    <td class="p-3 text-right flex gap-3">${accionHtml}<button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                </tr>`;
             });
         });
 
