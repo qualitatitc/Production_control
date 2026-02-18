@@ -30,7 +30,11 @@
 <body class="bg-gray-50 min-h-screen flex flex-col">
     <header class="bg-white border-b border-gray-200 px-6 py-6 flex items-center justify-between">
         <div class="flex items-center gap-4">
-            <div class="flex items-center gap-2">
+            <!-- Botón Volver a Index -->
+            <a href="index.html" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-800" title="Volver al inicio">
+                <i data-lucide="arrow-left" class="w-6 h-6"></i>
+            </a>
+            <div class="flex items-center gap-2 border-l pl-4 border-gray-200">
                 <i data-lucide="settings" class="w-10 h-10 text-gray-700"></i>
                 <h1 class="text-4xl font-extrabold text-gray-800">
                     Assemblies <span class="text-blue-600">Production</span>
@@ -181,16 +185,13 @@
 
         const getCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'tareas');
 
-        // FUNCIÓN DE CIERRE MEJORADA
         window.cerrarModal = () => {
-            console.log("Cerrando modal...");
             const modal = document.getElementById('modal-cantidad');
-            modal.style.display = 'none'; // Forzar ocultación por estilo directo
+            modal.style.display = 'none';
             modal.classList.add('hidden');
             filaActualId = null;
         };
 
-        // INTEGRACIÓN GEMINI ✨
         async function llamarGemini(prompt) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             const payload = {
@@ -294,7 +295,6 @@
 
             if (!cant || !docId) return;
 
-            // FORZAR CIERRE ANTES DE LA OPERACIÓN DE RED
             window.cerrarModal();
 
             try {
@@ -320,7 +320,6 @@
             }
         };
 
-        // LÓGICA DE IA ✨
         document.getElementById('btn-ia-analizar').onclick = async () => {
             const modalIA = document.getElementById('modal-ia');
             const contentIA = document.getElementById('ia-content');
