@@ -3,1115 +3,425 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assemblies Production - Control de Tareas</title>
+    <title>Assemblies Production</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAmv0Pffo50nfrrovo77TEqbr-oDZRpIVY",
-            authDomain: "aseemblies.firebaseapp.com",
-            projectId: "aseemblies",
-            storageBucket: "aseemblies.firebasestorage.app",
-            messagingSenderId: "471809973242",
-            appId: "1:471809973242:web:b784e7e3eb03411bc2a243",
-            measurementId: "G-QG9B8NSZJR"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const tareasRef = ref(db, 'tareas');
-        const tareasHistorialRef = ref(db, 'historial_tareas');
-        const pausaRef = ref(db, 'estadoPausa');
-        const incidenciaRef = ref(db, 'estadoIncidencia');
-        const estadoLineaRef = ref(db, 'estadoLinea');
-        const mantenimientoRef = ref(db, 'tareas_mantenimiento');
-        const incidenciasTextoRef = ref(db, 'incidencias_texto');
-
-        let estaPausadoGlobal = false;
-        let hayIncidenciaGlobal = false;
-        let lineaIniciada = false;
-        let operarioLineaActiva = null;
-        let inicioPausaMS = 0;
-        let inicioIncidenciaMS = 0;
-
-        function actualizarEstadoBotones() {
-            const btnPausa = document.getElementById('btnPausa');
-            const btnIncidencia = document.getElementById('btnIncidencia');
-            const btnIniciarTarea = document.getElementById('btnIniciarTarea');
-            const btnEntrada = document.getElementById('btnEntrada');
-            const btnSalida = document.getElementById('btnSalida');
-            const indicadorLinea = document.getElementById('indicadorLinea');
-            
-            if (lineaIniciada) {
-                btnPausa.disabled = false;
-                btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnIncidencia.disabled = false;
-                btnIncidencia.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnIniciarTarea.disabled = false;
-                btnIniciarTarea.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnEntrada.disabled = true;
-                btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
-                btnSalida.disabled = false;
-                btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
-            } else {
-                btnPausa.disabled = true;
-                btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnIncidencia.disabled = true;
-                btnIncidencia.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnIniciarTarea.disabled = true;
-                btnIniciarTarea.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnEntrada.disabled = false;
-                btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnSalida.disabled = true;
-                btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
-            }
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .led-indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .led-green { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 2s infinite; }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .led-gray { background-color: #9ca3af; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        
+        /* Spinner para carga de IA */
+        .loader-ia {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
         }
-
-        const obtenerFecha = () => {
-            const hoy = new Date();
-            const dia = String(hoy.getDate()).padStart(2, '0');
-            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-            const anio = hoy.getFullYear();
-            return `${dia}/${mes}/${anio}`;
-        };
-
-        function formatTime(ms) {
-            if (!ms || ms < 0) return "0m 0s";
-            const min = Math.floor(ms / 60000);
-            const seg = Math.floor((ms % 60000) / 1000);
-            return `${min}m ${seg}s`;
-        }
-
-        // ==========================================
-        // EXPONER FUNCIONES AL WINDOW GLOBAL
-        // ==========================================
-        
-        window.registrarJornada = async function(tipo) {
-            console.log(`🚀 registrarJornada llamado con tipo: ${tipo}`);
-            console.log(`📊 Estado actual - lineaIniciada: ${lineaIniciada}`);
-            
-            const operario = document.getElementById('selectOperario').value;
-            const esEntrada = tipo === 'INICIO';
-            
-            if (esEntrada && lineaIniciada) {
-                alert('⚠️ La línea ya está activa. Debes registrar SALIDA primero.');
-                return;
-            }
-            
-            if (!esEntrada && !lineaIniciada) {
-                alert('⚠️ La línea ya está parada. Debes registrar ENTRADA primero.');
-                return;
-            }
-
-            if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) {
-                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`);
-                return;
-            }
-            
-            await ejecutarRegistroJornada(tipo);
-        };
-
-        async function ejecutarRegistroJornada(tipo) {
-            console.log(`⚙️ ejecutarRegistroJornada iniciado - tipo: ${tipo}`);
-            
-            const operario = document.getElementById('selectOperario').value;
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            const esEntrada = tipo === 'INICIO';
-            const ahora = Date.now();
-            
-            try {
-                if (esEntrada) {
-                    console.log('🟢 Procesando ENTRADA...');
-                    
-                    // 1. Actualizar estado local PRIMERO
-                    lineaIniciada = true;
-                    operarioLineaActiva = operario;
-                    console.log(`✅ Estado local actualizado - lineaIniciada: ${lineaIniciada}, operario: ${operarioLineaActiva}`);
-                    
-                    // 2. Actualizar UI inmediatamente
-                    actualizarEstadoBotones();
-                    console.log('✅ UI actualizada');
-                    
-                    // 3. Guardar ENTRADA en tabla temporal (tareas)
-                    console.log('💾 Guardando ENTRADA en tareasRef...');
-                    const nuevaTareaRef = push(tareasRef);
-                    await set(nuevaTareaRef, { 
-                        operario: operario, 
-                        codigo: "🟢 ENTRADA", 
-                        fecha: fechaActual, 
-                        inicio: horaActual, 
-                        fin: "---", 
-                        total: "REGISTRO",
-                        cantidad: 0,
-                        estado: "finalizado", 
-                        tipo: "jornada"
-                    });
-                    console.log(`✅ ENTRADA guardada en tareas con ID: ${nuevaTareaRef.key}`);
-                    
-                    // 4. Guardar en historial
-                    console.log('💾 Guardando ENTRADA en historial...');
-                    await push(tareasHistorialRef, {
-                        operario: operario,
-                        codigo: "🟢 ENTRADA",
-                        fecha: fechaActual,
-                        inicio: horaActual,
-                        fin: "---",
-                        total: 0,
-                        cantidad: 0,
-                        tipo: "jornada",
-                        timestamp: Date.now()
-                    });
-                    console.log('✅ ENTRADA guardada en historial');
-                    
-                    // 5. Actualizar estado en Firebase
-                    console.log('💾 Actualizando estadoLineaRef...');
-                    await update(estadoLineaRef, {
-                        activa: true,
-                        operario: operario,
-                        horaInicio: horaActual,
-                        fecha: fechaActual
-                    });
-                    console.log('✅ estadoLineaRef actualizado');
-                    
-                    // 6. Reactivar tareas pausadas si las hay
-                    const snapTareas = await get(tareasRef);
-                    const tareas = snapTareas.val() || {};
-                    const updates = {};
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "pausa_salida_linea") {
-                            updates[`tareas/${id}/estado`] = "activo";
-                            updates[`tareas/${id}/inicioMS`] = ahora;
-                        }
-                    });
-                    if (Object.keys(updates).length > 0) {
-                        await update(ref(db), updates);
-                        console.log('✅ Tareas pausadas reactivadas');
-                    }
-                    
-                    alert('✅ Entrada registrada correctamente');
-                    
-                } else {
-                    // ES SALIDA
-                    console.log('🔴 Procesando SALIDA...');
-                    
-                    // 1. Pausar tareas activas primero
-                    const snapTareas = await get(tareasRef);
-                    const tareas = snapTareas.val() || {};
-                    const updates = {};
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "activo") {
-                            const acumuladoSesion = ahora - tareas[id].inicioMS;
-                            updates[`tareas/${id}/estado`] = "pausa_salida_linea";
-                            updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                        }
-                    });
-                    if (Object.keys(updates).length > 0) {
-                        await update(ref(db), updates);
-                        console.log('✅ Tareas activas pausadas');
-                    }
-                    
-                    // 2. Guardar SALIDA en tabla temporal
-                    console.log('💾 Guardando SALIDA en tareasRef...');
-                    await push(tareasRef, { 
-                        operario: operario, 
-                        codigo: "🔴 SALIDA", 
-                        fecha: fechaActual, 
-                        inicio: horaActual, 
-                        fin: "---", 
-                        total: "REGISTRO",
-                        cantidad: 0,
-                        estado: "finalizado", 
-                        tipo: "jornada"
-                    });
-                    console.log('✅ SALIDA guardada en tareas');
-                    
-                    // 3. Guardar en historial
-                    console.log('💾 Guardando SALIDA en historial...');
-                    await push(tareasHistorialRef, {
-                        operario: operario,
-                        codigo: "🔴 SALIDA",
-                        fecha: fechaActual,
-                        inicio: horaActual,
-                        fin: "---",
-                        total: 0,
-                        cantidad: 0,
-                        tipo: "jornada",
-                        timestamp: Date.now()
-                    });
-                    console.log('✅ SALIDA guardada en historial');
-                    
-                    // 4. Actualizar estado local
-                    lineaIniciada = false;
-                    operarioLineaActiva = null;
-                    console.log(`✅ Estado local actualizado - lineaIniciada: ${lineaIniciada}`);
-                    
-                    // 5. Actualizar UI
-                    actualizarEstadoBotones();
-                    console.log('✅ UI actualizada');
-                    
-                    // 6. Actualizar Firebase
-                    await update(estadoLineaRef, {
-                        activa: false,
-                        operario: null
-                    });
-                    console.log('✅ estadoLineaRef actualizado');
-                    
-                    alert('✅ Salida registrada correctamente');
-                }
-                
-            } catch (error) {
-                console.error("❌ Error al registrar:", error);
-                alert("❌ Error al registrar: " + error.message);
-            }
-        }
-
-        window.iniciarTarea = async function() {
-            console.log('🚀 iniciarTarea llamado');
-            console.log(`📊 Estado - lineaIniciada: ${lineaIniciada}`);
-            
-            if (!lineaIniciada) {
-                alert('⚠️ Debes registrar la ENTRADA antes de iniciar tareas');
-                return;
-            }
-            
-            const operario = document.getElementById('selectOperario').value;
-            const cod = document.getElementById('codigo').value.trim().toUpperCase();
-            
-            if (!cod) {
-                alert('⚠️ Debes introducir un código');
-                return;
-            }
-            
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            
-            try {
-                console.log(`💾 Guardando tarea - Operario: ${operario}, Código: ${cod}`);
-                
-                await push(tareasRef, { 
-                    operario: operario, 
-                    codigo: cod, 
-                    fecha: fechaActual, 
-                    inicio: horaActual, 
-                    inicioMS: Date.now(), 
-                    acumuladoMS: 0, 
-                    estado: "activo", 
-                    tipo: "produccion",
-                    cantidad: 0
-                });
-                
-                console.log('✅ Tarea guardada correctamente');
-                
-                document.getElementById('codigo').value = ''; 
-                document.getElementById('codigo').focus();
-                
-            } catch (error) {
-                console.error("❌ Error al iniciar tarea:", error);
-                alert("❌ Error al iniciar tarea: " + error.message);
-            }
-        };
-
-        window.toggleIncidencia = async function() {
-            console.log('🚀 toggleIncidencia llamado');
-            
-            if (!lineaIniciada && !hayIncidenciaGlobal) {
-                alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias');
-                return;
-            }
-            
-            const ahora = Date.now();
-            const operario = document.getElementById('selectOperario').value;
-            
-            try {
-                const snapTareas = await get(tareasRef);
-                const tareas = snapTareas.val() || {};
-                const updates = {};
-                
-                if (!hayIncidenciaGlobal) {
-                    const motivo = prompt("Motivo de la incidencia:"); 
-                    if (!motivo) return;
-                    
-                    await push(incidenciasTextoRef, {
-                        descripcion: motivo.trim(),
-                        fecha: obtenerFecha(),
-                        timestamp: Date.now()
-                    });
-                    
-                    await update(incidenciaRef, { 
-                        activa: true, 
-                        inicioMS: ahora, 
-                        horaTexto: new Date().toLocaleTimeString('es-ES'), 
-                        fecha: obtenerFecha(), 
-                        motivo: motivo.trim(), 
-                        operario: operario 
-                    });
-                    
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "activo") {
-                            const acumuladoSesion = ahora - tareas[id].inicioMS;
-                            updates[`tareas/${id}/estado`] = "pausa_incidencia";
-                            updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                        }
-                    });
-                    
-                    console.log('✅ Incidencia iniciada');
-                } else {
-                    const snapI = await get(incidenciaRef);
-                    const infoInc = snapI.val();
-                    const horaFin = new Date().toLocaleTimeString('es-ES');
-                    const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
-                    
-                    await push(tareasRef, { 
-                        operario: infoInc.operario || "SISTEMA", 
-                        codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, 
-                        fecha: infoInc.fecha, 
-                        inicio: infoInc.horaTexto, 
-                        fin: horaFin, 
-                        total: duracion, 
-                        cantidad: 0,
-                        estado: "finalizado", 
-                        tipo: "incidencia" 
-                    });
-                    
-                    await push(tareasHistorialRef, {
-                        operario: infoInc.operario || "SISTEMA",
-                        codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
-                        fecha: infoInc.fecha,
-                        inicio: infoInc.horaTexto,
-                        fin: horaFin,
-                        total: duracion,
-                        cantidad: 0,
-                        tipo: "incidencia",
-                        timestamp: Date.now()
-                    });
-                    
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "pausa_incidencia") { 
-                            updates[`tareas/${id}/estado`] = "activo"; 
-                            updates[`tareas/${id}/inicioMS`] = ahora; 
-                        }
-                    });
-                    
-                    await update(incidenciaRef, { activa: false, inicioMS: 0 });
-                    console.log('✅ Incidencia finalizada');
-                }
-                
-                if (Object.keys(updates).length > 0) await update(ref(db), updates);
-                
-            } catch (error) {
-                console.error("❌ Error en incidencia:", error);
-                alert("❌ Error: " + error.message);
-            }
-        };
-
-        window.togglePausa = async function() {
-            console.log('🚀 togglePausa llamado');
-            
-            if (!lineaIniciada && !estaPausadoGlobal) {
-                alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno');
-                return;
-            }
-            
-            const ahora = Date.now();
-            const operario = document.getElementById('selectOperario').value;
-            
-            try {
-                const snapTareas = await get(tareasRef);
-                const tareas = snapTareas.val() || {};
-                const updates = {};
-                
-                if (!estaPausadoGlobal) {
-                    await update(pausaRef, { 
-                        activa: true, 
-                        inicioMS: ahora, 
-                        horaTexto: new Date().toLocaleTimeString('es-ES'), 
-                        fecha: obtenerFecha(), 
-                        operario: operario 
-                    });
-                    
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "activo") {
-                            const acumuladoSesion = ahora - tareas[id].inicioMS;
-                            updates[`tareas/${id}/estado`] = "pausado_desayuno";
-                            updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                        }
-                    });
-                    
-                    console.log('✅ Pausa (desayuno) iniciada');
-                } else {
-                    const snapP = await get(pausaRef);
-                    const infoP = snapP.val();
-                    const horaFin = new Date().toLocaleTimeString('es-ES');
-                    const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
-                    
-                    await push(tareasRef, { 
-                        operario: infoP.operario || "SISTEMA", 
-                        codigo: "☕ DESAYUNO", 
-                        fecha: infoP.fecha, 
-                        inicio: infoP.horaTexto, 
-                        fin: horaFin, 
-                        total: duracion, 
-                        cantidad: 0,
-                        estado: "finalizado", 
-                        tipo: "descanso" 
-                    });
-                    
-                    await push(tareasHistorialRef, {
-                        operario: infoP.operario || "SISTEMA",
-                        codigo: "☕ DESAYUNO",
-                        fecha: infoP.fecha,
-                        inicio: infoP.horaTexto,
-                        fin: horaFin,
-                        total: duracion,
-                        cantidad: 0,
-                        tipo: "descanso",
-                        timestamp: Date.now()
-                    });
-                    
-                    Object.keys(tareas).forEach(id => {
-                        if (tareas[id].estado === "pausado_desayuno") { 
-                            updates[`tareas/${id}/estado`] = "activo"; 
-                            updates[`tareas/${id}/inicioMS`] = ahora; 
-                        }
-                    });
-                    
-                    await update(pausaRef, { activa: false, inicioMS: 0 });
-                    console.log('✅ Pausa (desayuno) finalizada');
-                }
-                
-                if (Object.keys(updates).length > 0) await update(ref(db), updates);
-                
-            } catch (error) {
-                console.error("❌ Error en pausa:", error);
-                alert("❌ Error: " + error.message);
-            }
-        };
-
-        window.forzarParadaLinea = async function() {
-            console.log('🚀 forzarParadaLinea llamado');
-            
-            const operario = document.getElementById('selectOperario').value;
-            
-            if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
-                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede forzar la parada.`);
-                return;
-            }
-
-            if (!confirm('⛔ ¿Forzar parada de línea?\n\nSe registrará una SALIDA ahora mismo.')) return;
-
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            const ahora = Date.now();
-
-            try {
-                const snapTareas = await get(tareasRef);
-                const tareas = snapTareas.val() || {};
-                const updates = {};
-
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "activo") {
-                        const acumuladoSesion = ahora - tareas[id].inicioMS;
-                        updates[`tareas/${id}/estado`] = "pausa_salida_linea";
-                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                    }
-                });
-                
-                if (Object.keys(updates).length > 0) await update(ref(db), updates);
-
-                await push(tareasRef, {
-                    operario: operario,
-                    codigo: "⛔ ENTRADA FORZADA",
-                    fecha: fechaActual,
-                    inicio: horaActual,
-                    fin: "---",
-                    total: "REGISTRO",
-                    estado: "finalizado",
-                    tipo: "jornada",
-                    cantidad: 0
-                });
-
-                await push(tareasRef, {
-                    operario: operario,
-                    codigo: "🔴 SALIDA FORZADA",
-                    fecha: fechaActual,
-                    inicio: horaActual,
-                    fin: "---",
-                    total: "REGISTRO",
-                    estado: "finalizado",
-                    tipo: "jornada",
-                    cantidad: 0
-                });
-
-                lineaIniciada = false;
-                operarioLineaActiva = null;
-                
-                actualizarEstadoBotones();
-                
-                await update(estadoLineaRef, {
-                    activa: false,
-                    operario: null
-                });
-                
-                console.log('✅ Parada forzada ejecutada');
-                alert('✅ Parada forzada registrada');
-                
-            } catch (error) {
-                console.error("❌ Error al forzar parada:", error);
-                alert("❌ Error: " + error.message);
-            }
-        };
-
-        window.finalizarTarea = async function(id) {
-            console.log(`🚀 finalizarTarea llamado - ID: ${id}`);
-            
-            const cantidad = prompt("¿Qué cantidad has montado?");
-            if (cantidad === null) return;
-            if (isNaN(cantidad) || cantidad === "") {
-                alert("Por favor, introduce un número válido.");
-                return;
-            }
-            
-            try {
-                const snap = await get(ref(db, `tareas/${id}`));
-                const t = snap.val();
-                let totalMS = (t.acumuladoMS || 0);
-                if(t.estado === "activo") totalMS += (Date.now() - t.inicioMS);
-                
-                const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
-                const horaFin = new Date().toLocaleTimeString('es-ES');
-                
-                await update(ref(db, `tareas/${id}`), { 
-                    fin: horaFin, 
-                    total: tiempoTotal, 
-                    cantidad: parseInt(cantidad),
-                    estado: "finalizado" 
-                });
-                
-                await push(tareasHistorialRef, {
-                    operario: t.operario,
-                    codigo: t.codigo,
-                    fecha: t.fecha,
-                    inicio: t.inicio,
-                    fin: horaFin,
-                    total: tiempoTotal,
-                    cantidad: parseInt(cantidad),
-                    tipo: "produccion",
-                    timestamp: Date.now()
-                });
-                
-                console.log('✅ Tarea finalizada');
-                
-            } catch (error) {
-                console.error("❌ Error al finalizar tarea:", error);
-                alert("❌ Error: " + error.message);
-            }
-        };
-
-        window.borrarTarea = async function(id) {
-            console.log(`🚀 borrarTarea llamado - ID: ${id}`);
-            if (confirm('¿Borrar tarea de la tabla temporal?')) {
-                try {
-                    await remove(ref(db, `tareas/${id}`));
-                    console.log('✅ Tarea borrada');
-                } catch (error) {
-                    console.error("❌ Error al borrar:", error);
-                }
-            }
-        };
-        
-        window.borrarTodoElRegistro = async function() {
-            console.log('🚀 borrarTodoElRegistro llamado');
-            if (confirm("¿BORRAR TODA LA TABLA TEMPORAL?\n\nLos datos del historial NO se borrarán.")) {
-                try {
-                    await remove(tareasRef);
-                    console.log('✅ Tabla temporal borrada');
-                } catch (error) {
-                    console.error("❌ Error al borrar todo:", error);
-                }
-            }
-        };
-
-        window.borrarHistorialGrafico = async function() {
-            console.log('🚀 borrarHistorialGrafico llamado');
-            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\n\nEsto borrará todos los datos históricos.")) {
-                try {
-                    await remove(tareasHistorialRef);
-                    console.log('✅ Historial borrado');
-                } catch (error) {
-                    console.error("❌ Error al borrar historial:", error);
-                }
-            }
-        };
-
-        window.agregarMantenimiento = async function() {
-            console.log('🚀 agregarMantenimiento llamado');
-            const descripcion = prompt("Descripción de la tarea de mantenimiento:");
-            if (!descripcion || !descripcion.trim()) return;
-            
-            try {
-                await push(mantenimientoRef, {
-                    descripcion: descripcion.trim(),
-                    fecha: obtenerFecha(),
-                    completada: false,
-                    timestamp: Date.now()
-                });
-                console.log('✅ Mantenimiento añadido');
-            } catch (error) {
-                console.error("❌ Error:", error);
-            }
-        };
-
-        window.completarMantenimiento = async function(id) {
-            console.log(`🚀 completarMantenimiento llamado - ID: ${id}`);
-            if (!confirm('¿Marcar tarea como realizada?')) return;
-            
-            try {
-                const tareaRef = ref(db, `tareas_mantenimiento/${id}`);
-                await update(tareaRef, { 
-                    completada: true,
-                    fechaCompletada: obtenerFecha(),
-                    horaCompletada: new Date().toLocaleTimeString('es-ES')
-                });
-                console.log('✅ Mantenimiento completado');
-            } catch (error) {
-                console.error("❌ Error:", error);
-            }
-        };
-
-        window.borrarMantenimiento = async function(id) {
-            console.log(`🚀 borrarMantenimiento llamado - ID: ${id}`);
-            if (!confirm('¿Eliminar esta tarea de mantenimiento?')) return;
-            
-            try {
-                await remove(ref(db, `tareas_mantenimiento/${id}`));
-                console.log('✅ Mantenimiento borrado');
-            } catch (error) {
-                console.error("❌ Error:", error);
-            }
-        };
-
-        window.borrarIncidenciaTexto = async function(id) {
-            console.log(`🚀 borrarIncidenciaTexto llamado - ID: ${id}`);
-            if (!confirm('¿Eliminar esta incidencia?')) return;
-            
-            try {
-                await remove(ref(db, `incidencias_texto/${id}`));
-                console.log('✅ Incidencia borrada');
-            } catch (error) {
-                console.error("❌ Error:", error);
-            }
-        };
-
-        window.handleKeyPress = function(e, nextId) { 
-            if (e.key === 'Enter') { 
-                e.preventDefault(); 
-                if (nextId) document.getElementById(nextId).focus(); 
-                else window.iniciarTarea(); 
-            } 
-        };
-        
-        window.exportarExcel = function() { 
-            try {
-                XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("tablaProduccion")), "Assemblies_Production.xlsx");
-                console.log('✅ Excel exportado');
-            } catch (error) {
-                console.error("❌ Error al exportar:", error);
-            }
-        };
-
-        window.togglePausaTarea = async function(id) {
-            console.log(`🚀 togglePausaTarea llamado - ID: ${id}`);
-            const ahora = Date.now();
-            
-            try {
-                const snap = await get(ref(db, `tareas/${id}`));
-                const t = snap.val();
-                
-                if (t.estado === "activo") {
-                    const nuevoAcumulado = (t.acumuladoMS || 0) + (ahora - t.inicioMS);
-                    await update(ref(db, `tareas/${id}`), { 
-                        estado: "pausa_manual", 
-                        acumuladoMS: nuevoAcumulado 
-                    });
-                    console.log('✅ Tarea pausada');
-                } else if (t.estado === "pausa_manual") {
-                    await update(ref(db, `tareas/${id}`), { 
-                        estado: "activo", 
-                        inicioMS: ahora 
-                    });
-                    console.log('✅ Tarea reanudada');
-                }
-            } catch (error) {
-                console.error("❌ Error:", error);
-            }
-        };
-
-        // ==========================================
-        // LISTENERS DE FIREBASE
-        // ==========================================
-
-        onValue(mantenimientoRef, (snapshot) => {
-            const cuerpo = document.getElementById('cuerpoMantenimiento');
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val();
-            
-            if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento</td></tr>';
-                return;
-            }
-            
-            const tareasPendientes = [];
-            const tareasCompletadas = [];
-            
-            Object.keys(datos).forEach(id => {
-                const t = datos[id];
-                if (t.completada) {
-                    tareasCompletadas.push({ id, ...t });
-                } else {
-                    tareasPendientes.push({ id, ...t });
-                }
-            });
-            
-            tareasPendientes.sort((a, b) => b.timestamp - a.timestamp);
-            tareasCompletadas.sort((a, b) => b.timestamp - a.timestamp);
-            
-            tareasPendientes.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-white border-b border-slate-100 hover:bg-blue-50 transition-all">
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-800 font-semibold">
-                            <span class="inline-flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                                ${t.descripcion}
-                            </span>
-                        </td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            <button onclick="completarMantenimiento('${t.id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
-                                ✓ Realizada
-                            </button>
-                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-            
-            tareasCompletadas.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-green-50 border-b border-slate-100 opacity-60">
-                        <td class="p-4 text-slate-500 font-medium text-sm line-through">${t.fecha}</td>
-                        <td class="p-4 text-slate-600 font-semibold line-through">
-                            <span class="inline-flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                                ${t.descripcion}
-                            </span>
-                            <div class="text-xs text-green-600 mt-1">✓ Completada el ${t.fechaCompletada} a las ${t.horaCompletada}</div>
-                        </td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-        });
-
-        onValue(incidenciasTextoRef, (snapshot) => {
-            const cuerpo = document.getElementById('cuerpoIncidencias');
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val();
-            
-            if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
-                return;
-            }
-            
-            const incidenciasArray = Object.keys(datos).map(id => ({ id, ...datos[id] }));
-            incidenciasArray.sort((a, b) => b.timestamp - a.timestamp);
-            
-            incidenciasArray.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
-                    </tr>`;
-            });
-        });
-
-        onValue(tareasRef, (snapshot) => {
-            console.log('📊 onValue tareasRef disparado');
-            const cuerpo = document.getElementById('cuerpoTabla'); 
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val(); 
-            
-            console.log(`📊 Datos recibidos: ${datos ? Object.keys(datos).length : 0} tareas`);
-            
-            if (!datos) return;
-            
-            Object.keys(datos).forEach(id => {
-                const t = datos[id];
-                const activo = t.estado === "activo";
-                let rowClass = "bg-white";
-                if(activo) rowClass = "bg-amber-50";
-                if(t.estado === "pausa_manual") rowClass = "bg-blue-50";
-                if(t.estado === "pausa_salida_linea") rowClass = "bg-purple-50";
-                if(t.estado === "pausa_incidencia") rowClass = "bg-red-50";
-                if(t.estado === "pausado_desayuno") rowClass = "bg-orange-50";
-
-                let tiempoMostrado;
-                if (activo) {
-                    tiempoMostrado = `<span class="contador-vivo text-amber-600" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
-                } else if (t.estado === "pausa_manual") {
-                    tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumuladoMS)}</span>`;
-                } else if (t.estado === "pausa_salida_linea") {
-                    tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
-                } else if (t.estado === "pausa_incidencia") {
-                    tiempoMostrado = `<span class="text-red-400 italic">🛠️ En Incidencia</span>`;
-                } else if (t.estado === "pausado_desayuno") {
-                    tiempoMostrado = `<span class="text-orange-400 italic">☕ En Desayuno</span>`;
-                } else if (t.tipo === 'jornada') {
-                    tiempoMostrado = `<span class="text-slate-500 font-bold text-xs">REGISTRO</span>`;
-                } else {
-                    tiempoMostrado = `${t.total} min`;
-                }
-
-                const cantidadMostrada = t.cantidad > 0 ? t.cantidad : '-';
-
-                cuerpo.innerHTML += `
-                    <tr class="${rowClass} border-b border-slate-100 transition-all">
-                        <td class="p-4 font-bold text-slate-700">${t.operario}</td>
-                        <td class="p-4 text-slate-600 font-medium">${t.fecha || '-'}</td>
-                        <td class="p-4 font-bold text-slate-800">${t.codigo}</td>
-                        <td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
-                        <td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
-                        <td class="p-4 font-black text-center">${tiempoMostrado}</td>
-                        <td class="p-4 font-bold text-center text-slate-700">${cantidadMostrada}</td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            ${activo ? `
-                                <button onclick="finalizarTarea('${id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>
-                            ` : (t.estado && t.estado.includes('pausa_') ? '⏸️' : '✓')}
-                            <button onclick="borrarTarea('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-        });
-
-        onValue(incidenciaRef, s => {
-            const d = s.val(); 
-            hayIncidenciaGlobal = d?.activa || false; 
-            inicioIncidenciaMS = d?.inicioMS || 0;
-            document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
-            document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
-            actualizarEstadoBotones();
-        });
-        
-        onValue(pausaRef, s => {
-            const d = s.val(); 
-            estaPausadoGlobal = d?.activa || false; 
-            inicioPausaMS = d?.inicioMS || 0;
-            document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
-            document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
-            actualizarEstadoBotones();
-        });
-
-        onValue(estadoLineaRef, s => {
-            console.log('📊 onValue estadoLineaRef disparado');
-            const d = s.val();
-            
-            if (d) {
-                lineaIniciada = d.activa || false;
-                operarioLineaActiva = d.operario || null;
-            } else {
-                lineaIniciada = false;
-                operarioLineaActiva = null;
-            }
-            
-            console.log(`📊 Estado línea - Activa: ${lineaIniciada}, Operario: ${operarioLineaActiva}`);
-            actualizarEstadoBotones();
-        });
-
-        // Inicializar UI
-        console.log('🚀 Aplicación inicializada');
-        actualizarEstadoBotones();
-    </script>
-<base target="_blank">
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
-<body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
-    <div class="max-w-7xl mx-auto">
-        <!-- Header -->
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <div class="flex items-center gap-4">
-                <a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">
-                    ← Volver
-                </a>
-                <h1 class="text-4xl font-black uppercase italic tracking-tighter">Assemblies <span class="text-blue-600">Production</span></h1>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+    <header class="bg-white border-b border-gray-200 px-6 py-6 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <i data-lucide="settings" class="w-10 h-10 text-gray-700"></i>
+                <h1 class="text-4xl font-extrabold text-gray-800">
+                    Assemblies <span class="text-blue-600">Production</span>
+                </h1>
             </div>
-            <div class="flex flex-wrap justify-center gap-3">
-                <div id="cajaIncidencia" class="hidden bg-red-100 p-2 rounded-xl text-right"><span id="tiempoIncidencia" class="font-mono font-bold text-red-700"></span></div>
-                <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
-                
-                <button id="btnIncidencia" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs">🚨 INCIDENCIA</button>
-                <button id="btnPausa" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs">🥐 DESAYUNO</button>
-                <button onclick="exportarExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase">Exportar a Excel</button>
-            </div>
-        </div>
-
-        <!-- Botones Entrada/Salida -->
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <button id="btnEntrada" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
-            <button id="btnSalida" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
-        </div>
-
-        <!-- Formulario Nueva Tarea -->
-        <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-blue-500 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
-                <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-blue-500">
-                    <option>Ekain</option>
-                    <option>Alfredo</option>
-                    <option>Sergio</option>
-                    <option>Aitor</option>
-                    <option>Jordi</option>
-                    <option>Miki</option>
-                    <option>Albert</option>
-                    <option>Adrian</option>
-                    <option>Carol</option>
-                    <option>Jona</option>
-                </select>
-            </div>
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Código</label>
-                <input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-blue-500 uppercase">
-            </div>
-            <button id="btnIniciarTarea" class="bg-blue-600 text-white font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 transition-all uppercase italic">Iniciar</button>
-        </div>
-
-        <!-- Indicador Estado Línea -->
-        <div id="indicadorLinea" class="flex justify-center mb-6">
-            <span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>
-        </div>
-
-        <!-- TABLA TEMPORAL -->
-        <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
-            <div class="bg-slate-900 p-4 flex justify-between items-center">
-                <h3 class="text-blue-400 font-black uppercase text-sm">Tabla de Tareas (Temporal)</h3>
-                <span class="text-slate-400 text-xs">Se puede borrar sin afectar el historial</span>
-            </div>
-            <table id="tablaProduccion" class="w-full text-left">
-                <thead class="bg-slate-800 text-blue-400 text-[10px] font-black uppercase">
-                    <tr>
-                        <th class="p-4">Operario</th>
-                        <th class="p-4">Fecha</th>
-                        <th class="p-4">Código</th>
-                        <th class="p-4">H. Inicio</th>
-                        <th class="p-4">H. Fin</th>
-                        <th class="p-4 text-center">Tiempo</th>
-                        <th class="p-4 text-center">Cantidad</th>
-                        <th class="p-4 text-right">Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="cuerpoTabla" class="divide-y divide-slate-100"></tbody>
-            </table>
-        </div>
-
-        <!-- BOTÓN FORZAR PARADA -->
-        <div class="flex justify-end mb-6">
-            <button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">
-                ⛔ Forzar Parada de Línea
+            <button id="btn-ia-analizar" class="ml-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg hover:scale-105 transition-transform">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> Analizar con IA ✨
             </button>
         </div>
+        <div class="flex items-center bg-gray-100 px-4 py-2 rounded-full border border-gray-200">
+            <span id="led-status" class="led-indicator led-gray"></span>
+            <div id="auth-status" class="text-sm text-gray-500 font-mono">Conectando...</div>
+        </div>
+    </header>
 
-        <!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-            <!-- TABLA MANTENIMIENTO -->
-            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
-                <div class="bg-blue-500 p-4 flex items-center justify-between">
-                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        🔧 Mantenimiento
-                    </h3>
-                    <button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">
-                        + Añadir tarea
+    <main class="p-6 max-w-7xl mx-auto w-full">
+        <!-- Panel de Entrada -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-6 flex items-center gap-2">
+                <i data-lucide="clipboard-plus" class="w-5 h-5 text-blue-500"></i>
+                Registro de Nueva Tarea
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div class="flex flex-col gap-2">
+                    <label for="operario" class="text-sm font-medium text-gray-600">Operario</label>
+                    <select id="operario" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg outline-none">
+                        <option value="" disabled selected>Seleccionar...</option>
+                        <option>Carol</option><option>Sergio</option><option>Albert</option><option>Adrian</option>
+                        <option>Jordi</option><option>Miki</option><option>Alfredo</option><option>Aitor</option>
+                        <option>Ekain</option><option>Jona</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="codigo" class="text-sm font-medium text-gray-600">Código de Producto</label>
+                    <input type="text" id="codigo" placeholder="Ej: PRD-12345" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg outline-none">
+                </div>
+                <button type="button" id="btn-iniciar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50" disabled>
+                    <i data-lucide="play" class="w-5 h-5"></i> Iniciar Tarea
+                </button>
+            </div>
+        </section>
+
+        <!-- Tabla -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex flex-col lg:flex-row justify-between items-center gap-4">
+                <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                    <i data-lucide="list" class="w-5 h-5 text-blue-500"></i> Tareas
+                </h3>
+                <div class="flex items-center gap-3">
+                    <input type="date" id="filtro-fecha" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none">
+                    <button type="button" id="btn-abrir-exportar" class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar
                     </button>
                 </div>
-                <div class="max-h-96 overflow-y-auto">
-                    <table class="w-full text-left">
-                        <thead class="bg-blue-100 text-blue-800 text-[10px] font-black uppercase sticky top-0">
-                            <tr>
-                                <th class="p-4 w-32">Fecha</th>
-                                <th class="p-4">Descripción</th>
-                                <th class="p-4 text-right w-40">Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
-                            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
             </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600 text-sm uppercase">
+                            <th class="px-6 py-4">Operario</th>
+                            <th class="px-6 py-4">Código</th>
+                            <th class="px-6 py-4 text-center">Cant.</th>
+                            <th class="px-6 py-4">Inicio</th>
+                            <th class="px-6 py-4">Final</th>
+                            <th class="px-6 py-4">Total</th>
+                            <th class="px-6 py-4 text-center">Acciones</th>
+                            <th class="px-6 py-4 text-center">OP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-tareas" class="divide-y divide-gray-100">
+                        <tr><td colspan="8" class="px-6 py-10 text-center text-gray-400">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
 
-            <!-- TABLA INCIDENCIAS -->
-            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
-                <div class="bg-orange-500 p-4">
-                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        ⚠️ Registro de Incidencias
-                    </h3>
-                </div>
-                <div class="max-h-96 overflow-y-auto">
-                    <table class="w-full text-left">
-                        <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
-                            <tr>
-                                <th class="p-4 w-32">Fecha</th>
-                                <th class="p-4">Motivo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-                            <tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+    <!-- Modales -->
+    <div id="modal-cantidad" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Finalizar Tarea</h3>
+            <input type="number" id="input-cantidad-final" class="w-full px-4 py-2 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cantidad producida">
+            <div class="flex gap-3">
+                <button type="button" id="btn-cancelar-modal" class="flex-1 py-2 bg-gray-100 rounded-lg font-medium">Cancelar</button>
+                <button type="button" id="btn-confirmar-modal" class="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium">Guardar</button>
             </div>
         </div>
     </div>
 
-    <!-- Script para asignar event listeners después de que el DOM esté listo -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('📋 DOM cargado, asignando event listeners...');
-            
-            // Asignar eventos a botones principales
-            document.getElementById('btnEntrada').onclick = function() {
-                window.registrarJornada('INICIO');
+    <!-- Modal IA Informe -->
+    <div id="modal-ia" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600 flex items-center gap-2">
+                    <i data-lucide="brain-circuit" class="text-purple-600"></i> Análisis de Producción ✨
+                </h3>
+                <button onclick="document.getElementById('modal-ia').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div id="ia-content" class="overflow-y-auto text-gray-700 leading-relaxed whitespace-pre-wrap flex-grow bg-gray-50 p-4 rounded-xl border border-gray-100 italic">
+                Generando informe de eficiencia...
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="document.getElementById('modal-ia').classList.add('hidden')" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-exportar" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 class="text-lg font-bold mb-4">Seleccionar Rango</h3>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <input type="date" id="export-desde" class="w-full px-3 py-2 border rounded-lg outline-none">
+                <input type="date" id="export-hasta" class="w-full px-3 py-2 border rounded-lg outline-none">
+            </div>
+            <div class="flex gap-3">
+                <button type="button" id="btn-cerrar-export" class="flex-1 py-2 bg-gray-100 rounded-lg">Cerrar</button>
+                <button type="button" id="btn-confirmar-exportar" class="flex-1 py-2 bg-emerald-600 text-white rounded-lg">Descargar .csv</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const apiKey = ""; // La clave se inyecta automáticamente
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDxxn1yHVSfdiC3BV1ad7lrNsCjE75VGOM",
+            authDomain: "aseemblies-f6f03.firebaseapp.com",
+            projectId: "aseemblies-f6f03",
+            storageBucket: "aseemblies-f6f03.firebasestorage.app",
+            messagingSenderId: "745722799534",
+            appId: "1:745722799534:web:547298a27e75eacd26143f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'assemblies-production-v2'; 
+        
+        let filaActualId = null;
+        let globalSnapshot = null;
+        let filtroFecha = new Date().toISOString().split('T')[0];
+
+        const getCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'tareas');
+
+        // FUNCIÓN DE CIERRE MEJORADA
+        window.cerrarModal = () => {
+            console.log("Cerrando modal...");
+            const modal = document.getElementById('modal-cantidad');
+            modal.style.display = 'none'; // Forzar ocultación por estilo directo
+            modal.classList.add('hidden');
+            filaActualId = null;
+        };
+
+        // INTEGRACIÓN GEMINI ✨
+        async function llamarGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "Eres un experto analista de producción industrial. Analizas datos de operarios y tiempos para optimizar la fábrica. Responde de forma concisa, profesional y directa en español." }] }
             };
+
+            let retryCount = 0;
+            const backoff = [1000, 2000, 4000, 8000, 16000];
+
+            while (retryCount < 5) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar el análisis.";
+                } catch (err) {
+                    retryCount++;
+                    if (retryCount === 5) throw err;
+                    await new Promise(r => setTimeout(r, backoff[retryCount-1]));
+                }
+            }
+        }
+
+        const renderizar = () => {
+            const tbody = document.getElementById('tabla-tareas');
+            if (!tbody || !globalSnapshot) return;
+            tbody.innerHTML = '';
             
-            document.getElementById('btnSalida').onclick = function() {
-                window.registrarJornada('FIN');
-            };
+            let items = [];
+            globalSnapshot.forEach(d => items.push({ id: d.id, ...d.data() }));
+
+            if (filtroFecha) {
+                items = items.filter(i => {
+                    const d = new Date(i.inicioTimestamp);
+                    return d.toISOString().split('T')[0] === filtroFecha;
+                });
+            }
+
+            items.sort((a, b) => (b.inicioTimestamp || 0) - (a.inicioTimestamp || 0));
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-gray-400 italic">No hay registros para este día.</td></tr>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors group";
+                const isDone = item.estado === 'completado';
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium">${item.operario}</td>
+                    <td class="px-6 py-4 font-mono text-sm">${item.codigo}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-600">${item.cantidad || '-'}</td>
+                    <td class="px-6 py-4 text-sm">${item.inicioHora || '-'}</td>
+                    <td class="px-6 py-4 text-sm">${item.finalHora || '-'}</td>
+                    <td class="px-6 py-4 font-medium text-gray-500">${item.tiempoTotal || '-'}</td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            ${!isDone ? `
+                                <button type="button" onclick="window.modalFinalizar('${item.id}')" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow hover:bg-blue-700">Finalizar</button>
+                            ` : `<span class="text-green-600 text-xs font-bold uppercase tracking-tighter">Completado</span>`}
+                            <button type="button" onclick="window.borrar('${item.id}')" class="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <input type="checkbox" ${item.opChecked ? 'checked' : ''} onchange="window.updateOP('${item.id}', this.checked)" class="w-4 h-4 rounded">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        };
+
+        window.modalFinalizar = (id) => {
+            filaActualId = id;
+            const modal = document.getElementById('modal-cantidad');
+            document.getElementById('input-cantidad-final').value = '';
+            modal.style.display = 'flex';
+            modal.classList.remove('hidden');
+            setTimeout(() => document.getElementById('input-cantidad-final').focus(), 100);
+        };
+
+        window.borrar = async (id) => {
+            if(confirm('¿Borrar registro?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tareas', id));
+        };
+
+        window.updateOP = async (id, val) => {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tareas', id), { opChecked: val });
+        };
+
+        window.finalizarEnDB = async (e) => {
+            if (e) e.preventDefault();
+            const cantInput = document.getElementById('input-cantidad-final');
+            const cant = cantInput.value;
+            const docId = filaActualId;
+
+            if (!cant || !docId) return;
+
+            // FORZAR CIERRE ANTES DE LA OPERACIÓN DE RED
+            window.cerrarModal();
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tareas', docId);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const fin = new Date();
+                    const diff = fin.getTime() - data.inicioTimestamp;
+                    const h = Math.floor(diff / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    const s = Math.floor((diff % 60000) / 1000);
+
+                    await updateDoc(docRef, {
+                        cantidad: parseInt(cant),
+                        finalHora: fin.toLocaleTimeString(),
+                        estado: 'completado',
+                        tiempoTotal: `${h > 0 ? h+'h ' : ''}${m}m ${s}s`
+                    });
+                }
+            } catch (err) { 
+                console.error("Error al guardar:", err);
+            }
+        };
+
+        // LÓGICA DE IA ✨
+        document.getElementById('btn-ia-analizar').onclick = async () => {
+            const modalIA = document.getElementById('modal-ia');
+            const contentIA = document.getElementById('ia-content');
+            modalIA.classList.remove('hidden');
+            contentIA.innerHTML = '<div class="flex items-center gap-2"><div class="loader-ia"></div> Procesando datos con Gemini...</div>';
             
-            document.getElementById('btnIniciarTarea').onclick = function() {
-                window.iniciarTarea();
-            };
+            let dataSummary = [];
+            globalSnapshot.forEach(d => {
+                const data = d.data();
+                if(data.estado === 'completado') {
+                    dataSummary.push(`${data.operario} hizo ${data.cantidad} de ${data.codigo} en ${data.tiempoTotal}`);
+                }
+            });
+
+            if(dataSummary.length === 0) {
+                contentIA.innerText = "No hay suficientes datos completados para realizar un análisis de eficiencia hoy.";
+                return;
+            }
+
+            const prompt = `Analiza estos datos de producción de hoy: ${dataSummary.join('. ')}. 
+            Identifica: 1. El operario más productivo. 2. Cualquier posible cuello de botella (códigos que tardan mucho). 
+            3. Una sugerencia breve de mejora. Responde en formato de puntos.`;
             
-            document.getElementById('btnIncidencia').onclick = function() {
-                window.toggleIncidencia();
-            };
+            try {
+                const analysis = await llamarGemini(prompt);
+                contentIA.innerText = analysis;
+            } catch (e) {
+                contentIA.innerText = "Error al conectar con la IA. Por favor, intenta de nuevo.";
+            }
+        };
+
+        document.getElementById('btn-iniciar').onclick = async () => {
+            const op = document.getElementById('operario').value;
+            const cod = document.getElementById('codigo').value;
+            if (!op || !cod) return;
+            const t = new Date();
+            await addDoc(getCollectionRef(), {
+                operario: op, codigo: cod,
+                inicioHora: t.toLocaleTimeString(),
+                inicioTimestamp: t.getTime(),
+                estado: 'en-proceso',
+                cantidad: null, opChecked: false
+            });
+            document.getElementById('codigo').value = '';
+        };
+
+        document.getElementById('btn-confirmar-modal').onclick = window.finalizarEnDB;
+        document.getElementById('btn-cancelar-modal').onclick = window.cerrarModal;
+        
+        document.getElementById('filtro-fecha').value = filtroFecha;
+        document.getElementById('filtro-fecha').onchange = (e) => { filtroFecha = e.target.value; renderizar(); };
+
+        document.getElementById('btn-abrir-exportar').onclick = () => document.getElementById('modal-exportar').classList.remove('hidden');
+        document.getElementById('btn-cerrar-export').onclick = () => document.getElementById('modal-exportar').classList.add('hidden');
+        
+        document.getElementById('btn-confirmar-exportar').onclick = () => {
+            const desdeInput = document.getElementById('export-desde').value;
+            const hastaInput = document.getElementById('export-hasta').value;
+            if(!desdeInput || !hastaInput) return;
+
+            const desde = new Date(desdeInput).getTime();
+            const hasta = new Date(hastaInput).setHours(23,59,59);
             
-            document.getElementById('btnPausa').onclick = function() {
-                window.togglePausa();
-            };
+            let csv = "Fecha,Operario,Codigo,Cantidad,Inicio,Fin,Total,OP\n";
+            let exportData = [];
+            globalSnapshot.forEach(d => {
+                const data = d.data();
+                if (data.inicioTimestamp >= desde && data.inicioTimestamp <= hasta) exportData.push(data);
+            });
             
-            console.log('✅ Event listeners asignados');
+            exportData.sort((a,b) => a.inicioTimestamp - b.inicioTimestamp).forEach(i => {
+                csv += `"${new Date(i.inicioTimestamp).toLocaleDateString()}","${i.operario}","${i.codigo}","${i.cantidad || 0}","${i.inicioHora}","${i.finalHora || '-'}","${i.tiempoTotal || '-'}","${i.opChecked ? 'SI':'NO'}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Produccion_${desdeInput}.csv`;
+            a.click();
+            document.getElementById('modal-exportar').classList.add('hidden');
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('btn-iniciar').disabled = false;
+                document.getElementById('led-status').className = "led-indicator led-green";
+                document.getElementById('auth-status').innerText = "En línea";
+                onSnapshot(getCollectionRef(), (snap) => {
+                    globalSnapshot = snap;
+                    renderizar();
+                });
+            }
         });
+
+        signInAnonymously(auth).catch(e => {
+            document.getElementById('led-status').className = "led-indicator led-red";
+            document.getElementById('auth-status').innerText = "Error conexión";
+        });
+
+        lucide.createIcons();
     </script>
 </body>
 </html>
