@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assemblies Production</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .led-indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .led-green { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 2s infinite; }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .led-gray { background-color: #9ca3af; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        
+        /* Spinner para carga de IA */
+        .loader-ia {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+    <header class="bg-white border-b border-gray-200 px-6 py-6 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <i data-lucide="settings" class="w-10 h-10 text-gray-700"></i>
+                <h1 class="text-4xl font-extrabold text-gray-800">
+                    Assemblies <span class="text-blue-600">Production</span>
+                </h1>
+            </div>
+            <button id="btn-ia-analizar" class="ml-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg hover:scale-105 transition-transform">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> Analizar con IA ✨
+            </button>
+        </div>
+        <div class="flex items-center bg-gray-100 px-4 py-2 rounded-full border border-gray-200">
+            <span id="led-status" class="led-indicator led-gray"></span>
+            <div id="auth-status" class="text-sm text-gray-500 font-mono">Conectando...</div>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-7xl mx-auto w-full">
+        <!-- Panel de Entrada -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-6 flex items-center gap-2">
+                <i data-lucide="clipboard-plus" class="w-5 h-5 text-blue-500"></i>
+                Registro de Nueva Tarea
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div class="flex flex-col gap-2">
+                    <label for="operario" class="text-sm font-medium text-gray-600">Operario</label>
+                    <select id="operario" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg outline-none">
+                        <option value="" disabled selected>Seleccionar...</option>
+                        <option>Carol</option><option>Sergio</option><option>Albert</option><option>Adrian</option>
+                        <option>Jordi</option><option>Miki</option><option>Alfredo</option><option>Aitor</option>
+                        <option>Ekain</option><option>Jona</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="codigo" class="text-sm font-medium text-gray-600">Código de Producto</label>
+                    <input type="text" id="codigo" placeholder="Ej: PRD-12345" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg outline-none">
+                </div>
+                <button type="button" id="btn-iniciar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50" disabled>
+                    <i data-lucide="play" class="w-5 h-5"></i> Iniciar Tarea
+                </button>
+            </div>
+        </section>
+
+        <!-- Tabla -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex flex-col lg:flex-row justify-between items-center gap-4">
+                <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                    <i data-lucide="list" class="w-5 h-5 text-blue-500"></i> Tareas
+                </h3>
+                <div class="flex items-center gap-3">
+                    <input type="date" id="filtro-fecha" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none">
+                    <button type="button" id="btn-abrir-exportar" class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600 text-sm uppercase">
+                            <th class="px-6 py-4">Operario</th>
+                            <th class="px-6 py-4">Código</th>
+                            <th class="px-6 py-4 text-center">Cant.</th>
+                            <th class="px-6 py-4">Inicio</th>
+                            <th class="px-6 py-4">Final</th>
+                            <th class="px-6 py-4">Total</th>
+                            <th class="px-6 py-4 text-center">Acciones</th>
+                            <th class="px-6 py-4 text-center">OP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-tareas" class="divide-y divide-gray-100">
+                        <tr><td colspan="8" class="px-6 py-10 text-center text-gray-400">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modales -->
+    <div id="modal-cantidad" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Finalizar Tarea</h3>
+            <input type="number" id="input-cantidad-final" class="w-full px-4 py-2 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cantidad producida">
+            <div class="flex gap-3">
+                <button type="button" id="btn-cancelar-modal" class="flex-1 py-2 bg-gray-100 rounded-lg font-medium">Cancelar</button>
+                <button type="button" id="btn-confirmar-modal" class="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal IA Informe -->
+    <div id="modal-ia" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600 flex items-center gap-2">
+                    <i data-lucide="brain-circuit" class="text-purple-600"></i> Análisis de Producción ✨
+                </h3>
+                <button onclick="document.getElementById('modal-ia').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div id="ia-content" class="overflow-y-auto text-gray-700 leading-relaxed whitespace-pre-wrap flex-grow bg-gray-50 p-4 rounded-xl border border-gray-100 italic">
+                Generando informe de eficiencia...
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="document.getElementById('modal-ia').classList.add('hidden')" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-exportar" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 class="text-lg font-bold mb-4">Seleccionar Rango</h3>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <input type="date" id="export-desde" class="w-full px-3 py-2 border rounded-lg outline-none">
+                <input type="date" id="export-hasta" class="w-full px-3 py-2 border rounded-lg outline-none">
+            </div>
+            <div class="flex gap-3">
+                <button type="button" id="btn-cerrar-export" class="flex-1 py-2 bg-gray-100 rounded-lg">Cerrar</button>
+                <button type="button" id="btn-confirmar-exportar" class="flex-1 py-2 bg-emerald-600 text-white rounded-lg">Descargar .csv</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const apiKey = ""; // La clave se inyecta automáticamente
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDxxn1yHVSfdiC3BV1ad7lrNsCjE75VGOM",
+            authDomain: "aseemblies-f6f03.firebaseapp.com",
+            projectId: "aseemblies-f6f03",
+            storageBucket: "aseemblies-f6f03.firebasestorage.app",
+            messagingSenderId: "745722799534",
+            appId: "1:745722799534:web:547298a27e75eacd26143f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'assemblies-production-v2'; 
+        
+        let filaActualId = null;
+        let globalSnapshot = null;
+        let filtroFecha = new Date().toISOString().split('T')[0];
+
+        const getCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'tareas');
+
+        // FUNCIÓN DE CIERRE MEJORADA
+        window.cerrarModal = () => {
+            console.log("Cerrando modal...");
+            const modal = document.getElementById('modal-cantidad');
+            modal.style.display = 'none'; // Forzar ocultación por estilo directo
+            modal.classList.add('hidden');
+            filaActualId = null;
+        };
+
+        // INTEGRACIÓN GEMINI ✨
+        async function llamarGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "Eres un experto analista de producción industrial. Analizas datos de operarios y tiempos para optimizar la fábrica. Responde de forma concisa, profesional y directa en español." }] }
+            };
+
+            let retryCount = 0;
+            const backoff = [1000, 2000, 4000, 8000, 16000];
+
+            while (retryCount < 5) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar el análisis.";
+                } catch (err) {
+                    retryCount++;
+                    if (retryCount === 5) throw err;
+                    await new Promise(r => setTimeout(r, backoff[retryCount-1]));
+                }
+            }
+        }
+
+        const renderizar = () => {
+            const tbody = document.getElementById('tabla-tareas');
+            if (!tbody || !globalSnapshot) return;
+            tbody.innerHTML = '';
+            
+            let items = [];
+            globalSnapshot.forEach(d => items.push({ id: d.id, ...d.data() }));
+
+            if (filtroFecha) {
+                items = items.filter(i => {
+                    const d = new Date(i.inicioTimestamp);
+                    return d.toISOString().split('T')[0] === filtroFecha;
+                });
+            }
+
+            items.sort((a, b) => (b.inicioTimestamp || 0) - (a.inicioTimestamp || 0));
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-gray-400 italic">No hay registros para este día.</td></tr>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors group";
+                const isDone = item.estado === 'completado';
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium">${item.operario}</td>
+                    <td class="px-6 py-4 font-mono text-sm">${item.codigo}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-600">${item.cantidad || '-'}</td>
+                    <td class="px-6 py-4 text-sm">${item.inicioHora || '-'}</td>
+                    <td class="px-6 py-4 text-sm">${item.finalHora || '-'}</td>
+                    <td class="px-6 py-4 font-medium text-gray-500">${item.tiempoTotal || '-'}</td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            ${!isDone ? `
+                                <button type="button" onclick="window.modalFinalizar('${item.id}')" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow hover:bg-blue-700">Finalizar</button>
+                            ` : `<span class="text-green-600 text-xs font-bold uppercase tracking-tighter">Completado</span>`}
+                            <button type="button" onclick="window.borrar('${item.id}')" class="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <input type="checkbox" ${item.opChecked ? 'checked' : ''} onchange="window.updateOP('${item.id}', this.checked)" class="w-4 h-4 rounded">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        };
+
+        window.modalFinalizar = (id) => {
+            filaActualId = id;
+            const modal = document.getElementById('modal-cantidad');
+            document.getElementById('input-cantidad-final').value = '';
+            modal.style.display = 'flex';
+            modal.classList.remove('hidden');
+            setTimeout(() => document.getElementById('input-cantidad-final').focus(), 100);
+        };
+
+        window.borrar = async (id) => {
+            if(confirm('¿Borrar registro?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tareas', id));
+        };
+
+        window.updateOP = async (id, val) => {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tareas', id), { opChecked: val });
+        };
+
+        window.finalizarEnDB = async (e) => {
+            if (e) e.preventDefault();
+            const cantInput = document.getElementById('input-cantidad-final');
+            const cant = cantInput.value;
+            const docId = filaActualId;
+
+            if (!cant || !docId) return;
+
+            // FORZAR CIERRE ANTES DE LA OPERACIÓN DE RED
+            window.cerrarModal();
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tareas', docId);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const fin = new Date();
+                    const diff = fin.getTime() - data.inicioTimestamp;
+                    const h = Math.floor(diff / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    const s = Math.floor((diff % 60000) / 1000);
+
+                    await updateDoc(docRef, {
+                        cantidad: parseInt(cant),
+                        finalHora: fin.toLocaleTimeString(),
+                        estado: 'completado',
+                        tiempoTotal: `${h > 0 ? h+'h ' : ''}${m}m ${s}s`
+                    });
+                }
+            } catch (err) { 
+                console.error("Error al guardar:", err);
+            }
+        };
+
+        // LÓGICA DE IA ✨
+        document.getElementById('btn-ia-analizar').onclick = async () => {
+            const modalIA = document.getElementById('modal-ia');
+            const contentIA = document.getElementById('ia-content');
+            modalIA.classList.remove('hidden');
+            contentIA.innerHTML = '<div class="flex items-center gap-2"><div class="loader-ia"></div> Procesando datos con Gemini...</div>';
+            
+            let dataSummary = [];
+            globalSnapshot.forEach(d => {
+                const data = d.data();
+                if(data.estado === 'completado') {
+                    dataSummary.push(`${data.operario} hizo ${data.cantidad} de ${data.codigo} en ${data.tiempoTotal}`);
+                }
+            });
+
+            if(dataSummary.length === 0) {
+                contentIA.innerText = "No hay suficientes datos completados para realizar un análisis de eficiencia hoy.";
+                return;
+            }
+
+            const prompt = `Analiza estos datos de producción de hoy: ${dataSummary.join('. ')}. 
+            Identifica: 1. El operario más productivo. 2. Cualquier posible cuello de botella (códigos que tardan mucho). 
+            3. Una sugerencia breve de mejora. Responde en formato de puntos.`;
+            
+            try {
+                const analysis = await llamarGemini(prompt);
+                contentIA.innerText = analysis;
+            } catch (e) {
+                contentIA.innerText = "Error al conectar con la IA. Por favor, intenta de nuevo.";
+            }
+        };
+
+        document.getElementById('btn-iniciar').onclick = async () => {
+            const op = document.getElementById('operario').value;
+            const cod = document.getElementById('codigo').value;
+            if (!op || !cod) return;
+            const t = new Date();
+            await addDoc(getCollectionRef(), {
+                operario: op, codigo: cod,
+                inicioHora: t.toLocaleTimeString(),
+                inicioTimestamp: t.getTime(),
+                estado: 'en-proceso',
+                cantidad: null, opChecked: false
+            });
+            document.getElementById('codigo').value = '';
+        };
+
+        document.getElementById('btn-confirmar-modal').onclick = window.finalizarEnDB;
+        document.getElementById('btn-cancelar-modal').onclick = window.cerrarModal;
+        
+        document.getElementById('filtro-fecha').value = filtroFecha;
+        document.getElementById('filtro-fecha').onchange = (e) => { filtroFecha = e.target.value; renderizar(); };
+
+        document.getElementById('btn-abrir-exportar').onclick = () => document.getElementById('modal-exportar').classList.remove('hidden');
+        document.getElementById('btn-cerrar-export').onclick = () => document.getElementById('modal-exportar').classList.add('hidden');
+        
+        document.getElementById('btn-confirmar-exportar').onclick = () => {
+            const desdeInput = document.getElementById('export-desde').value;
+            const hastaInput = document.getElementById('export-hasta').value;
+            if(!desdeInput || !hastaInput) return;
+
+            const desde = new Date(desdeInput).getTime();
+            const hasta = new Date(hastaInput).setHours(23,59,59);
+            
+            let csv = "Fecha,Operario,Codigo,Cantidad,Inicio,Fin,Total,OP\n";
+            let exportData = [];
+            globalSnapshot.forEach(d => {
+                const data = d.data();
+                if (data.inicioTimestamp >= desde && data.inicioTimestamp <= hasta) exportData.push(data);
+            });
+            
+            exportData.sort((a,b) => a.inicioTimestamp - b.inicioTimestamp).forEach(i => {
+                csv += `"${new Date(i.inicioTimestamp).toLocaleDateString()}","${i.operario}","${i.codigo}","${i.cantidad || 0}","${i.inicioHora}","${i.finalHora || '-'}","${i.tiempoTotal || '-'}","${i.opChecked ? 'SI':'NO'}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Produccion_${desdeInput}.csv`;
+            a.click();
+            document.getElementById('modal-exportar').classList.add('hidden');
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('btn-iniciar').disabled = false;
+                document.getElementById('led-status').className = "led-indicator led-green";
+                document.getElementById('auth-status').innerText = "En línea";
+                onSnapshot(getCollectionRef(), (snap) => {
+                    globalSnapshot = snap;
+                    renderizar();
+                });
+            }
+        });
+
+        signInAnonymously(auth).catch(e => {
+            document.getElementById('led-status').className = "led-indicator led-red";
+            document.getElementById('auth-status').innerText = "Error conexión";
+        });
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>
