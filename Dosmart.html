@@ -287,6 +287,19 @@
                     fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
             }
 
+            // Calcular tiempo medio de todas las tareas
+            const todosTiempos = [...tareasAdrian, ...tareasAlberto].map(t => t.y);
+            const tiempoMedio = todosTiempos.length > 0 
+                ? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length 
+                : 0;
+            
+            // Crear array para línea de media (cubrir todo el rango X)
+            const maxX = Math.max(tareasAdrian.length, tareasAlberto.length) - 1;
+            const lineaMedia = maxX >= 0 ? [
+                { x: 0, y: tiempoMedio },
+                { x: maxX, y: tiempoMedio }
+            ] : [];
+
             chartInstance = new Chart(ctx, {
                 type: 'scatter',
                 data: {
@@ -298,7 +311,8 @@
                             borderColor: '#2563eb',
                             borderWidth: 2,
                             pointRadius: 8,
-                            pointHoverRadius: 12
+                            pointHoverRadius: 12,
+                            order: 2
                         },
                         {
                             label: 'Alberto Colmenero',
@@ -307,7 +321,21 @@
                             borderColor: '#dc2626',
                             borderWidth: 2,
                             pointRadius: 8,
-                            pointHoverRadius: 12
+                            pointHoverRadius: 12,
+                            order: 2
+                        },
+                        {
+                            label: 'Tiempo Medio',
+                            data: lineaMedia,
+                            type: 'line',
+                            borderColor: '#fbbf24',
+                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                            borderWidth: 3,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            showLine: true,
+                            order: 1
                         }
                     ]
                 },
@@ -687,7 +715,9 @@
                     datasets: [
                         {
                             label: 'Productividad Mensual',
-                            data: datosProductividad.map((val, idx) => ({ x: idx, y: val })),
+                            data: datosProductividad
+                                .map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
+                                .filter(p => p !== null),
                             backgroundColor: '#3b82f6',
                             borderColor: '#2563eb',
                             pointRadius: 8,
@@ -697,7 +727,9 @@
                         },
                         {
                             label: 'Media Anual',
-                            data: lineaMedia.map((val, idx) => ({ x: idx, y: val })),
+                            data: lineaMedia
+                                .map((val, idx) => val !== null && !isNaN(val) && val > 0 ? { x: idx, y: val } : null)
+                                .filter(p => p !== null),
                             type: 'line',
                             borderColor: '#fbbf24',
                             backgroundColor: 'rgba(251, 191, 36, 0.1)',
@@ -710,7 +742,9 @@
                         },
                         {
                             label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
-                            data: tendencia.map((val, idx) => ({ x: idx, y: val })),
+                            data: tendencia
+                                .map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
+                                .filter(p => p !== null),
                             type: 'line',
                             borderColor: colorTendencia,
                             backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
@@ -1752,7 +1786,7 @@
                 <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
                 <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
                     <option>Adrian García</option>
-                    <option>Alberto Colmenero</option>
+                    <option selected>Alberto Colmenero</option>
                 </select>
             </div>
             <div class="flex flex-col">
