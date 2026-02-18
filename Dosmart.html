@@ -28,14 +28,16 @@
         const pausaRef = ref(db, 'estadoPausa');
         const incidenciaRef = ref(db, 'estadoIncidencia');
         const reposicionRef = ref(db, 'estadoReposicion');
+        const estadoLineaRef = ref(db, 'estadoLinea');
         const mantenimientoRef = ref(db, 'tareas_mantenimiento');
         const incidenciasTextoRef = ref(db, 'incidencias_texto');
 
         let estaPausadoGlobal = false;
         let hayIncidenciaGlobal = false;
         let hayReposicionGlobal = false;
-        let lineaIniciada = false; // Nueva variable para controlar si hay entrada registrada
-        let numOperariosActivos = 1; // Número de operarios trabajando (1 o 2)
+        let lineaIniciada = false;
+        let numOperariosActivos = 1;
+        let operarioLineaActiva = null; // Operario que inició la línea
         let inicioPausaMS = 0;
         let inicioIncidenciaMS = 0;
         let inicioReposicionMS = 0;
@@ -96,9 +98,16 @@
 
         // FORZAR PARADA DE LÍNEA
         window.forzarParadaLinea = async function() {
+            const operario = document.getElementById('selectOperario').value;
+            
+            // Validar operario si la línea está activa
+            if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
+                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede forzar la parada.`);
+                return;
+            }
+
             if (!confirm('⛔ ¿Forzar parada de línea?\n\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
 
-            const operario = document.getElementById('selectOperario').value;
             const horaActual = new Date().toLocaleTimeString('es-ES');
             const fechaActual = obtenerFecha();
             const ahora = Date.now();
@@ -148,6 +157,15 @@
             // Actualizar estado local
             lineaIniciada = false;
             numOperariosActivos = 1;
+            operarioLineaActiva = null;
+            
+            // Limpiar estado en Firebase
+            await update(estadoLineaRef, {
+                activa: false,
+                operario: null,
+                numOperarios: 0
+            });
+            
             actualizarEstadoBotones();
         };
 
@@ -663,22 +681,23 @@
             }
 
             chartProductividadMensual = new Chart(ctx, {
-                type: 'bar',
+                type: 'scatter',
                 data: {
                     labels: labels,
                     datasets: [
                         {
                             label: 'Productividad Mensual',
-                            data: datosProductividad,
+                            data: datosProductividad.map((val, idx) => ({ x: idx, y: val })),
                             backgroundColor: '#3b82f6',
                             borderColor: '#2563eb',
-                            borderWidth: 2,
-                            borderRadius: 8,
+                            pointRadius: 8,
+                            pointHoverRadius: 12,
+                            showLine: false,
                             order: 3
                         },
                         {
                             label: 'Media Anual',
-                            data: lineaMedia,
+                            data: lineaMedia.map((val, idx) => ({ x: idx, y: val })),
                             type: 'line',
                             borderColor: '#fbbf24',
                             backgroundColor: 'rgba(251, 191, 36, 0.1)',
@@ -691,7 +710,7 @@
                         },
                         {
                             label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
-                            data: tendencia,
+                            data: tendencia.map((val, idx) => ({ x: idx, y: val })),
                             type: 'line',
                             borderColor: colorTendencia,
                             backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
@@ -712,16 +731,28 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const value = context.raw;
+                                    const value = context.raw?.y || context.raw;
                                     if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
                                     return `${context.dataset.label}: ${value.toFixed(2)} tareas/hora`;
+                                },
+                                title: function(context) {
+                                    return labels[context[0].parsed.x];
                                 }
                             }
                         }
                     },
                     scales: {
                         x: { 
-                            display: true, 
+                            type: 'linear',
+                            display: true,
+                            min: 0,
+                            max: 11,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    return labels[value] || '';
+                                }
+                            },
                             title: { display: true, text: 'Meses del año', font: { weight: 'bold' } }, 
                             grid: { color: '#e2e8f0' } 
                         },
@@ -1178,9 +1209,9 @@
         };
 
         window.registrarJornada = async (tipo) => {
+            const operario = document.getElementById('selectOperario').value;
             const esEntrada = tipo === 'INICIO';
             
-            // Validaciones
             if (esEntrada && lineaIniciada) {
                 alert('⚠️ La línea ya está activa. Debes registrar SALIDA primero.');
                 return;
@@ -1190,12 +1221,16 @@
                 alert('⚠️ La línea ya está parada. Debes registrar ENTRADA primero.');
                 return;
             }
+
+            // Validar que la salida la registra el mismo operario que la entrada
+            if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) {
+                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`);
+                return;
+            }
             
-            // Si es entrada, mostrar modal para seleccionar operarios
             if (esEntrada) {
                 document.getElementById('modalOperarios').classList.remove('hidden');
             } else {
-                // Si es salida, registrar directamente
                 await ejecutarRegistroJornada('FIN', 0);
             }
         };
@@ -1216,32 +1251,34 @@
             const esEntrada = tipo === 'INICIO';
             const ahora = Date.now();
             
-            // Si es entrada, activar la línea y reactivar tareas pausadas
             if (esEntrada) {
                 numOperariosActivos = numOperarios;
                 lineaIniciada = true;
+                operarioLineaActiva = operario;
                 
-                // Reactivar todas las tareas que fueron pausadas por salida de línea
+                // Guardar estado en Firebase
+                await update(estadoLineaRef, {
+                    activa: true,
+                    operario: operario,
+                    numOperarios: numOperarios,
+                    horaInicio: horaActual,
+                    fecha: fechaActual
+                });
+                
                 const snapTareas = await get(tareasRef);
                 const tareas = snapTareas.val() || {};
                 const updates = {};
-                
                 Object.keys(tareas).forEach(id => {
                     if (tareas[id].estado === "pausa_salida_linea") {
                         updates[`tareas/${id}/estado`] = "activo";
                         updates[`tareas/${id}/inicioMS`] = ahora;
                     }
                 });
-                
-                if (Object.keys(updates).length > 0) {
-                    await update(ref(db), updates);
-                }
+                if (Object.keys(updates).length > 0) await update(ref(db), updates);
             } else {
-                // Si es salida, pausar todas las tareas activas
                 const snapTareas = await get(tareasRef);
                 const tareas = snapTareas.val() || {};
                 const updates = {};
-                
                 Object.keys(tareas).forEach(id => {
                     if (tareas[id].estado === "activo") {
                         const acumuladoSesion = ahora - tareas[id].inicioMS;
@@ -1249,20 +1286,23 @@
                         updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
                     }
                 });
+                if (Object.keys(updates).length > 0) await update(ref(db), updates);
                 
-                if (Object.keys(updates).length > 0) {
-                    await update(ref(db), updates);
-                }
-                
-                // Desactivar la línea
                 lineaIniciada = false;
-                numOperariosActivos = 1; // Reset
+                numOperariosActivos = 1;
+                operarioLineaActiva = null;
+                
+                // Limpiar estado en Firebase
+                await update(estadoLineaRef, {
+                    activa: false,
+                    operario: null,
+                    numOperarios: 0
+                });
             }
             
-            // Actualizar estado de botones
+            // Actualizar UI inmediatamente después de cambiar el estado
             actualizarEstadoBotones();
             
-            // Tabla temporal
             await push(tareasRef, { 
                 operario, 
                 numSerie: "---", 
@@ -1276,9 +1316,8 @@
                 numOperarios: esEntrada ? numOperariosActivos : 0
             });
             
-            // Historial persistente
             await push(tareasHistorialRef, {
-                operario: operario,
+                operario,
                 numSerie: "---",
                 codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
                 fecha: fechaActual,
@@ -1556,10 +1595,65 @@
             actualizarEstadoBotones();
         });
 
-        // Inicializar estado de botones al cargar la página
-        setTimeout(() => {
+        // Listener para estado de línea - maneja la sincronización del estado
+        onValue(estadoLineaRef, s => {
+            const d = s.val();
+            
+            // Si hay datos en Firebase, usarlos
+            if (d) {
+                lineaIniciada = d.activa || false;
+                operarioLineaActiva = d.operario || null;
+                numOperariosActivos = d.numOperarios || 1;
+            } else {
+                // Si no hay datos en Firebase, inicializar estado parado
+                lineaIniciada = false;
+                operarioLineaActiva = null;
+                numOperariosActivos = 1;
+            }
+            
+            console.log('Estado línea actualizado:', { lineaIniciada, operarioLineaActiva, numOperariosActivos });
             actualizarEstadoBotones();
-        }, 500);
+        });
+
+        // Al cargar la página, sincronizar el estado si no existe en Firebase pero hay tareas
+        get(estadoLineaRef).then(snapshot => {
+            if (!snapshot.exists()) {
+                // No hay estado guardado, intentar deducirlo de las tareas
+                get(tareasRef).then(tareasSnap => {
+                    const tareas = tareasSnap.val();
+                    if (tareas) {
+                        // Buscar la última entrada sin salida correspondiente
+                        let ultimaEntrada = null;
+                        let hayEntradaSinSalida = false;
+                        
+                        Object.values(tareas).forEach(t => {
+                            if (t.tipo === 'jornada') {
+                                if (t.codigo && t.codigo.includes('ENTRADA')) {
+                                    ultimaEntrada = t;
+                                    hayEntradaSinSalida = true;
+                                } else if (t.codigo && t.codigo.includes('SALIDA')) {
+                                    hayEntradaSinSalida = false;
+                                }
+                            }
+                        });
+                        
+                        // Si hay entrada sin salida, activar la línea
+                        if (hayEntradaSinSalida && ultimaEntrada) {
+                            const match = ultimaEntrada.codigo.match(/\((\d+) op\.\)/);
+                            const numOp = match ? parseInt(match[1]) : 1;
+                            
+                            update(estadoLineaRef, {
+                                activa: true,
+                                operario: ultimaEntrada.operario,
+                                numOperarios: numOp,
+                                horaInicio: ultimaEntrada.inicio,
+                                fecha: ultimaEntrada.fecha
+                            });
+                        }
+                    }
+                });
+            }
+        });
 
         window.handleKeyPress = (e, nextId) => { 
             if (e.key === 'Enter') { 

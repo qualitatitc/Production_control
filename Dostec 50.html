@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dostec 50 Production - Cloud MES</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8",
+            authDomain: "dostec-50.firebaseapp.com",
+            databaseURL: "https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "dostec-50",
+            storageBucket: "dostec-50.firebasestorage.app",
+            messagingSenderId: "581863827285",
+            appId: "1:581863827285:web:b360b2f59cb95b6055b1dc",
+            measurementId: "G-TQJEP07Y6M"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const tareasRef = ref(db, 'tareas');
+        const planRef = ref(db, 'planificacion');
+        const productividadDiariaRef = ref(db, 'productividadDiaria');
+        const estadoSesionRef = ref(db, 'estadoSesion');
+        const preferenciasRef = ref(db, 'preferencias');
+        const tiempoPorTareaRef = ref(db, 'tiempoPorTarea');
+        const mantenimientoRef = ref(db, 'mantenimiento');
+        const incidenciasLogRef = ref(db, 'incidenciasLog');
+
+        const state = {
+            operarios: 0,
+            pausaDesayuno: false,
+            incidencia: false,
+            reposicion: false,
+            ids: { pausa: null, incidencia: null, reposicion: null },
+            modo: "entrada",
+            pedidosOrdenados: [],
+            chart: null,
+            chartDiario: null,
+            chartMensual: null,
+            sortable: null,
+            entradaLineaHoy: null,
+            salidaLineaHoy: null,
+            mesSeleccionado: null,
+            fechaProdSeleccionada: null,
+            anioSeleccionado: null,
+            inicializado: false,
+            modoEdicionGrafico: false,
+        };
+
+        const guardarEstadoSesion = async (datos) => {
+            await update(estadoSesionRef, datos);
+        };
+
+        const obtenerEstadoSesion = async () => {
+            const snapshot = await get(estadoSesionRef);
+            return snapshot.val() || {};
+        };
+
+        const guardarPreferencias = async (clave, valor) => {
+            await update(ref(db, `preferencias/${clave}`), { valor });
+        };
+
+        const obtenerPreferencias = async () => {
+            const snapshot = await get(preferenciasRef);
+            return snapshot.val() || {};
+        };
+
+        const obtenerProductividadDiaria = async () => {
+            const snapshot = await get(productividadDiariaRef);
+            return snapshot.val() || {};
+        };
+
+        const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
+            const fechaKey = fechaToKey(fecha);
+            await push(ref(db, `tiempoPorTarea/${fechaKey}`), {
+                serie, tiempo, finMS, timestamp: Date.now()
+            });
+        };
+
+        const obtenerTiempoPorTarea = async (fecha) => {
+            const fechaKey = fechaToKey(fecha);
+            const snapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
+            return snapshot.val() || {};
+        };
+
+        const calcularProductividadDiaria = (t1, t2, h1, h2) => {
+            const divisor = h1 + h2 * 2;
+            if (divisor <= 0) return 0;
+            const prod = ((t1 + t2) * 7) / divisor;
+            return isFinite(prod) ? Math.round(prod * 10) / 10 : 0;
+        };
+
+        const guardarSesionDiaria = async (fecha, operarios, tareasEnSesion, horasEnSesion) => {
+            const fechaKey = fechaToKey(fecha);
+            const snapDia = await get(ref(db, `productividadDiaria/${fechaKey}`));
+            const diaActual = snapDia.val() || { tareas1op: 0, tareas2op: 0, horas1op: 0, horas2op: 0 };
+
+            if (operarios === 1) {
+                diaActual.tareas1op = (diaActual.tareas1op || 0) + tareasEnSesion;
+                diaActual.horas1op  = (diaActual.horas1op  || 0) + horasEnSesion;
+            } else if (operarios === 2) {
+                diaActual.tareas2op = (diaActual.tareas2op || 0) + tareasEnSesion;
+                diaActual.horas2op  = (diaActual.horas2op  || 0) + horasEnSesion;
+            }
+
+            diaActual.productividad = calcularProductividadDiaria(
+                diaActual.tareas1op, diaActual.tareas2op,
+                diaActual.horas1op,  diaActual.horas2op
+            );
+
+            await update(ref(db, `productividadDiaria/${fechaKey}`), diaActual);
+        };
+
+        const festivosEspa = [
+            [1, 1], [1, 6], [5, 1], [8, 15], [10, 12], [11, 1], [12, 25]
+        ];
+
+        const esFestivo = (year, month, day) => {
+            return festivosEspa.some(([m, d]) => m === (month + 1) && d === day);
+        };
+
+        const esFinDeSemana = (year, month, day) => {
+            const fecha = new Date(year, month, day);
+            const diaSemana = fecha.getDay();
+            return diaSemana === 0 || diaSemana === 6;
+        };
+
+        const tsToFechaLocal = (ms) => {
+            const d = new Date(Number(ms));
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day   = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
+
+        const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
+            const ctx = document.getElementById('graficoProd');
+            const container = document.getElementById('graficoContainer');
+            if (!ctx || !container) return;
+            
+            const tituloFecha = document.getElementById('tituloFechaProd');
+            if (tituloFecha && fechaSeleccionada) {
+                const hoy = tsToFechaLocal(Date.now());
+                tituloFecha.textContent = fechaSeleccionada === hoy ? 'Hoy' : 
+                    new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            }
+            
+            if (!datosProd || datosProd.length === 0) {
+                if (state.chart) state.chart.destroy();
+                const mediaIndicator = document.getElementById('mediaValor');
+                if (mediaIndicator) mediaIndicator.textContent = '--';
+                
+                state.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ label: 'Tiempo (min)', data: [], borderColor: 'rgba(99, 102, 241, 1)', pointBackgroundColor: 'rgba(99, 102, 241, 0.8)' }] },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, title: { display: true, text: 'Sin datos para la fecha seleccionada', font: { size: 12, weight: 'bold' }, color: '#94a3b8' } },
+                        scales: {
+                            x: { title: { display: true, text: 'Número de Serie', font: { size: 11, weight: 'bold' } }, grid: { display: false } },
+                            y: { beginAtZero: true, title: { display: true, text: 'Tiempo (minutos)', font: { size: 11, weight: 'bold' } } }
+                        }
+                    }
+                });
+                return;
+            }
+            
+            const tiempos = datosProd.map(d => d.tiempo);
+            const series = datosProd.map(d => d.serie);
+            const media = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
+            
+            const mediaIndicator = document.getElementById('mediaValor');
+            if (mediaIndicator) {
+                mediaIndicator.textContent = media.toFixed(1) + ' min';
+                mediaIndicator.className = 'font-black text-lg text-yellow-700';
+            }
+            
+            if (state.chart) state.chart.destroy();
+            
+            state.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: series.map((s, i) => i + 1),
+                    datasets: [{
+                        label: 'Tiempo (min)',
+                        data: tiempos,
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        pointBackgroundColor: 'rgba(99, 102, 241, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        order: 2
+                    }, {
+                        label: `Media (${media.toFixed(1)} min)`,
+                        data: Array(series.length).fill(media),
+                        borderColor: 'rgba(250, 204, 21, 1)',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        fill: false,
+                        order: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 10,
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            callbacks: {
+                                title: (items) => `Serie: ${series[items[0].dataIndex]}`,
+                                label: (item) => {
+                                    if (item.dataset.label.includes('Media')) return item.dataset.label;
+                                    const tiempo = item.parsed.y;
+                                    const productividad = (420 / tiempo).toFixed(1);
+                                    return [
+                                        `Tiempo: ${tiempo.toFixed(1)} min`,
+                                        `Productividad: ${productividad}`,
+                                        `vs Media: ${(tiempo - media).toFixed(1)} min`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Orden de finalización', font: { size: 11, weight: 'bold' } }, 
+                            grid: { display: false },
+                            ticks: { 
+                                font: { size: 9, weight: 'bold' },
+                                maxTicksLimit: 40,
+                                autoSkip: true
+                            }
+                        },
+                        y: { beginAtZero: true, title: { display: true, text: 'Tiempo (minutos)', font: { size: 11, weight: 'bold' } }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }
+                    }
+                }
+            });
+        };
+
+        window.seleccionarFechaProd = async (fecha) => {
+            state.fechaProdSeleccionada = fecha;
+            await guardarPreferencias('fechaProdSeleccionada', fecha);
+            const datosGuardados = await obtenerTiempoPorTarea(fecha);
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            actualizarGraficoProd(datosProd, fecha);
+            renderizarListaPuntos(fecha);
+        };
+
+        const renderizarListaPuntos = async (fecha) => {
+            const lista = document.getElementById('listaPuntosTiempo');
+            if (!lista || lista.classList.contains('hidden')) return;
+            const datos = await obtenerTiempoPorTarea(fecha);
+            const items = Object.entries(datos).sort((a, b) => (a[1].finMS || 0) - (b[1].finMS || 0));
+            if (items.length === 0) {
+                lista.innerHTML = '<p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Modo edición — sin puntos para este día</p>';
+                return;
+            }
+            lista.innerHTML = `
+                <p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    Modo edición — pulsa 🗑️ para borrar un punto
+                </p>
+                <table class="w-full text-xs">
+                    <thead><tr class="bg-slate-100 text-slate-500 font-black uppercase text-[9px]">
+                        <th class="p-1.5 text-left">#</th>
+                        <th class="p-1.5 text-left">Serie</th>
+                        <th class="p-1.5 text-center">Tiempo</th>
+                        <th class="p-1.5"></th>
+                    </tr></thead>
+                    <tbody>
+                        ${items.map(([id, t], i) => `
+                        <tr class="border-b border-slate-100 hover:bg-red-50">
+                            <td class="p-1.5 text-slate-400 font-bold">${i + 1}</td>
+                            <td class="p-1.5 font-black text-slate-700">${t.serie || '—'}</td>
+                            <td class="p-1.5 text-center"><span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-black">${t.tiempo} min</span></td>
+                            <td class="p-1.5 text-right">
+                                <button onclick="borrarPuntoTiempo('${fecha}', '${id}')" class="bg-red-100 hover:bg-red-600 text-red-500 hover:text-white p-1 rounded-lg transition-all" title="Borrar punto">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+        };
+
+        window.borrarPuntoTiempo = async (fecha, puntoId) => {
+            const fechaKey = fechaToKey(fecha);
+            await remove(ref(db, `tiempoPorTarea/${fechaKey}/${puntoId}`));
+            const datosGuardados = await obtenerTiempoPorTarea(fecha);
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
+            actualizarGraficoProd(datosProd, fecha);
+            renderizarListaPuntos(fecha);
+        };
+
+        window.toggleModoEdicionGrafico = () => {
+            state.modoEdicionGrafico = !state.modoEdicionGrafico;
+            const btn = document.getElementById('btnEditarGrafico');
+            const lista = document.getElementById('listaPuntosTiempo');
+            if (state.modoEdicionGrafico) {
+                btn.classList.replace('bg-slate-100', 'bg-red-100');
+                btn.classList.replace('text-slate-600', 'text-red-600');
+                btn.classList.replace('border-slate-200', 'border-red-300');
+                btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg> Salir edición`;
+                lista.classList.remove('hidden');
+                renderizarListaPuntos(state.fechaProdSeleccionada || tsToFechaLocal(Date.now()));
+            } else {
+                btn.classList.replace('bg-red-100', 'bg-slate-100');
+                btn.classList.replace('text-red-600', 'text-slate-600');
+                btn.classList.replace('border-red-300', 'border-slate-200');
+                btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg> Editar puntos`;
+                lista.classList.add('hidden');
+            }
+        };
+
+        window.mostrarSelectorFechaProd = () => {
+            const fechaGuardada = state.fechaProdSeleccionada || new Date().toISOString().split('T')[0];
+            const input = document.getElementById('inputFechaProd');
+            if (input) {
+                input.value = fechaGuardada;
+                input.showPicker();
+            }
+        };
+
+        const actualizarGraficoDiario = async (mesSeleccionado = null) => {
+            const ctx = document.getElementById('graficoDiario');
+            if (!ctx) return;
+            
+            const productividadDiaria = await obtenerProductividadDiaria();
+            const hoy = new Date();
+            const mesAMostrar = mesSeleccionado || { year: hoy.getFullYear(), month: hoy.getMonth() };
+            
+            const dias = Array.from({ length: 31 }, (_, i) => i + 1);
+            const valores = dias.map(dia => {
+                const mes = String(mesAMostrar.month + 1).padStart(2, '0');
+                const diaStr = String(dia).padStart(2, '0');
+                const fechaStr = `${mesAMostrar.year}-${mes}-${diaStr}`;
+                const fechaKey = fechaStr.replace(/-/g, '_');
+                return productividadDiaria[fechaKey]?.productividad || 0;
+            });
+            
+            const valoresConDatos = valores.filter(v => v > 0);
+            const media = valoresConDatos.length > 0 ? valoresConDatos.reduce((a, b) => a + b, 0) / valoresConDatos.length : 0;
+            
+            const mediaIndicatorDiario = document.getElementById('mediaValorDiario');
+            if (mediaIndicatorDiario) {
+                mediaIndicatorDiario.textContent = media.toFixed(1);
+                mediaIndicatorDiario.className = `font-black text-lg ${media >= 19 ? 'text-emerald-600' : 'text-yellow-600'}`;
+            }
+            
+            if (state.chartDiario) state.chartDiario.destroy();
+            
+            state.chartDiario = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dias.map(d => `${d}`),
+                    datasets: [{
+                        label: 'Productividad Diaria',
+                        data: valores,
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        pointBackgroundColor: (ctx) => {
+                            const dia = dias[ctx.dataIndex];
+                            const val = ctx.raw;
+                            if (esFestivo(mesAMostrar.year, mesAMostrar.month, dia) || esFinDeSemana(mesAMostrar.year, mesAMostrar.month, dia)) {
+                                return 'rgba(180, 180, 180, 0.7)';
+                            }
+                            if (val === 0) return 'rgba(203, 213, 225, 0.5)';
+                            return val >= 19 ? 'rgba(16, 185, 129, 1)' : 'rgba(99, 102, 241, 1)';
+                        },
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        order: 2
+                    }, {
+                        label: 'Objetivo (19)',
+                        data: Array(31).fill(19),
+                        borderColor: 'rgba(239, 68, 68, 1)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        order: 3
+                    }, {
+                        label: `Media (${media.toFixed(1)})`,
+                        data: Array(31).fill(media),
+                        borderColor: 'rgba(250, 204, 21, 1)',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        fill: false,
+                        order: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { 
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 10,
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        } 
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: true, suggestedMax: 30 }
+                    }
+                }
+            });
+        };
+
+        const calcularTendencia = (valores) => {
+            const n = valores.length;
+            const indices = valores.map((_, i) => i);
+            const sumaX = indices.reduce((a, b) => a + b, 0);
+            const sumaY = valores.reduce((a, b) => a + b, 0);
+            const sumaXY = indices.reduce((sum, x, i) => sum + x * valores[i], 0);
+            const sumaX2 = indices.reduce((sum, x) => sum + x * x, 0);
+            const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
+            const intercept = (sumaY - pendiente * sumaX) / n;
+            return { pendiente, datos: indices.map(x => pendiente * x + intercept) };
+        };
+
+        const actualizarGraficoMensual = async (anioSeleccionado = null) => {
+            const ctx = document.getElementById('graficoMensual');
+            if (!ctx) return;
+            
+            const productividadDiaria = await obtenerProductividadDiaria();
+            const anio = anioSeleccionado || new Date().getFullYear();
+            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            const valoresMensuales = [];
+            
+            for (let mes = 0; mes < 12; mes++) {
+                const diasDelMes = new Date(anio, mes + 1, 0).getDate();
+                let suma = 0, diasConDatos = 0;
+                for (let dia = 1; dia <= diasDelMes; dia++) {
+                    const mesStr = String(mes + 1).padStart(2, '0');
+                    const diaStr = String(dia).padStart(2, '0');
+                    const fechaStr = `${anio}-${mesStr}-${diaStr}`;
+                    const fechaKey = fechaStr.replace(/-/g, '_');
+                    const prod = productividadDiaria[fechaKey]?.productividad || 0;
+                    if (prod > 0) { suma += prod; diasConDatos++; }
+                }
+                valoresMensuales.push(diasConDatos > 0 ? suma / diasConDatos : 0);
+            }
+            
+            const mesesConDatos = valoresMensuales.filter(v => v > 0);
+            const tendencia = mesesConDatos.length >= 2 ? calcularTendencia(valoresMensuales) : null;
+            const esTendenciaPositiva = tendencia && tendencia.pendiente >= 0;
+            
+            const tendenciaPos = document.getElementById('tendenciaPositiva');
+            const tendenciaNeg = document.getElementById('tendenciaNegativa');
+            if (tendencia) {
+                if (tendenciaPos) tendenciaPos.style.display = esTendenciaPositiva ? 'flex' : 'none';
+                if (tendenciaNeg) tendenciaNeg.style.display = esTendenciaPositiva ? 'none' : 'flex';
+            } else {
+                if (tendenciaPos) tendenciaPos.style.display = 'none';
+                if (tendenciaNeg) tendenciaNeg.style.display = 'none';
+            }
+            
+            if (state.chartMensual) state.chartMensual.destroy();
+            
+            const datasets = [
+                { 
+                    label: 'Media Mensual', 
+                    data: valoresMensuales, 
+                    borderColor: 'rgba(250, 204, 21, 1)', 
+                    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+                    borderWidth: 3, 
+                    pointRadius: 5,
+                    pointBackgroundColor: 'rgba(250, 204, 21, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    order: 2
+                },
+                { 
+                    label: 'Objetivo (19)', 
+                    data: Array(12).fill(19), 
+                    borderColor: 'rgba(239, 68, 68, 1)', 
+                    borderWidth: 2, 
+                    borderDash: [5, 5], 
+                    pointRadius: 0, 
+                    fill: false,
+                    order: 3
+                }
+            ];
+            
+            if (tendencia) {
+                const colorTendencia = esTendenciaPositiva ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)';
+                datasets.push({
+                    label: esTendenciaPositiva ? 'Tendencia ↗ Positiva' : 'Tendencia ↘ Negativa',
+                    data: tendencia.datos,
+                    borderColor: colorTendencia,
+                    backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                    borderWidth: 3,
+                    borderDash: [10, 5],
+                    pointRadius: 0,
+                    fill: false,
+                    order: 1,
+                    tension: 0
+                });
+            }
+            
+            state.chartMensual = new Chart(ctx, {
+                type: 'line',
+                data: { labels: meses, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { 
+                            display: true, 
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 10,
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        } 
+                    },
+                    scales: {
+                        y: { beginAtZero: true, suggestedMax: 25 }
+                    }
+                }
+            });
+        };
+
+        window.cambiarAnio = async (direccion) => {
+            const nuevoAnio = state.anioSeleccionado + direccion;
+            state.anioSeleccionado = nuevoAnio;
+            await guardarPreferencias('anioMensualSeleccionado', nuevoAnio);
+            await actualizarGraficoMensual(nuevoAnio);
+            const anioEl = document.getElementById('anioMensual');
+            if (anioEl) anioEl.textContent = nuevoAnio;
+        };
+
+        window.cambiarMes = async (direccion) => {
+            const mesActual = state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
+            let nuevoMes = mesActual.month + direccion;
+            let nuevoAnio = mesActual.year;
+            if (nuevoMes > 11) { nuevoMes = 0; nuevoAnio++; }
+            if (nuevoMes < 0) { nuevoMes = 11; nuevoAnio--; }
+            const mesSeleccionado = { year: nuevoAnio, month: nuevoMes };
+            state.mesSeleccionado = mesSeleccionado;
+            await guardarPreferencias('mesDiarioSeleccionado', mesSeleccionado);
+            await actualizarGraficoDiario(mesSeleccionado);
+            actualizarTextoMiniCalendario(mesSeleccionado);
+        };
+
+        const actualizarTextoMiniCalendario = (mes) => {
+            const fecha = new Date(mes.year, mes.month, 1);
+            const nombreMes = fecha.toLocaleString('es-ES', { month: 'long' });
+            const nombreMesEl = document.getElementById('nombreMesDiario');
+            const anioMesEl = document.getElementById('anioMesDiario');
+            if (nombreMesEl) nombreMesEl.textContent = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
+            if (anioMesEl) anioMesEl.textContent = mes.year;
+        };
+
+        setInterval(() => {
+            document.querySelectorAll('[data-inicio-ms]').forEach(el => {
+                const inicioMS = parseInt(el.getAttribute('data-inicio-ms'));
+                const diff = Date.now() - inicioMS;
+                const min = Math.floor(diff / 60000);
+                const sec = Math.floor((diff % 60000) / 1000);
+                el.innerText = `${min}m ${sec}s`;
+            });
+        }, 1000);
+
+        const actualizarEstadoLineaUI = () => {
+            const indicador = document.getElementById('estadoLineaIndicador');
+            const btns = { desayuno: document.getElementById('btnDesayuno'), incidencia: document.getElementById('btnIncidencia'), reposicion: document.getElementById('btnReposicion') };
+            if (state.operarios > 0) {
+                indicador.innerHTML = `<span class="flex items-center gap-2 bg-emerald-100 text-emerald-700 px-4 py-1.5 rounded-full border border-emerald-300 animate-pulse"><span class="w-3 h-3 bg-emerald-600 rounded-full"></span> LÍNEA ACTIVA (${state.operarios} Op.)</span>`;
+                btns.desayuno.classList.remove('opacity-50', 'cursor-not-allowed');
+                btns.incidencia.classList.remove('opacity-50', 'cursor-not-allowed');
+                btns.reposicion.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                indicador.innerHTML = `<span class="flex items-center gap-2 bg-slate-200 text-slate-600 px-4 py-1.5 rounded-full border border-slate-300"><span class="w-3 h-3 bg-slate-400 rounded-full"></span> LÍNEA PARADA</span>`;
+                btns.desayuno.classList.add('opacity-50', 'cursor-not-allowed');
+                btns.incidencia.classList.add('opacity-50', 'cursor-not-allowed');
+                btns.reposicion.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            if (state.reposicion) {
+                btns.reposicion.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm-1 14.5c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L4.24 8.24C3.46 9.47 3 10.68 3 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg> Fin Reposición`;
+                btns.reposicion.classList.replace('bg-purple-600', 'bg-blue-600');
+            } else {
+                btns.reposicion.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg> Reposición`;
+                btns.reposicion.classList.replace('bg-blue-600', 'bg-purple-600');
+            }
+            if (state.pausaDesayuno) {
+                btns.desayuno.innerHTML = `<svg class="w-4 h-4 animate-bounce" fill="currentColor" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3m4 8.3L18.4 14c.4.8.6 1.6.6 2.4 0 3.3-2.7 6-6 6s-6-2.7-6-6c0-.8.2-1.6.6-2.4L9 11.3V13h2V3h2v10h2v-1.7z"/></svg> Fin Desayuno`;
+                btns.desayuno.classList.replace('bg-orange-500', 'bg-blue-600');
+            } else {
+                btns.desayuno.innerHTML = `<svg class="w-4 h-4 group-hover:rotate-12 transition-transform" fill="currentColor" viewBox="0 0 24 24"><path d="M2 21h18v-2H2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg> Desayuno`;
+                btns.desayuno.classList.replace('bg-blue-600', 'bg-orange-500');
+            }
+            if (state.incidencia) {
+                btns.incidencia.innerHTML = `<svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.292 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg> Fin Incidencia`;
+                btns.incidencia.classList.replace('bg-red-600', 'bg-blue-600');
+            } else {
+                btns.incidencia.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg> Incidencia`;
+                btns.incidencia.classList.replace('bg-blue-600', 'bg-red-600');
+            }
+        };
+
+        window.mostrarSelectorOperarios = (modo = "entrada") => {
+            if (modo === "entrada" && state.operarios > 0) { alert("⚠️ ATENCIÓN: La línea ya está activa."); return; }
+            if (modo === "reposicion") {
+                if (state.operarios > 0) { alert("⚠️ ATENCIÓN: Solo se puede reponer con la línea parada."); return; }
+                if (state.reposicion) { finalizarReposicion(); return; }
+            }
+            state.modo = modo;
+            document.getElementById('tituloModal').innerText = modo === "reposicion" ? "Operarios para Reposición" : "Seleccione Operarios en Línea";
+            document.getElementById('modalOperarios').classList.remove('hidden');
+            document.getElementById('modalOperarios').classList.add('flex');
+        };
+
+        const finalizarReposicion = async () => {
+            const snapshot = await get(ref(db, `tareas/${state.ids.reposicion}`));
+            if (snapshot.exists()) {
+                const minutos = Math.max(1, Math.round((Date.now() - snapshot.val().inicioMS) / 60000));
+                await update(ref(db, `tareas/${state.ids.reposicion}`), { fin: new Date().toLocaleTimeString('es-ES'), total: minutos, estado: "finalizado" });
+            }
+            state.reposicion = false;
+            state.ids.reposicion = null;
+            actualizarEstadoLineaUI();
+        };
+
+        window.cerrarSelector = () => {
+            document.getElementById('modalOperarios').classList.add('hidden');
+            document.getElementById('modalOperarios').classList.remove('flex');
+        };
+
+        window.seleccionarOperarios = async (num) => {
+            if (state.modo === "entrada") {
+                state.operarios = num;
+                const ahoraMSTime = Date.now();
+                state.entradaLineaHoy = ahoraMSTime;
+                await guardarEstadoSesion({ operarios: num, entradaLineaHoy: ahoraMSTime, salidaLineaHoy: null });
+                await push(tareasRef, { numSerie: "ENTRADA LÍNEA", codigo: "SISTEMA", notas: "", operarios: num, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: ahoraMSTime, fin: "--:--", total: 0, estado: "finalizado" });
+            } else if (state.modo === "reposicion") {
+                const nuevaRep = await push(tareasRef, { numSerie: "REPOSICIÓN", codigo: "SISTEMA", notas: "", operarios: num, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "en_reposicion_sistema" });
+                state.ids.reposicion = nuevaRep.key;
+                state.reposicion = true;
+            }
+            actualizarEstadoLineaUI();
+            cerrarSelector();
+        };
+
+        window.registrarSalida = async () => {
+            if (state.operarios === 0) { alert("La línea ya está cerrada."); return; }
+            const ahoraMSTime = Date.now();
+            const fechaHoy = tsToFechaLocal(ahoraMSTime);
+            
+            await push(tareasRef, { numSerie: "SALIDA LÍNEA", codigo: "SISTEMA", notas: "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: ahoraMSTime, fin: "--:--", total: 0, estado: "finalizado" });
+            
+            const snapshot = await get(tareasRef);
+            const entradaMS = state.entradaLineaHoy;
+            const operariosSesion = state.operarios;
+            
+            let tareasEnSesion = 0;
+            if (snapshot.exists()) {
+                Object.values(snapshot.val()).forEach(t => {
+                    const fechaTarea = tsToFechaLocal(t.inicioMS);
+                    if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0 && t.operarios === operariosSesion) {
+                        tareasEnSesion++;
+                    }
+                });
+            }
+            
+            const horasEnSesion = entradaMS ? (ahoraMSTime - entradaMS) / (1000 * 3600) : 0;
+            
+            await guardarSesionDiaria(fechaHoy, operariosSesion, tareasEnSesion, horasEnSesion);
+            
+            state.operarios = 0;
+            state.entradaLineaHoy = null;
+            state.salidaLineaHoy = null;
+            await guardarEstadoSesion({ operarios: 0, entradaLineaHoy: null, salidaLineaHoy: null });
+            actualizarEstadoLineaUI();
+            if (state.inicializado) {
+                await actualizarGraficoDiario(state.mesSeleccionado);
+                await actualizarGraficoMensual(state.anioSeleccionado);
+            }
+        };
+
+        window.pausaDesayuno = async () => {
+            if (state.operarios === 0 || state.incidencia) return;
+            const snapshot = await get(tareasRef);
+            const updates = {};
+            if (!state.pausaDesayuno) {
+                if (snapshot.exists()) {
+                    snapshot.forEach((child) => {
+                        if (child.val().estado === "activo") {
+                            updates[`${child.key}/estado`] = "pausa";
+                            updates[`${child.key}/tiempoAcumuladoMS`] = Date.now() - child.val().inicioMS;
+                        }
+                    });
+                }
+                const nuevaPausa = await push(tareasRef, { numSerie: "PAUSA DESAYUNO", codigo: "SISTEMA", notas: "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "en_pausa_sistema" });
+                state.ids.pausa = nuevaPausa.key;
+                state.pausaDesayuno = true;
+            } else {
+                if (snapshot.exists()) {
+                    snapshot.forEach((child) => {
+                        if (child.val().estado === "pausa") {
+                            const acumulado = child.val().tiempoAcumuladoMS || 0;
+                            updates[`${child.key}/inicioMS`] = Date.now() - acumulado;
+                            updates[`${child.key}/estado`] = "activo";
+                        }
+                        if (child.key === state.ids.pausa) {
+                            const minutos = Math.max(1, Math.round((Date.now() - child.val().inicioMS) / 60000));
+                            updates[`${child.key}/fin`] = new Date().toLocaleTimeString('es-ES');
+                            updates[`${child.key}/total`] = minutos;
+                            updates[`${child.key}/estado`] = "finalizado";
+                        }
+                    });
+                }
+                state.pausaDesayuno = false;
+                state.ids.pausa = null;
+            }
+            await update(tareasRef, updates);
+            actualizarEstadoLineaUI();
+        };
+
+        window.toggleIncidencia = async () => {
+            if (state.operarios === 0 || state.pausaDesayuno) return;
+            const snapshot = await get(tareasRef);
+            const updates = {};
+            if (!state.incidencia) {
+                const motivo = prompt("Indique el motivo de la incidencia:");
+                if (!motivo) return;
+                if (snapshot.exists()) {
+                    snapshot.forEach((child) => {
+                        if (child.val().estado === "activo") {
+                            updates[`${child.key}/estado`] = "incidencia_pausa";
+                            updates[`${child.key}/tiempoAcumuladoMS`] = Date.now() - child.val().inicioMS;
+                        }
+                    });
+                }
+                const nuevaInc = await push(tareasRef, { numSerie: "INCIDENCIA", codigo: "SISTEMA", notas: motivo, operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "en_incidencia_sistema" });
+                state.ids.incidencia = nuevaInc.key;
+                state.incidencia = true;
+                push(incidenciasLogRef, { texto: motivo, fecha: tsToFechaLocal(Date.now()), hora: new Date().toLocaleTimeString('es-ES'), timestamp: Date.now() });
+            } else {
+                if (snapshot.exists()) {
+                    snapshot.forEach((child) => {
+                        if (child.val().estado === "incidencia_pausa") {
+                            const acumulado = child.val().tiempoAcumuladoMS || 0;
+                            updates[`${child.key}/inicioMS`] = Date.now() - acumulado;
+                            updates[`${child.key}/estado`] = "activo";
+                        }
+                        if (child.key === state.ids.incidencia) {
+                            const minutos = Math.max(1, Math.round((Date.now() - child.val().inicioMS) / 60000));
+                            updates[`${child.key}/fin`] = new Date().toLocaleTimeString('es-ES');
+                            updates[`${child.key}/total`] = minutos;
+                            updates[`${child.key}/estado`] = "finalizado";
+                        }
+                    });
+                }
+                state.incidencia = false;
+                state.ids.incidencia = null;
+            }
+            await update(tareasRef, updates);
+            actualizarEstadoLineaUI();
+        };
+
+        window.dispararSelector = () => document.getElementById('file-input').click();
+
+        window.procesarArchivo = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                    if (json.length === 0) { alert("El archivo está vacío"); return; }
+                    let count = 0;
+                    json.forEach(item => {
+                        const cleanItem = {};
+                        Object.keys(item).forEach(key => { cleanItem[key.trim().toLowerCase()] = String(item[key]).trim(); });
+                        push(planRef, {
+                            pedido: cleanItem["pedido"] || cleanItem["orden"] || "S/P",
+                            cliente: cleanItem["cliente"] || cleanItem["client"] || "Sin cliente",
+                            codigo: cleanItem["código"] || cleanItem["codigo"] || "--",
+                            serie: cleanItem["serie"] || cleanItem["nº serie"] || "--",
+                            notas: cleanItem["notas"] || cleanItem["observaciones"] || "",
+                            orden: Date.now() + count++
+                        });
+                    });
+                    alert(`✅ ${count} series cargadas`);
+                } catch (error) { alert("❌ Error: " + error.message); }
+                e.target.value = "";
+            };
+            reader.readAsArrayBuffer(file);
+        };
+
+        window.exportarAExcel = () => {
+            const tabla = document.getElementById("tablaProceso");
+            const wb = XLSX.utils.table_to_book(tabla, { sheet: "Producción" });
+            XLSX.writeFile(wb, `Produccion_Dostec50_${tsToFechaLocal(Date.now())}.xlsx`);
+            if (confirm("✅ Excel exportado. ¿Borrar toda la tabla de Pedidos en Proceso?")) {
+                borrarTodoProceso(true);
+            }
+        };
+
+        window.borrarTodoProceso = async (sinConfirm = false) => {
+            if (!sinConfirm && !confirm("¿Borrar TODOS los registros de Pedidos en Proceso?")) return;
+            const snap = await get(tareasRef);
+            if (snap.exists()) {
+                const updates = {};
+                Object.keys(snap.val()).forEach(id => { updates[id] = null; });
+                await update(tareasRef, updates);
+            }
+        };
+
+        window.abrirMantenimiento = () => {
+            const texto = prompt("📝 Descripción de la tarea de mantenimiento:");
+            if (!texto || !texto.trim()) return;
+            const fecha = tsToFechaLocal(Date.now());
+            push(mantenimientoRef, { texto: texto.trim(), fecha, realizado: false, timestamp: Date.now() });
+        };
+
+        window.toggleMantenimiento = async (id, actual) => {
+            await update(ref(db, `mantenimiento/${id}`), { realizado: !actual });
+        };
+
+        window.borrarMantenimiento = async (id) => {
+            if (confirm("¿Eliminar esta tarea de mantenimiento?")) await remove(ref(db, `mantenimiento/${id}`));
+        };
+
+        window.borrarIncidenciaLog = async (id) => {
+            if (confirm("¿Eliminar este registro de incidencia?")) await remove(ref(db, `incidenciasLog/${id}`));
+        };
+
+        window.toggleGrupo = (pedidoId) => {
+            const rows = document.querySelectorAll(`.grupo-${pedidoId}`);
+            const icon = document.getElementById(`icon-${pedidoId}`);
+            rows.forEach(row => row.classList.toggle('hidden'));
+            if(icon) icon.classList.toggle('rotate-90');
+        };
+
+        window.borrarSeriePendiente = (id, e) => {
+            e.stopPropagation();
+            if(confirm("¿Eliminar serie?")) remove(ref(db, `planificacion/${id}`));
+        };
+
+        window.borrarPedidoCompleto = (ids, e) => {
+            e.stopPropagation();
+            if(confirm(`¿Eliminar todo el pedido (${ids.length} series)?`)) ids.forEach(id => remove(ref(db, `planificacion/${id}`)));
+        };
+
+        window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
+            if(!state.operarios || state.operarios === 0) { alert("⚠️ Debes pulsar 'ENTRADA LÍNEA' primero."); return; }
+            remove(ref(db, `planificacion/${id}`));
+            push(tareasRef, { numSerie: serie, codigo: cod, notas: notas, pedido: pedido || "", cliente: cliente || "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "activo" });
+        };
+
+        window.finalizarTarea = async (id, inicioMS) => {
+            const inicioMSNum = Number(inicioMS);
+            const minutos = Math.max(1, Math.round((Date.now() - inicioMSNum) / 60000));
+            const finMS = Date.now();
+            
+            const snapshot = await get(ref(db, `tareas/${id}`));
+            if (!snapshot.exists()) return;
+            
+            const tarea = snapshot.val();
+            const fecha = tsToFechaLocal(tarea.inicioMS);
+            
+            if (tarea.codigo !== "SISTEMA") {
+                await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
+                
+                const datosGuardados = await obtenerTiempoPorTarea(fecha);
+                const datosProd = Object.values(datosGuardados)
+                    .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                    .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
+                actualizarGraficoProd(datosProd, fecha);
+            }
+            
+            await update(ref(db, `tareas/${id}`), {
+                fin: new Date().toLocaleTimeString('es-ES'),
+                finMS,
+                total: minutos,
+                estado: "finalizado"
+            });
+        };
+
+        window.borrarRegistro = (id) => {
+            if(confirm("¿Eliminar?")) remove(ref(db, `tareas/${id}`));
+        };
+
+        const guardarOrdenPedidos = async () => {
+            const updates = {};
+            state.pedidosOrdenados.forEach((pedidoId, index) => { updates[`${pedidoId}/orden`] = index; });
+            await update(planRef, updates);
+        };
+
+        const inicializarDragDrop = () => {
+            const tbody = document.getElementById('cuerpoPlan');
+            if (tbody && !state.sortable) {
+                state.sortable = new Sortable(tbody, {
+                    animation: 150,
+                    handle: '.drag-handle',
+                    ghostClass: 'sortable-ghost',
+                    dragClass: 'sortable-drag',
+                    filter: '.grupo-item',
+                    onEnd: async function(evt) {
+                        const newOrder = [];
+                        tbody.querySelectorAll('.pedido-header').forEach(row => {
+                            const pedidoKey = row.getAttribute('data-pedido-key');
+                            if (pedidoKey) newOrder.push(pedidoKey);
+                        });
+                        state.pedidosOrdenados = newOrder;
+                        await guardarOrdenPedidos();
+                    }
+                });
+            }
+        };
+
+        onValue(tareasRef, (snap) => {
+            const data = snap.val() || {};
+            const cuerpo = document.getElementById('cuerpoActividad');
+            cuerpo.innerHTML = "";
+            const tareas = Object.values(data);
+            state.pausaDesayuno = !!tareas.find(t => t.estado === "en_pausa_sistema");
+            state.incidencia = !!tareas.find(t => t.estado === "en_incidencia_sistema");
+            state.reposicion = !!tareas.find(t => t.estado === "en_reposicion_sistema");
+            if (state.pausaDesayuno) state.ids.pausa = Object.keys(data).find(k => data[k].estado === "en_pausa_sistema");
+            if (state.incidencia) state.ids.incidencia = Object.keys(data).find(k => data[k].estado === "en_incidencia_sistema");
+            if (state.reposicion) state.ids.reposicion = Object.keys(data).find(k => data[k].estado === "en_reposicion_sistema");
+            actualizarEstadoLineaUI();
+            
+            const idsOrdenados = Object.keys(data).sort((a, b) => (data[a].inicioMS || 0) - (data[b].inicioMS || 0));
+            
+            idsOrdenados.forEach(id => {
+                const t = data[id];
+                const esActivo = t.estado === "activo";
+                const esPausado = t.estado === "pausa" || t.estado === "incidencia_pausa";
+                const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
+                const esHito = t.codigo === "SISTEMA";
+                
+                let tiempoTexto = "";
+                if(esActivo) tiempoTexto = '<span class="animate-pulse">0m 0s</span>';
+                else if(esPausado) {
+                    const m = Math.floor((t.tiempoAcumuladoMS || 0) / 60000);
+                    const s = Math.floor(((t.tiempoAcumuladoMS || 0) % 60000) / 1000);
+                    tiempoTexto = `${m}m ${s}s <span class="text-[9px] text-blue-600">(PAUSA)</span>`;
+                } else if(esPausaSistema) tiempoTexto = "EN CURSO...";
+                else if(esHito) tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
+                else tiempoTexto = `${t.total}m`;
+
+                const esIncidencia  = t.numSerie === "INCIDENCIA";
+                const esDesayuno    = t.numSerie === "PAUSA DESAYUNO";
+                const esReposicion  = t.numSerie === "REPOSICIÓN";
+                const esEntrada     = t.numSerie === "ENTRADA LÍNEA";
+                const esSalida      = t.numSerie === "SALIDA LÍNEA";
+
+                const filaClase = esEntrada    ? "bg-emerald-50 border-emerald-200" :
+                                  esSalida     ? "bg-red-50 border-red-200" :
+                                  esDesayuno   ? "bg-orange-50 border-orange-200" :
+                                  esIncidencia ? "bg-red-50 border-red-200" :
+                                  esReposicion ? "bg-purple-50 border-purple-200" :
+                                  esActivo     ? "bg-red-50 border-red-100" :
+                                  esPausado    ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
+
+                const serieColorClase = esIncidencia  ? "text-red-600" :
+                                        esDesayuno    ? "text-orange-500" :
+                                        esReposicion  ? "text-purple-600" :
+                                        esEntrada     ? "text-emerald-600" :
+                                        esSalida      ? "text-red-600" : "";
+
+                const clienteHtml = (!esHito && t.cliente && t.cliente.trim() && t.cliente !== "Sin cliente")
+                    ? `<span class="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">👤 ${t.cliente}</span>`
+                    : '';
+                const pedidoHtml = (!esHito && t.pedido)
+                    ? `<span class="ml-1 text-[10px] text-slate-400">PED: ${t.pedido}</span>`
+                    : '';
+
+                const prodHtml = (!esHito && t.total > 0) ? `<span class="${(420/t.total) >= 19 ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-indigo-100 text-indigo-700 border-indigo-300'} px-2 py-1 rounded font-black text-sm border">${(420 / t.total).toFixed(1)}</span>` : '<span class="text-stone-300">—</span>';
+                let accionHtml = '';
+                if (esActivo) accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase">Finalizar</button>`;
+                else if(esPausado) accionHtml = '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>';
+                else if(esHito) accionHtml = '<span class="text-[10px] font-bold text-stone-400 uppercase">REGISTRO</span>';
+                else accionHtml = `<div class="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black text-[10px] border border-emerald-300"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Hecho</div>`;
+
+                cuerpo.innerHTML += `<tr class="${filaClase} border-b">
+                    <td class="p-3 font-black text-[15px] ${serieColorClase}">
+                        ${t.numSerie}
+                        ${pedidoHtml}
+                        ${clienteHtml}
+                    </td>
+                    <td class="p-3 font-bold text-sm">${t.codigo}</td>
+                    <td class="p-3 text-center"><span class="bg-slate-100 px-2 py-1 rounded font-black text-xs">${t.operarios || 0}</span></td>
+                    <td class="p-3">${t.notas && t.notas.trim() ? `<div class="bg-yellow-100 border-yellow-500 p-2 rounded text-[12px] font-black">⚠️ ${t.notas}</div>` : '<span class="text-stone-300 text-[10px]">-</span>'}</td>
+                    <td class="p-3 font-[1000] text-lg ${esActivo ? 'text-red-600' : esPausado || esPausaSistema ? 'text-blue-600' : ''}" ${esActivo || esPausaSistema ? `data-inicio-ms="${t.inicioMS}"` : ''}>${tiempoTexto}</td>
+                    <td class="p-3 text-center">${prodHtml}</td>
+                    <td class="p-3 text-right flex gap-3">${accionHtml}<button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                </tr>`;
+            });
+        });
+
+        onValue(planRef, (snap) => {
+            const data = snap.val() || {};
+            const cuerpo = document.getElementById('cuerpoPlan');
+            document.getElementById('sec-plan').classList.toggle('hidden', Object.keys(data).length === 0);
+            cuerpo.innerHTML = "";
+            if (state.sortable) { state.sortable.destroy(); state.sortable = null; }
+            const grupos = {}, ordenMap = {};
+            Object.keys(data).forEach(id => {
+                const item = data[id];
+                if (!grupos[item.pedido]) { grupos[item.pedido] = []; ordenMap[item.pedido] = item.orden || 999999; }
+                grupos[item.pedido].push({ ...item, id });
+            });
+            const pedidosOrdenadosKeys = Object.keys(grupos).sort((a, b) => (ordenMap[a] || 999999) - (ordenMap[b] || 999999));
+            state.pedidosOrdenados = pedidosOrdenadosKeys;
+            pedidosOrdenadosKeys.forEach((pedido, index) => {
+                const pedidoId = `pedido-${index}`;
+                const items = grupos[pedido];
+                const cliente = items[0].cliente || "Sin cliente";
+                
+                cuerpo.innerHTML += `
+                    <tr class="pedido-header bg-stone-50 cursor-pointer" data-pedido-key="${items[0].id}">
+                        <td class="p-3 flex items-center gap-3" onclick="toggleGrupo('${pedidoId}')">
+                            <svg class="drag-handle w-5 h-5 text-slate-400 cursor-grab" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"></path>
+                            </svg>
+                            <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs uppercase tracking-tighter text-slate-700">PEDIDO: ${pedido}</span>
+                                <span class="text-xs text-slate-400">—</span>
+                                <span class="text-xs text-blue-700 font-black bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200">👤 ${cliente}</span>
+                            </div>
+                            <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-bold">${items.length} UNID.</span>
+                        </td>
+                        <td colspan="3"></td>
+                        <td class="p-3 text-right">
+                            <button onclick='borrarPedidoCompleto(${JSON.stringify(items.map(i => i.id))}, event)' class="text-stone-400 hover:text-red-600 p-1 transition-colors" title="Eliminar pedido completo">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>`;
+                    
+                items.forEach(item => {
+                    const tieneNota = item.notas && item.notas.trim() !== "";
+                    cuerpo.innerHTML += `
+                        <tr class="grupo-${pedidoId} grupo-item hidden border-b border-stone-100 bg-white hover:bg-stone-50 transition-colors">
+                            <td class="p-2 pl-12 font-bold text-slate-500 text-base">↳ ${item.codigo}</td>
+                            <td class="p-2">
+                                <span class="bg-red-100 text-red-600 px-2 py-0.5 rounded font-mono font-black text-[15px]">${item.serie}</span>
+                            </td>
+                            <td class="p-2 w-1/2">
+                                ${tieneNota 
+                                    ? `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-900 px-3 py-1.5 rounded-r shadow-sm">
+                                        <p class="text-[10px] font-black leading-tight uppercase text-yellow-700">⚠️ NOTA:</p>
+                                        <p class="text-sm font-bold">${item.notas}</p>
+                                       </div>` 
+                                    : '<span class="text-stone-300 italic text-[10px]">Sin observaciones</span>'}
+                            </td>
+                            <td class="p-2 text-right" colspan="2">
+                                <div class="flex items-center justify-end gap-3">
+                                    <button onclick="iniciarDesdePlan('${item.id}', '${item.serie}', '${item.codigo}', '${item.notas}', '${pedido}', '${item.cliente}')" 
+                                            class="bg-red-600 hover:bg-slate-900 text-white px-4 py-1.5 rounded-lg font-black text-[10px] uppercase transition-all shadow-md flex items-center gap-1">
+                                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Iniciar
+                                    </button>
+                                    <button onclick="borrarSeriePendiente('${item.id}', event)" class="text-stone-300 hover:text-red-500 transition-colors" title="Eliminar serie">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>`;
+                });
+            });
+            setTimeout(inicializarDragDrop, 100);
+        });
+
+        onValue(estadoSesionRef, (snap) => {
+            const estadoSesion = snap.val() || {};
+            state.operarios = estadoSesion.operarios || 0;
+            state.entradaLineaHoy = estadoSesion.entradaLineaHoy || null;
+            state.salidaLineaHoy = estadoSesion.salidaLineaHoy || null;
+            if (state.inicializado) actualizarEstadoLineaUI();
+        });
+
+        onValue(preferenciasRef, (snap) => {
+            const preferencias = snap.val() || {};
+            state.mesSeleccionado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
+            state.fechaProdSeleccionada = preferencias.fechaProdSeleccionada?.valor || new Date().toISOString().split('T')[0];
+            state.anioSeleccionado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
+            if (state.inicializado) {
+                if (state.mesSeleccionado) actualizarTextoMiniCalendario(state.mesSeleccionado);
+                const anioEl = document.getElementById('anioMensual');
+                if (anioEl && state.anioSeleccionado) anioEl.textContent = state.anioSeleccionado;
+                const inputFecha = document.getElementById('inputFechaProd');
+                if (inputFecha && state.fechaProdSeleccionada) {
+                    inputFecha.value = state.fechaProdSeleccionada;
+                    const tituloFecha = document.getElementById('tituloFechaProd');
+                    if (tituloFecha) {
+                        const hoy = new Date().toISOString().split('T')[0];
+                        tituloFecha.textContent = state.fechaProdSeleccionada === hoy ? 'Hoy' : new Date(state.fechaProdSeleccionada).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                    }
+                }
+            }
+        });
+
+        onValue(productividadDiariaRef, async () => {
+            if (!state.inicializado) return;
+            await actualizarGraficoDiario(state.mesSeleccionado);
+            await actualizarGraficoMensual(state.anioSeleccionado);
+        });
+
+        onValue(mantenimientoRef, (snap) => {
+            const data = snap.val() || {};
+            const tbody = document.getElementById('tablaMantenimientoBody');
+            if (!tbody) return;
+            const items = Object.entries(data).sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            tbody.innerHTML = items.length === 0
+                ? '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin tareas de mantenimiento</td></tr>'
+                : items.map(([id, t]) => `
+                    <tr class="border-b border-slate-100 ${t.realizado ? 'bg-emerald-50' : 'bg-white'} hover:bg-slate-50">
+                        <td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">${t.fecha || ''}</td>
+                        <td class="p-2 text-xs font-bold ${t.realizado ? 'line-through text-slate-400' : 'text-slate-700'}">${t.texto || ''}</td>
+                        <td class="p-2 text-center">
+                            <button onclick="toggleMantenimiento('${id}', ${t.realizado})" class="text-[9px] font-black px-2 py-0.5 rounded-full border ${t.realizado ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-500 border-slate-300'} hover:opacity-80">
+                                ${t.realizado ? '✅ Hecho' : '⬜ Pendiente'}
+                            </button>
+                        </td>
+                        <td class="p-2 text-right">
+                            <button onclick="borrarMantenimiento('${id}')" class="text-slate-300 hover:text-red-500">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                            </button>
+                        </td>
+                    </tr>`).join('');
+        });
+
+        onValue(incidenciasLogRef, (snap) => {
+            const data = snap.val() || {};
+            const tbody = document.getElementById('tablaIncidenciasBody');
+            if (!tbody) return;
+            const items = Object.entries(data).sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            tbody.innerHTML = items.length === 0
+                ? '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias registradas</td></tr>'
+                : items.map(([id, t]) => `
+                    <tr class="border-b border-slate-100 bg-white hover:bg-red-50">
+                        <td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">${t.fecha || ''}</td>
+                        <td class="p-2 text-xs font-bold text-slate-700">${t.texto || ''}</td>
+                        <td class="p-2 text-right">
+                            <button onclick="borrarIncidenciaLog('${id}')" class="text-slate-300 hover:text-red-500">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                            </button>
+                        </td>
+                    </tr>`).join('');
+        });
+
+        onValue(tiempoPorTareaRef, (snap) => {
+            if (!state.inicializado) return;
+            const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
+            const fechaKey = fechaToKey(fecha);
+            const todosDatos = snap.val() || {};
+            const datosFecha = todosDatos[fechaKey] || {};
+            const datosProd = Object.values(datosFecha)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            actualizarGraficoProd(datosProd, fecha);
+        });
+
+        window.addEventListener('load', async () => {
+            actualizarEstadoLineaUI();
+            const preferencias = await obtenerPreferencias();
+            const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
+            state.mesSeleccionado = mesGuardado;
+            const fechaProdGuardada = preferencias.fechaProdSeleccionada?.valor || tsToFechaLocal(Date.now());
+            state.fechaProdSeleccionada = fechaProdGuardada;
+            const anioGuardado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
+            state.anioSeleccionado = anioGuardado;
+            await actualizarGraficoDiario(mesGuardado);
+            await actualizarGraficoMensual(anioGuardado);
+            
+            const datosGuardados = await obtenerTiempoPorTarea(fechaProdGuardada);
+            const datosProd = Object.values(datosGuardados)
+                .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+                .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+            
+            actualizarGraficoProd(datosProd, fechaProdGuardada);
+            actualizarTextoMiniCalendario(mesGuardado);
+            const anioEl = document.getElementById('anioMensual');
+            if (anioEl) anioEl.textContent = anioGuardado;
+            const inputFechaProd = document.getElementById('inputFechaProd');
+            if (inputFechaProd) inputFechaProd.value = fechaProdGuardada;
+            const tituloFecha = document.getElementById('tituloFechaProd');
+            if (tituloFecha) {
+                const hoy = tsToFechaLocal(Date.now());
+                tituloFecha.textContent = fechaProdGuardada === hoy ? 'Hoy' : new Date(fechaProdGuardada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            }
+            state.inicializado = true;
+        });
+    </script>
+    
+    <style>
+        .sortable-ghost { opacity: 0.4; background: #f3f4f6; }
+        .sortable-drag { opacity: 1; cursor: grabbing !important; }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+    </style>
+</head>
+<body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
+    
+    <div id="modalOperarios" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border-4 border-emerald-500">
+            <h3 id="tituloModal" class="text-xl font-black uppercase mb-6">Seleccione Operarios</h3>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <button onclick="seleccionarOperarios(1)" class="bg-emerald-100 hover:bg-emerald-500 hover:text-white hover:scale-105 text-emerald-700 font-black p-6 rounded-2xl text-2xl transition-all border-2">1</button>
+                <button onclick="seleccionarOperarios(2)" class="bg-emerald-100 hover:bg-emerald-500 hover:text-white hover:scale-105 text-emerald-700 font-black p-6 rounded-2xl text-2xl transition-all border-2">2</button>
+                <button onclick="seleccionarOperarios(3)" class="bg-emerald-100 hover:bg-emerald-500 hover:text-white hover:scale-105 text-emerald-700 font-black p-6 rounded-2xl text-2xl transition-all border-2">3</button>
+            </div>
+            <button onclick="cerrarSelector()" class="text-slate-400 font-bold uppercase text-[10px] hover:text-red-500">Cancelar</button>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto space-y-6">
+        <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-xl transition-colors flex items-center gap-2 text-[10px] font-black uppercase border border-slate-200" title="Volver al inicio">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Inicio
+                </a>
+                <div>
+                    <h1 class="text-4xl font-[1000] uppercase italic tracking-tighter"><span class="text-black">Dostec 50</span> <span class="text-red-600">Production</span></h1>
+                    <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <button id="btnReposicion" onclick="mostrarSelectorOperarios('reposicion')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                    Reposición
+                </button>
+                <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    Incidencia
+                </button>
+                <button id="btnDesayuno" onclick="pausaDesayuno()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M2 21h18v-2H2M20 8h-2V5h2m0-2H4v10a4 4 0 004 4h6a4 4 0 004-4v-3h2a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg>
+                    Desayuno
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4">
+            <button onclick="mostrarSelectorOperarios('entrada')" class="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
+                <span class="w-3 h-3 bg-white rounded-full animate-pulse"></span> Entrada Línea
+            </button>
+            <button onclick="registrarSalida()" class="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
+                <span class="w-3 h-3 bg-white rounded-full"></span> Salida Línea
+            </button>
+            <div class="flex-grow"></div>
+            <input type="file" id="file-input" class="hidden" accept=".xlsx, .xls" onchange="procesarArchivo(event)">
+            <button onclick="dispararSelector()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8 8m4-4l4 4"></path></svg>
+                Cargar Excel
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6">
+            <div id="sec-plan" class="hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></span> Pedidos pendientes
+                    </h2>
+                </div>
+                <div class="bg-white rounded-3xl shadow-sm overflow-hidden border">
+                    <table class="w-full text-left text-xs">
+                        <tbody id="cuerpoPlan"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <h2 class="text-base font-black uppercase tracking-widest text-emerald-600 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                        Pedidos en proceso
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
+                        <button onclick="exportarAExcel()" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow flex items-center gap-2">
+                            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Exportar Excel
+                        </button>
+                        <button onclick="borrarTodoProceso()" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow flex items-center gap-2 transition-all border border-red-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            Borrar Todo
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border">
+                    <table class="w-full text-left text-xs" id="tablaProceso">
+                        <thead class="bg-slate-900 text-white text-[13px] font-black uppercase">
+                            <tr>
+                                <th class="p-4">Serie</th>
+                                <th class="p-4">Código</th>
+                                <th class="p-4 text-center">Op.</th>
+                                <th class="p-4">Notas</th>
+                                <th class="p-4">Tiempo</th>
+                                <th class="p-4">Prod.</th>
+                                <th class="p-4 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoActividad"></tbody>
+                    </table>
+                </div>
+                
+                <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
+                    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+                                Tiempo por Tarea
+                            </h3>
+                            <button onclick="mostrarSelectorFechaProd()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-black text-xs border-2 border-indigo-300 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                                <span id="tituloFechaProd">Hoy</span>
+                            </button>
+                            <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)"/>
+                        </div>
+                        <div class="flex items-center gap-4 text-[10px] font-bold flex-wrap">
+                            <div class="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-200">
+                                <span class="w-4 h-1 bg-yellow-400 rounded"></span>
+                                <span class="text-yellow-700">Media: <span id="mediaValor">--</span></span>
+                            </div>
+                            <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border border-slate-200 hover:border-red-300 flex items-center gap-1.5 transition-all">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+                                Editar puntos
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
+                        <canvas id="graficoProd"></canvas>
+                    </div>
+                    <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2">
+                        <p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                            Modo edición — pulsa 🗑️ para borrar un punto
+                        </p>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2 text-center">Puntos ordenados por finalización de tarea (de izquierda a derecha) | Línea amarilla: Media del día</p>
+                </div>
+
+                <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
+                    <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-purple-600 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"/></svg>
+                                Productividad Diaria
+                            </h3>
+                            <div class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-2 py-1.5 shadow-sm">
+                                <div class="flex items-center gap-2">
+                                    <button onclick="cambiarMes(-1)" class="bg-purple-600 hover:bg-purple-700 text-white p-1 rounded">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"/></svg>
+                                    </button>
+                                    <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1 shadow-inner border border-purple-200">
+                                        <svg class="w-3.5 h-3.5 text-purple-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                                        <div class="flex flex-col leading-none">
+                                            <span class="text-[10px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
+                                            <span class="text-[8px] font-bold text-purple-400" id="anioMesDiario">2026</span>
+                                        </div>
+                                    </div>
+                                    <button onclick="cambiarMes(1)" class="bg-purple-600 hover:bg-purple-700 text-white p-1 rounded">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-64 bg-slate-50 rounded-xl p-2">
+                        <canvas id="graficoDiario"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
+                    <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-blue-600 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                                Productividad Mensual
+                            </h3>
+                            <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-2 py-1.5 shadow-sm">
+                                <div class="flex items-center gap-2">
+                                    <button onclick="cambiarAnio(-1)" class="bg-blue-600 hover:bg-blue-700 text-white p-1 rounded">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"/></svg>
+                                    </button>
+                                    <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1 shadow-inner border border-blue-200">
+                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                                        <span class="text-[11px] font-black text-blue-900" id="anioMensual">2026</span>
+                                    </div>
+                                    <button onclick="cambiarAnio(1)" class="bg-blue-600 hover:bg-blue-700 text-white p-1 rounded">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4 text-[10px] font-bold flex-wrap">
+                            <div class="flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200" id="tendenciaPositiva" style="display:none;">
+                                <span class="w-4 h-1 bg-emerald-500 rounded"></span>
+                                <span class="text-emerald-700">Tendencia ↗</span>
+                            </div>
+                            <div class="flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-200" id="tendenciaNegativa" style="display:none;">
+                                <span class="w-4 h-1 bg-red-500 rounded"></span>
+                                <span class="text-red-700">Tendencia ↘</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-72 bg-slate-50 rounded-xl p-2">
+                        <canvas id="graficoMensual"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+
+            <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
+                <div class="bg-blue-600 px-5 py-3 flex items-center justify-between">
+                    <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+                        Mantenimiento
+                    </h3>
+                    <button onclick="abrirMantenimiento()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg font-black text-[10px] uppercase flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                        Añadir
+                    </button>
+                </div>
+                <div class="overflow-auto max-h-64">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-blue-50 text-blue-700 font-black uppercase text-[10px] sticky top-0">
+                            <tr>
+                                <th class="p-2">Fecha</th>
+                                <th class="p-2">Descripción</th>
+                                <th class="p-2 text-center">Estado</th>
+                                <th class="p-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaMantenimientoBody">
+                            <tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin tareas de mantenimiento</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
+                <div class="bg-red-600 px-5 py-3 flex items-center justify-between">
+                    <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                        Registro de Incidencias
+                    </h3>
+                    <span class="bg-white/20 text-white px-2 py-0.5 rounded-lg text-[10px] font-black">Automático</span>
+                </div>
+                <div class="overflow-auto max-h-64">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-red-50 text-red-700 font-black uppercase text-[10px] sticky top-0">
+                            <tr>
+                                <th class="p-2">Fecha</th>
+                                <th class="p-2">Motivo</th>
+                                <th class="p-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaIncidenciasBody">
+                            <tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias registradas</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

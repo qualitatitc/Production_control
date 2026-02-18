@@ -3,53 +3,234 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Producción - Central</title>
+    <title>ITC Production Systems</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; }
-        .card { transition: all 0.3s ease; border: 1px solid #1e293b; }
-        .card:hover { transform: translateY(-5px); border-color: #38bdf8; box-shadow: 0 10px 20px -5px rgba(56, 189, 248, 0.2); }
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: grab;
+        }
+        .glass-card:active { cursor: grabbing; }
+        .sortable-ghost {
+            opacity: 0.4;
+            transform: scale(0.95);
+            background: #f1f5f9;
+        }
+        .drag-handle {
+            cursor: grab;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .glass-card:hover .drag-handle {
+            opacity: 1;
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-6">
+<body class="bg-slate-50 min-h-screen">
 
-    <div class="max-w-4xl w-full">
-        <header class="text-center mb-12">
-            <h1 class="text-4xl font-extrabold tracking-tight mb-2 uppercase">Sistema de Producción</h1>
-            <p class="text-slate-400 uppercase tracking-widest text-sm font-semibold">Acceso Centralizado a Módulos</p>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <a href="Dosmart.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
-                <div class="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    <!-- Header -->
+    <header class="bg-slate-900 text-white py-8 shadow-xl">
+        <div class="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-black tracking-tighter uppercase">ITC Production <span class="text-yellow-400">Systems</span></h1>
+                <p class="text-slate-400 text-sm mt-1 uppercase tracking-widest font-semibold">Panel de Control de Producción</p>
+            </div>
+            <div class="mt-4 md:mt-0 flex items-center gap-4">
+                <div class="text-right hidden md:block text-slate-300">
+                    <p id="current-date" class="text-xs font-bold uppercase"></p>
+                    <p id="current-time" class="text-xl font-light"></p>
                 </div>
-                <h2 class="text-xl font-bold mb-1">Dosmart</h2>
-                <p class="text-slate-400 text-sm">Control de Tareas</p>
-            </a>
-
-            <a href="Dostec%20AC.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
-                <div class="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                </div>
-                <h2 class="text-xl font-bold mb-1">Dostec AC</h2>
-                <p class="text-slate-400 text-sm">Producción Activa</p>
-            </a>
-
-            <a href="Restyling.html" class="card bg-slate-800 p-8 rounded-2xl text-center group">
-                <div class="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                </div>
-                <h2 class="text-xl font-bold mb-1">Restyling</h2>
-                <p class="text-slate-400 text-sm">Cloud MES</p>
-            </a>
+                <button onclick="resetOrder()" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
+                    Restablecer Orden
+                </button>
+            </div>
         </div>
+    </header>
 
-        <footer class="mt-16 text-center text-slate-500 text-xs font-bold uppercase tracking-widest">
-            Acceso Remoto Habilitado • ITC S.A.
-        </footer>
-    </div>
+    <main class="container mx-auto px-6 py-12">
+        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            
+            <!-- Agitador -->
+            <div data-id="agitador" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Agitador.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:rotate-180 transition-transform duration-700">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Agitador</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Gestión de producción, control de tiempos y registro de incidencias.</p>
+                    <div class="mt-8 flex items-center text-emerald-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
 
+            <!-- Aseemblies (Actualizado el enlace) -->
+            <div data-id="assemblies" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Aseemblies.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Aseemblies</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Control de montaje, ensamblaje de componentes y tareas.</p>
+                    <div class="mt-8 flex items-center text-blue-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Dosmart -->
+            <div data-id="dosmart" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Dosmart.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-yellow-100 text-yellow-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Dosmart</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Sistema inteligente de dosificación y monitoreo.</p>
+                    <div class="mt-8 flex items-center text-yellow-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Dostec 40 -->
+            <div data-id="dostec40" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Dostec 40.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Dostec 40</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Línea de producción Dostec 40 y control estadístico.</p>
+                    <div class="mt-8 flex items-center text-red-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Dostec 50 -->
+            <div data-id="dostec50" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Dostec 50.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 012-2H9a2 2 0 00-2 2v6a2 2 0 00-2 2v6a2 2 0 002 2h8a2 2 0 002-2z"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Dostec 50</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Línea de producción Dostec 50 de alto rendimiento.</p>
+                    <div class="mt-8 flex items-center text-red-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Dostec AC -->
+            <div data-id="dostecac" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Dostec AC.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-yellow-100 text-yellow-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Dostec AC</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Control avanzado de Dostec AC y analítica.</p>
+                    <div class="mt-8 flex items-center text-yellow-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Restyling -->
+            <div data-id="restyling" class="glass-card border border-slate-200 rounded-3xl p-6 flex flex-col group relative">
+                <div class="drag-handle absolute top-4 right-4 text-slate-300">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
+                </div>
+                <a href="Restyling.html" class="flex flex-col h-full">
+                    <div class="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.172-1.172a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/></svg>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Restyling</h2>
+                    <p class="text-slate-500 mt-2 text-sm leading-relaxed">Módulo de actualización y rediseño de procesos.</p>
+                    <div class="mt-8 flex items-center text-red-600 text-xs font-bold uppercase tracking-widest">
+                        Acceder al módulo 
+                        <svg class="w-4 h-4 ml-2 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="mt-12 py-12 border-t border-slate-200 bg-white">
+        <div class="container mx-auto px-6 text-center">
+            <p class="text-slate-400 text-xs font-bold uppercase tracking-widest">ITC PRODUCTION SYSTEMS &copy; 2025</p>
+            <div class="mt-4 flex justify-center gap-6 opacity-30">
+                <div class="w-8 h-1 bg-slate-900 rounded"></div>
+                <div class="w-8 h-1 bg-yellow-500 rounded"></div>
+                <div class="w-8 h-1 bg-slate-900 rounded"></div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const grid = document.getElementById('dashboard-grid');
+        
+        // Inicializar SortableJS
+        const sortable = new Sortable(grid, {
+            animation: 350,
+            ghostClass: 'sortable-ghost',
+            handle: '.glass-card',
+            store: {
+                get: function (sortable) {
+                    const order = localStorage.getItem('itc-dashboard-order');
+                    return order ? order.split('|') : [];
+                },
+                set: function (sortable) {
+                    const order = sortable.toArray();
+                    localStorage.setItem('itc-dashboard-order', order.join('|'));
+                }
+            }
+        });
+
+        function resetOrder() {
+            localStorage.removeItem('itc-dashboard-order');
+            location.reload();
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            
+            document.getElementById('current-date').textContent = now.toLocaleDateString('es-ES', dateOptions);
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('es-ES', timeOptions);
+        }
+
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+    </script>
 </body>
 </html>
