@@ -11,7 +11,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, push, onValue, update, remove, get, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg",
@@ -52,7 +52,49 @@
             anioSeleccionado: null,
             inicializado: false,
             modoEdicionGrafico: false,
-            filtroFechaTareas: null, // Nueva: filtro para tabla de tareas
+            filtroFechaTareas: null,
+            firebaseConectado: false,
+        };
+
+        // Listener para estado de conexión con Firebase
+        const conexionRef = ref(db, '.info/connected');
+        onValue(conexionRef, (snap) => {
+            const conectado = snap.val() === true;
+            state.firebaseConectado = conectado;
+            actualizarIndicadorConexion(conectado);
+        });
+
+        // Función para actualizar el indicador visual de conexión
+        const actualizarIndicadorConexion = (conectado) => {
+            const indicador = document.getElementById('indicadorFirebase');
+            const led = document.getElementById('ledFirebase');
+            const texto = document.getElementById('textoFirebase');
+            
+            if (!indicador || !led || !texto) return;
+            
+            if (conectado) {
+                // Conectado - LED verde brillante con sombra
+                indicador.classList.remove('bg-red-100', 'border-red-300');
+                indicador.classList.add('bg-emerald-100', 'border-emerald-400');
+                
+                led.classList.remove('bg-red-500', 'animate-pulse');
+                led.classList.add('bg-emerald-500', 'shadow-emerald-500/60', 'led-conectado');
+                
+                texto.textContent = 'CONECTADO';
+                texto.classList.remove('text-red-700');
+                texto.classList.add('text-emerald-800');
+            } else {
+                // Desconectado - LED rojo con pulso rápido
+                indicador.classList.remove('bg-emerald-100', 'border-emerald-400');
+                indicador.classList.add('bg-red-100', 'border-red-300');
+                
+                led.classList.remove('bg-emerald-500', 'shadow-emerald-500/60', 'led-conectado');
+                led.classList.add('bg-red-500', 'animate-pulse');
+                
+                texto.textContent = 'SIN CONEXIÓN';
+                texto.classList.remove('text-emerald-800');
+                texto.classList.add('text-red-700');
+            }
         };
 
         const guardarEstadoSesion = async (datos) => {
@@ -143,7 +185,6 @@
 
         const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
-        // GRÁFICO DE TIEMPO POR TAREA
         const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
             const ctx = document.getElementById('graficoProd');
             const container = document.getElementById('graficoContainer');
@@ -180,7 +221,6 @@
             const tiempos = datosProd.map(d => d.tiempo);
             const series = datosProd.map(d => d.serie);
             const media = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
-            const tiempoObjetivo = 420 / 19;
             
             const mediaIndicator = document.getElementById('mediaValor');
             if (mediaIndicator) {
@@ -839,12 +879,10 @@
             reader.readAsArrayBuffer(file);
         };
 
-        // NUEVO: Función para mostrar modal de exportación con rango de fechas
         window.mostrarModalExportar = () => {
             const modal = document.getElementById('modalExportar');
             const hoy = new Date().toISOString().split('T')[0];
             
-            // Establecer fechas por defecto (últimos 7 días)
             const hace7Dias = new Date();
             hace7Dias.setDate(hace7Dias.getDate() - 7);
             const fechaInicio = hace7Dias.toISOString().split('T')[0];
@@ -862,7 +900,6 @@
             modal.classList.remove('flex');
         };
 
-        // NUEVO: Exportar Excel con rango de fechas
         window.exportarAExcelRango = async () => {
             const fechaInicio = document.getElementById('fechaInicioExport').value;
             const fechaFin = document.getElementById('fechaFinExport').value;
@@ -877,7 +914,6 @@
                 return;
             }
             
-            // Obtener todas las tareas de Firebase
             const snapshot = await get(tareasRef);
             if (!snapshot.exists()) {
                 alert("❌ No hay datos para exportar");
@@ -888,7 +924,6 @@
             const todasLasTareas = snapshot.val();
             const tareasFiltradas = [];
             
-            // Filtrar por rango de fechas
             Object.entries(todasLasTareas).forEach(([id, tarea]) => {
                 const fechaTarea = tsToFechaLocal(tarea.inicioMS);
                 if (fechaTarea >= fechaInicio && fechaTarea <= fechaFin) {
@@ -913,34 +948,22 @@
                 return;
             }
             
-            // Crear workbook y worksheet
             const ws = XLSX.utils.json_to_sheet(tareasFiltradas);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Producción");
             
-            // Ajustar anchos de columna
             const colWidths = [
-                { wch: 12 }, // Fecha
-                { wch: 10 }, // Hora Inicio
-                { wch: 10 }, // Hora Fin
-                { wch: 20 }, // Serie
-                { wch: 15 }, // Código
-                { wch: 10 }, // Operarios
-                { wch: 30 }, // Notas
-                { wch: 12 }, // Total
-                { wch: 12 }, // Productividad
-                { wch: 15 }  // Estado
+                { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 15 },
+                { wch: 10 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 15 }
             ];
             ws['!cols'] = colWidths;
             
-            // Descargar archivo
             const nombreArchivo = `Produccion_${fechaInicio}_a_${fechaFin}.xlsx`;
             XLSX.writeFile(wb, nombreArchivo);
             
             alert(`✅ Exportadas ${tareasFiltradas.length} tareas (${fechaInicio} a ${fechaFin})`);
             cerrarModalExportar();
             
-            // Preguntar si borrar
             if (confirm("¿Deseas borrar las tareas exportadas de la base de datos?")) {
                 const updates = {};
                 Object.entries(todasLasTareas).forEach(([id, tarea]) => {
@@ -954,7 +977,6 @@
             }
         };
 
-        // Mantener función antigua por compatibilidad (exporta todo)
         window.exportarAExcel = () => {
             mostrarModalExportar();
         };
@@ -969,7 +991,6 @@
             }
         };
 
-        // Mantenimiento
         window.abrirMantenimiento = () => {
             const texto = prompt("📝 Descripción de la tarea de mantenimiento:");
             if (!texto || !texto.trim()) return;
@@ -985,7 +1006,6 @@
             if (confirm("¿Eliminar esta tarea de mantenimiento?")) await remove(ref(db, `mantenimiento/${id}`));
         };
 
-        // Incidencias log
         window.borrarIncidenciaLog = async (id) => {
             if (confirm("¿Eliminar este registro de incidencia?")) await remove(ref(db, `incidenciasLog/${id}`));
         };
@@ -1074,7 +1094,6 @@
             }
         };
 
-        // NUEVO: Funciones para filtro de fecha en tabla de tareas
         window.mostrarFiltroFechaTareas = () => {
             const input = document.getElementById('inputFiltroFechaTareas');
             const hoy = new Date().toISOString().split('T')[0];
@@ -1104,7 +1123,6 @@
                 resetFiltroFechaTareas();
             }
             
-            // Recargar la tabla con el filtro aplicado
             await renderizarTablaTareas();
         };
 
@@ -1126,7 +1144,6 @@
             renderizarTablaTareas();
         };
 
-        // Función para renderizar tabla de tareas con filtro
         const renderizarTablaTareas = async () => {
             const snapshot = await get(tareasRef);
             const cuerpo = document.getElementById('cuerpoActividad');
@@ -1137,7 +1154,6 @@
             const data = snapshot.val();
             const tareas = Object.entries(data);
             
-            // Aplicar filtro de fecha si existe
             let tareasFiltradas = tareas;
             if (state.filtroFechaTareas) {
                 tareasFiltradas = tareas.filter(([id, t]) => {
@@ -1146,10 +1162,8 @@
                 });
             }
             
-            // Ordenar por inicioMS
             tareasFiltradas.sort((a, b) => (a[1].inicioMS || 0) - (b[1].inicioMS || 0));
             
-            // Actualizar estado de la línea basado en tareas SISTEMA (INCIDENCIA, PAUSA, etc.)
             state.pausaDesayuno = !!tareas.find(([id, t]) => t.estado === "en_pausa_sistema");
             state.incidencia = !!tareas.find(([id, t]) => t.estado === "en_incidencia_sistema");
             state.reposicion = !!tareas.find(([id, t]) => t.estado === "en_reposicion_sistema");
@@ -1159,7 +1173,6 @@
             
             actualizarEstadoLineaUI();
             
-            // Mostrar mensaje si no hay tareas en el filtro
             if (tareasFiltradas.length === 0 && state.filtroFechaTareas) {
                 cuerpo.innerHTML = `
                     <tr>
@@ -1241,7 +1254,6 @@
             });
         };
 
-        // Reemplazar onValue de tareasRef para usar la función de renderizado
         onValue(tareasRef, () => {
             renderizarTablaTareas();
         });
@@ -1456,8 +1468,17 @@
         .sortable-drag { opacity: 1; cursor: grabbing !important; }
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
+        
+        /* Animación de pulso suave para el LED verde */
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { opacity: 0.85; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        }
+        
+        .led-conectado {
+            animation: pulse-soft 2s infinite;
+        }
     </style>
-<base target="_blank">
 </head>
 <body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
     
@@ -1474,7 +1495,7 @@
         </div>
     </div>
 
-    <!-- NUEVO: Modal para exportar con rango de fechas -->
+    <!-- Modal para exportar con rango de fechas -->
     <div id="modalExportar" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-slate-200">
             <div class="flex items-center justify-between mb-6">
@@ -1518,7 +1539,8 @@
     </div>
 
     <div class="max-w-6xl mx-auto space-y-6">
-        <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
+        <!-- Header con indicador de conexión Firebase mejorado -->
+        <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border relative">
             <div class="flex items-center gap-4">
                 <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-xl transition-colors flex items-center gap-2 text-[10px] font-black uppercase border border-slate-200" title="Volver al inicio">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
@@ -1529,7 +1551,14 @@
                     <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3 flex-wrap">
+            
+            <!-- INDICADOR FIREBASE MEJORADO - Más visible y posicionado correctamente -->
+            <div id="indicadorFirebase" class="flex items-center gap-2 bg-emerald-100 border-2 border-emerald-400 px-4 py-2 rounded-full shadow-md z-10">
+                <div id="ledFirebase" class="w-3 h-3 rounded-full bg-emerald-500 led-conectado shadow-lg shadow-emerald-500/60"></div>
+                <span id="textoFirebase" class="text-[11px] font-black uppercase tracking-wider text-emerald-800">CONECTADO</span>
+            </div>
+            
+            <div class="flex items-center gap-3 flex-wrap w-full md:w-auto justify-end">
                 <button id="btnReposicion" onclick="mostrarSelectorOperarios('reposicion')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center gap-2">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
                     Reposición
@@ -1545,6 +1574,7 @@
             </div>
         </div>
 
+        <!-- Resto del contenido... -->
         <div class="flex flex-wrap items-center gap-4">
             <button onclick="mostrarSelectorOperarios('entrada')" class="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
                 <span class="w-3 h-3 bg-white rounded-full animate-pulse"></span> Entrada Línea
@@ -1581,7 +1611,6 @@
                             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
                             Pedidos en proceso
                         </h2>
-                        <!-- NUEVO: Botón de filtro de fecha -->
                         <button id="btnFiltroFechaTareas" onclick="mostrarFiltroFechaTareas()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase flex items-center gap-2 transition-colors">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
                             <span class="font-black text-[10px] uppercase">Filtrar fecha</span>
@@ -1622,6 +1651,7 @@
                     </table>
                 </div>
                 
+                <!-- Gráficos... -->
                 <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
                     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                         <div class="flex items-center gap-3">
@@ -1731,8 +1761,6 @@
 
         <!-- TABLAS MANTENIMIENTO E INCIDENCIAS -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
-
-            <!-- TABLA MANTENIMIENTO -->
             <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
                 <div class="bg-blue-600 px-5 py-3 flex items-center justify-between">
                     <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
@@ -1761,7 +1789,6 @@
                 </div>
             </div>
 
-            <!-- TABLA INCIDENCIAS LOG -->
             <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
                 <div class="bg-red-600 px-5 py-3 flex items-center justify-between">
                     <h3 class="text-white font-black uppercase text-sm tracking-widest flex items-center gap-2">
@@ -1785,7 +1812,6 @@
                     </table>
                 </div>
             </div>
-
         </div>
     </div>
 </body>
