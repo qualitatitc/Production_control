@@ -51,14 +51,12 @@ modoEdicionGrafico: false,
 filtroFechaTareas: null,
 firebaseConectado: false,
 };
-// Listener para estado de conexión con Firebase
 const conexionRef = ref(db, '.info/connected');
 onValue(conexionRef, (snap) => {
 const conectado = snap.val() === true;
 state.firebaseConectado = conectado;
 actualizarIndicadorConexion(conectado);
 });
-// ✅ MODIFICACIÓN 4: Función para actualizar el indicador visual de conexión (EN LÍNEA)
 const actualizarIndicadorConexion = (conectado) => {
 const indicador = document.getElementById('indicadorFirebase');
 const led = document.getElementById('ledFirebase');
@@ -69,7 +67,7 @@ indicador.classList.remove('bg-red-100', 'border-red-300');
 indicador.classList.add('bg-emerald-100', 'border-emerald-400');
 led.classList.remove('bg-red-500', 'animate-pulse');
 led.classList.add('bg-emerald-500', 'shadow-emerald-500/60', 'led-conectado');
-texto.textContent = 'EN LÍNEA'; // ✅ CAMBIADO DE 'CONECTADO' A 'EN LÍNEA'
+texto.textContent = 'EN LÍNEA';
 texto.classList.remove('text-red-700');
 texto.classList.add('text-emerald-800');
 } else {
@@ -583,7 +581,6 @@ const sec = Math.floor((diff % 60000) / 1000);
 el.innerText = `${min}m ${sec}s`;
 });
 }, 1000);
-// ✅ MODIFICACIÓN 1: Función actualizarEstadoLineaUI con botones Entrada/Salida dinámicos
 const actualizarEstadoLineaUI = () => {
 const indicador = document.getElementById('estadoLineaIndicador');
 const btns = { 
@@ -594,32 +591,24 @@ const btns = {
     reposicion: document.getElementById('btnReposicion') 
 };
 if (state.operarios > 0) {
-// Línea ACTIVA
 indicador.innerHTML = `<span class="flex items-center gap-2 bg-emerald-100 text-emerald-700 px-4 py-1.5 rounded-full border border-emerald-300 animate-pulse"><span class="w-3 h-3 bg-emerald-600 rounded-full"></span> LÍNEA ACTIVA (${state.operarios} Op.)</span>`;
-
-// ✅ Desactivar Entrada, Activar Salida
 if (btns.entrada) {
     btns.entrada.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
 }
 if (btns.salida) {
     btns.salida.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
 }
-
 btns.desayuno.classList.remove('opacity-50', 'cursor-not-allowed');
 btns.incidencia.classList.remove('opacity-50', 'cursor-not-allowed');
 btns.reposicion.classList.add('opacity-50', 'cursor-not-allowed');
 } else {
-// Línea PARADA
 indicador.innerHTML = `<span class="flex items-center gap-2 bg-slate-200 text-slate-600 px-4 py-1.5 rounded-full border border-slate-300"><span class="w-3 h-3 bg-slate-400 rounded-full"></span> LÍNEA PARADA</span>`;
-
-// ✅ Activar Entrada, Desactivar Salida
 if (btns.entrada) {
     btns.entrada.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
 }
 if (btns.salida) {
     btns.salida.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
 }
-
 btns.desayuno.classList.add('opacity-50', 'cursor-not-allowed');
 btns.incidencia.classList.add('opacity-50', 'cursor-not-allowed');
 btns.reposicion.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -646,15 +635,12 @@ btns.incidencia.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0
 btns.incidencia.classList.replace('bg-blue-600', 'bg-red-600');
 }
 };
-// ✅ MODIFICACIÓN 3: Validación Entrada/Salida 1:1
 window.mostrarSelectorOperarios = async (modo = "entrada") => {
 if (modo === "entrada") {
     if (state.operarios > 0) { 
         alert("⚠️ ATENCIÓN: La línea ya está activa."); 
         return; 
     }
-    
-    // ✅ VALIDACIÓN: Verificar si hay entrada sin salida previa
     const snapshot = await get(tareasRef);
     let entradaSinSalida = false;
     if (snapshot.exists()) {
@@ -662,23 +648,18 @@ if (modo === "entrada") {
         const entradas = Object.entries(tareas)
             .filter(([id, t]) => t.numSerie === "ENTRADA LÍNEA")
             .sort((a, b) => a[1].inicioMS - b[1].inicioMS);
-        
         const salidas = Object.entries(tareas)
             .filter(([id, t]) => t.numSerie === "SALIDA LÍNEA")
             .sort((a, b) => a[1].inicioMS - b[1].inicioMS);
-        
-        // ✅ Verificar si hay más entradas que salidas
         if (entradas.length > salidas.length) {
             entradaSinSalida = true;
         }
     }
-    
     if (entradaSinSalida) {
         alert("⚠️ ATENCIÓN: Debes registrar SALIDA LÍNEA antes de una nueva entrada. Cada entrada requiere una salida.");
         return;
     }
 }
-
 if (modo === "reposicion") {
 if (state.operarios > 0) { 
     alert("⚠️ ATENCIÓN: Solo se puede reponer con la línea parada."); 
@@ -945,7 +926,6 @@ alert("🗑️ Tareas exportadas eliminadas");
 window.exportarAExcel = () => {
 mostrarModalExportar();
 };
-// ✅ MODIFICACIÓN 5: Función borrarTodoProceso mantenida pero botón eliminado del HTML
 window.borrarTodoProceso = async (sinConfirm = false) => {
 if (!sinConfirm && !confirm("¿Borrar TODOS los registros de Pedidos en Proceso?")) return;
 const snap = await get(tareasRef);
@@ -984,8 +964,13 @@ window.borrarPedidoCompleto = (ids, e) => {
 e.stopPropagation();
 if(confirm(`¿Eliminar todo el pedido (${ids.length} series)?`)) ids.forEach(id => remove(ref(db, `planificacion/${id}`)));
 };
+// ✅ MODIFICACIÓN 1: Validación reforzada - No se puede iniciar tarea sin línea activa
 window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
-if(!state.operarios || state.operarios === 0) { alert("⚠️ Debes pulsar 'ENTRADA LÍNEA' primero."); return; }
+// ✅ Doble validación para asegurar que la línea está activa
+if(!state.operarios || state.operarios === 0) { 
+    alert("⚠️ ATENCIÓN: Debes pulsar 'ENTRADA LÍNEA' primero para iniciar la línea de producción."); 
+    return; 
+}
 remove(ref(db, `planificacion/${id}`));
 push(tareasRef, { numSerie: serie, codigo: cod, notas: notas, pedido: pedido || "", cliente: cliente || "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "activo" });
 };
@@ -1050,7 +1035,6 @@ input.showPicker();
 window.aplicarFiltroFechaTareas = async (fecha) => {
 state.filtroFechaTareas = fecha;
 const btnFiltro = document.getElementById('btnFiltroFechaTareas');
-const btnReset = document.getElementById('btnResetFiltroTareas');
 const tituloTabla = document.getElementById('tituloTablaTareas');
 if (fecha) {
 const hoy = new Date().toISOString().split('T')[0];
@@ -1060,7 +1044,7 @@ btnFiltro.innerHTML = `
 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
 <span class="font-black text-[10px] uppercase">${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</span>
 `;
-btnReset.classList.remove('hidden');
+// ✅ MODIFICACIÓN 2: Botón "Limpiar" eliminado - ya no se muestra
 tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
 } else {
 resetFiltroFechaTareas();
@@ -1070,14 +1054,12 @@ await renderizarTablaTareas();
 window.resetFiltroFechaTareas = () => {
 state.filtroFechaTareas = null;
 const btnFiltro = document.getElementById('btnFiltroFechaTareas');
-const btnReset = document.getElementById('btnResetFiltroTareas');
 const tituloTabla = document.getElementById('tituloTablaTareas');
 btnFiltro.classList.replace('bg-emerald-600', 'bg-slate-800');
 btnFiltro.innerHTML = `
 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
 <span class="font-black text-[10px] uppercase">Filtrar fecha</span>
 `;
-btnReset.classList.add('hidden');
 tituloTabla.textContent = 'Pedidos en proceso';
 renderizarTablaTareas();
 };
@@ -1339,7 +1321,7 @@ const todosDatos = snap.val() || {};
 const datosFecha = todosDatos[fechaKey] || {};
 const datosProd = Object.values(datosFecha)
 .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-.map(t => ({ serie: t.serie, tiempo: t.tiempo }));
+.map(t => ({ serie: t.serie, tiempo: d.tiempo }));
 actualizarGraficoProd(datosProd, fecha);
 });
 window.addEventListener('load', async () => {
@@ -1376,7 +1358,6 @@ state.inicializado = true;
 .sortable-drag { opacity: 1; cursor: grabbing !important; }
 .drag-handle { cursor: grab; }
 .drag-handle:active { cursor: grabbing; }
-/* Animación de pulso suave para el LED verde */
 @keyframes pulse-soft {
 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
 50% { opacity: 0.85; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
@@ -1387,7 +1368,6 @@ animation: pulse-soft 2s infinite;
 </style>
 </head>
 <body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
-<!-- Modal para selección de operarios -->
 <div id="modalOperarios" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
 <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border-4 border-emerald-500">
 <h3 id="tituloModal" class="text-xl font-black uppercase mb-6">Seleccione Operarios</h3>
@@ -1399,7 +1379,6 @@ animation: pulse-soft 2s infinite;
 <button onclick="cerrarSelector()" class="text-slate-400 font-bold uppercase text-[10px] hover:text-red-500">Cancelar</button>
 </div>
 </div>
-<!-- Modal para exportar con rango de fechas -->
 <div id="modalExportar" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
 <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-slate-200">
 <div class="flex items-center justify-between mb-6">
@@ -1439,14 +1418,12 @@ Exportar
 </div>
 </div>
 <div class="max-w-6xl mx-auto space-y-6">
-<!-- ✅ MODIFICACIÓN 4: Header con indicador EN LÍNEA reposicionado encima del título a la derecha -->
 <div class="flex justify-end mb-2">
     <div id="indicadorFirebase" class="flex items-center gap-2 bg-emerald-100 border-2 border-emerald-400 px-4 py-2 rounded-full shadow-md z-10">
         <div id="ledFirebase" class="w-3 h-3 rounded-full bg-emerald-500 led-conectado shadow-lg shadow-emerald-500/60"></div>
         <span id="textoFirebase" class="text-[11px] font-black uppercase tracking-wider text-emerald-800">EN LÍNEA</span>
     </div>
 </div>
-
 <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border relative">
 <div class="flex items-center gap-4">
 <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-xl transition-colors flex items-center gap-2 text-[10px] font-black uppercase border border-slate-200" title="Volver al inicio">
@@ -1473,7 +1450,6 @@ Desayuno
 </button>
 </div>
 </div>
-<!-- ✅ MODIFICACIÓN 1 & 2: Botones Entrada/Salida con IDs para control dinámico -->
 <div class="flex flex-wrap items-center gap-4">
 <button id="btnEntradaLinea" onclick="mostrarSelectorOperarios('entrada')" class="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase shadow-lg flex items-center gap-3">
 <span class="w-3 h-3 bg-white rounded-full animate-pulse"></span> Entrada Línea
@@ -1513,10 +1489,7 @@ Pedidos en proceso
 <span class="font-black text-[10px] uppercase">Filtrar fecha</span>
 </button>
 <input type="date" id="inputFiltroFechaTareas" class="hidden" onchange="aplicarFiltroFechaTareas(this.value)">
-<button id="btnResetFiltroTareas" onclick="resetFiltroFechaTareas()" class="hidden bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1.5 rounded-lg font-black text-[10px] uppercase flex items-center gap-1 transition-colors">
-<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-Limpiar
-</button>
+<!-- ✅ MODIFICACIÓN 2: Botón "Limpiar" ELIMINADO -->
 </div>
 <div class="flex items-center gap-2">
 <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
@@ -1524,7 +1497,6 @@ Limpiar
 <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
 Exportar Excel
 </button>
-<!-- ✅ MODIFICACIÓN 5: Botón "Borrar Todo" ELIMINADO -->
 </div>
 </div>
 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border">
@@ -1543,7 +1515,6 @@ Exportar Excel
 <tbody id="cuerpoActividad"></tbody>
 </table>
 </div>
-<!-- Gráficos... -->
 <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
 <div class="flex items-center gap-3">
@@ -1648,7 +1619,6 @@ Productividad Mensual
 </div>
 </div>
 </div>
-<!-- TABLAS MANTENIMIENTO E INCIDENCIAS -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
 <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
 <div class="bg-blue-600 px-5 py-3 flex items-center justify-between">
