@@ -52,6 +52,7 @@
             anioSeleccionado: null,
             inicializado: false,
             modoEdicionGrafico: false,
+            filtroFechaTareas: null, // Nueva: filtro para tabla de tareas
         };
 
         const guardarEstadoSesion = async (datos) => {
@@ -77,7 +78,6 @@
             return snapshot.val() || {};
         };
 
-        // Funciones para manejar datos del gráfico tiempo por tarea
         const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
             const fechaKey = fechaToKey(fecha);
             await push(ref(db, `tiempoPorTarea/${fechaKey}`), {
@@ -91,8 +91,6 @@
             return snapshot.val() || {};
         };
 
-        // Nueva fórmula:
-        // ((tareas1op + tareas2op) * 7) / (horas1op + horas2op * 2)
         const calcularProductividadDiaria = (t1, t2, h1, h2) => {
             const divisor = h1 + h2 * 2;
             if (divisor <= 0) return 0;
@@ -100,14 +98,11 @@
             return isFinite(prod) ? Math.round(prod * 10) / 10 : 0;
         };
 
-        // Guarda o acumula la sesión del día en Firebase
-        // La estructura acumula: tareas1op, tareas2op, horas1op, horas2op
         const guardarSesionDiaria = async (fecha, operarios, tareasEnSesion, horasEnSesion) => {
             const fechaKey = fechaToKey(fecha);
             const snapDia = await get(ref(db, `productividadDiaria/${fechaKey}`));
             const diaActual = snapDia.val() || { tareas1op: 0, tareas2op: 0, horas1op: 0, horas2op: 0 };
 
-            // Acumular según número de operarios de esta sesión
             if (operarios === 1) {
                 diaActual.tareas1op = (diaActual.tareas1op || 0) + tareasEnSesion;
                 diaActual.horas1op  = (diaActual.horas1op  || 0) + horasEnSesion;
@@ -116,7 +111,6 @@
                 diaActual.horas2op  = (diaActual.horas2op  || 0) + horasEnSesion;
             }
 
-            // Recalcular productividad con datos acumulados
             diaActual.productividad = calcularProductividadDiaria(
                 diaActual.tareas1op, diaActual.tareas2op,
                 diaActual.horas1op,  diaActual.horas2op
@@ -139,7 +133,6 @@
             return diaSemana === 0 || diaSemana === 6;
         };
 
-        // Función CENTRAL para convertir cualquier timestamp a fecha YYYY-MM-DD local
         const tsToFechaLocal = (ms) => {
             const d = new Date(Number(ms));
             const year = d.getFullYear();
@@ -148,7 +141,6 @@
             return `${year}-${month}-${day}`;
         };
 
-        // Convierte fecha YYYY-MM-DD a clave Firebase YYYY_MM_DD
         const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
         // GRÁFICO DE TIEMPO POR TAREA
@@ -201,7 +193,7 @@
             state.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: series.map((s, i) => i + 1), // Números secuenciales en lugar de series
+                    labels: series.map((s, i) => i + 1),
                     datasets: [{
                         label: 'Tiempo (min)',
                         data: tiempos,
@@ -371,7 +363,6 @@
             
             const dias = Array.from({ length: 31 }, (_, i) => i + 1);
             const valores = dias.map(dia => {
-                // Crear fecha en formato YYYY-MM-DD directamente sin conversión de zona horaria
                 const mes = String(mesAMostrar.month + 1).padStart(2, '0');
                 const diaStr = String(dia).padStart(2, '0');
                 const fechaStr = `${mesAMostrar.year}-${mes}-${diaStr}`;
@@ -483,7 +474,6 @@
                 const diasDelMes = new Date(anio, mes + 1, 0).getDate();
                 let suma = 0, diasConDatos = 0;
                 for (let dia = 1; dia <= diasDelMes; dia++) {
-                    // Crear fecha en formato YYYY-MM-DD directamente sin conversión de zona horaria
                     const mesStr = String(mes + 1).padStart(2, '0');
                     const diaStr = String(dia).padStart(2, '0');
                     const fechaStr = `${anio}-${mesStr}-${diaStr}`;
@@ -707,7 +697,6 @@
             
             await push(tareasRef, { numSerie: "SALIDA LÍNEA", codigo: "SISTEMA", notas: "", operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: ahoraMSTime, fin: "--:--", total: 0, estado: "finalizado" });
             
-            // Calcular tareas y horas de esta sesión
             const snapshot = await get(tareasRef);
             const entradaMS = state.entradaLineaHoy;
             const operariosSesion = state.operarios;
@@ -716,7 +705,6 @@
             if (snapshot.exists()) {
                 Object.values(snapshot.val()).forEach(t => {
                     const fechaTarea = tsToFechaLocal(t.inicioMS);
-                    // Solo tareas de esta sesión: mismo día, mismos operarios, finalizadas, no sistema
                     if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0 && t.operarios === operariosSesion) {
                         tareasEnSesion++;
                     }
@@ -725,7 +713,6 @@
             
             const horasEnSesion = entradaMS ? (ahoraMSTime - entradaMS) / (1000 * 3600) : 0;
             
-            // Guardar sesión acumulada en Firebase
             await guardarSesionDiaria(fechaHoy, operariosSesion, tareasEnSesion, horasEnSesion);
             
             state.operarios = 0;
@@ -796,7 +783,6 @@
                 const nuevaInc = await push(tareasRef, { numSerie: "INCIDENCIA", codigo: "SISTEMA", notas: motivo, operarios: state.operarios, inicio: new Date().toLocaleTimeString('es-ES'), inicioMS: Date.now(), fin: "--:--", total: 0, estado: "en_incidencia_sistema" });
                 state.ids.incidencia = nuevaInc.key;
                 state.incidencia = true;
-                // Guardar en log de incidencias
                 push(incidenciasLogRef, { texto: motivo, fecha: tsToFechaLocal(Date.now()), hora: new Date().toLocaleTimeString('es-ES'), timestamp: Date.now() });
             } else {
                 if (snapshot.exists()) {
@@ -853,14 +839,124 @@
             reader.readAsArrayBuffer(file);
         };
 
-        window.exportarAExcel = () => {
-            const tabla = document.getElementById("tablaProceso");
-            const wb = XLSX.utils.table_to_book(tabla, { sheet: "Producción" });
-            XLSX.writeFile(wb, `Produccion_Dostec_${tsToFechaLocal(Date.now())}.xlsx`);
-            // Borrar tabla tras exportar
-            if (confirm("✅ Excel exportado. ¿Borrar toda la tabla de Pedidos en Proceso?")) {
-                borrarTodoProceso(true);
+        // NUEVO: Función para mostrar modal de exportación con rango de fechas
+        window.mostrarModalExportar = () => {
+            const modal = document.getElementById('modalExportar');
+            const hoy = new Date().toISOString().split('T')[0];
+            
+            // Establecer fechas por defecto (últimos 7 días)
+            const hace7Dias = new Date();
+            hace7Dias.setDate(hace7Dias.getDate() - 7);
+            const fechaInicio = hace7Dias.toISOString().split('T')[0];
+            
+            document.getElementById('fechaInicioExport').value = fechaInicio;
+            document.getElementById('fechaFinExport').value = hoy;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.cerrarModalExportar = () => {
+            const modal = document.getElementById('modalExportar');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        // NUEVO: Exportar Excel con rango de fechas
+        window.exportarAExcelRango = async () => {
+            const fechaInicio = document.getElementById('fechaInicioExport').value;
+            const fechaFin = document.getElementById('fechaFinExport').value;
+            
+            if (!fechaInicio || !fechaFin) {
+                alert("⚠️ Por favor selecciona ambas fechas");
+                return;
             }
+            
+            if (fechaInicio > fechaFin) {
+                alert("⚠️ La fecha de inicio no puede ser posterior a la fecha fin");
+                return;
+            }
+            
+            // Obtener todas las tareas de Firebase
+            const snapshot = await get(tareasRef);
+            if (!snapshot.exists()) {
+                alert("❌ No hay datos para exportar");
+                cerrarModalExportar();
+                return;
+            }
+            
+            const todasLasTareas = snapshot.val();
+            const tareasFiltradas = [];
+            
+            // Filtrar por rango de fechas
+            Object.entries(todasLasTareas).forEach(([id, tarea]) => {
+                const fechaTarea = tsToFechaLocal(tarea.inicioMS);
+                if (fechaTarea >= fechaInicio && fechaTarea <= fechaFin) {
+                    tareasFiltradas.push({
+                        'Fecha': fechaTarea,
+                        'Hora Inicio': tarea.inicio,
+                        'Hora Fin': tarea.fin,
+                        'Serie': tarea.numSerie,
+                        'Código': tarea.codigo,
+                        'Operarios': tarea.operarios,
+                        'Notas': tarea.notas,
+                        'Total (min)': tarea.total,
+                        'Productividad': tarea.total > 0 ? (420 / tarea.total).toFixed(2) : '-',
+                        'Estado': tarea.estado
+                    });
+                }
+            });
+            
+            if (tareasFiltradas.length === 0) {
+                alert(`❌ No hay tareas entre ${fechaInicio} y ${fechaFin}`);
+                cerrarModalExportar();
+                return;
+            }
+            
+            // Crear workbook y worksheet
+            const ws = XLSX.utils.json_to_sheet(tareasFiltradas);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Producción");
+            
+            // Ajustar anchos de columna
+            const colWidths = [
+                { wch: 12 }, // Fecha
+                { wch: 10 }, // Hora Inicio
+                { wch: 10 }, // Hora Fin
+                { wch: 20 }, // Serie
+                { wch: 15 }, // Código
+                { wch: 10 }, // Operarios
+                { wch: 30 }, // Notas
+                { wch: 12 }, // Total
+                { wch: 12 }, // Productividad
+                { wch: 15 }  // Estado
+            ];
+            ws['!cols'] = colWidths;
+            
+            // Descargar archivo
+            const nombreArchivo = `Produccion_${fechaInicio}_a_${fechaFin}.xlsx`;
+            XLSX.writeFile(wb, nombreArchivo);
+            
+            alert(`✅ Exportadas ${tareasFiltradas.length} tareas (${fechaInicio} a ${fechaFin})`);
+            cerrarModalExportar();
+            
+            // Preguntar si borrar
+            if (confirm("¿Deseas borrar las tareas exportadas de la base de datos?")) {
+                const updates = {};
+                Object.entries(todasLasTareas).forEach(([id, tarea]) => {
+                    const fechaTarea = tsToFechaLocal(tarea.inicioMS);
+                    if (fechaTarea >= fechaInicio && fechaTarea <= fechaFin) {
+                        updates[id] = null;
+                    }
+                });
+                await update(tareasRef, updates);
+                alert("🗑️ Tareas exportadas eliminadas");
+            }
+        };
+
+        // Mantener función antigua por compatibilidad (exporta todo)
+        window.exportarAExcel = () => {
+            mostrarModalExportar();
         };
 
         window.borrarTodoProceso = async (sinConfirm = false) => {
@@ -978,23 +1074,108 @@
             }
         };
 
-        onValue(tareasRef, (snap) => {
-            const data = snap.val() || {};
+        // NUEVO: Funciones para filtro de fecha en tabla de tareas
+        window.mostrarFiltroFechaTareas = () => {
+            const input = document.getElementById('inputFiltroFechaTareas');
+            const hoy = new Date().toISOString().split('T')[0];
+            input.value = state.filtroFechaTareas || hoy;
+            input.showPicker();
+        };
+
+        window.aplicarFiltroFechaTareas = async (fecha) => {
+            state.filtroFechaTareas = fecha;
+            
+            const btnFiltro = document.getElementById('btnFiltroFechaTareas');
+            const btnReset = document.getElementById('btnResetFiltroTareas');
+            const tituloTabla = document.getElementById('tituloTablaTareas');
+            
+            if (fecha) {
+                const hoy = new Date().toISOString().split('T')[0];
+                const esHoy = fecha === hoy;
+                
+                btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
+                btnFiltro.innerHTML = `
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                    <span class="font-black text-[10px] uppercase">${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</span>
+                `;
+                btnReset.classList.remove('hidden');
+                tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
+            } else {
+                resetFiltroFechaTareas();
+            }
+            
+            // Recargar la tabla con el filtro aplicado
+            await renderizarTablaTareas();
+        };
+
+        window.resetFiltroFechaTareas = () => {
+            state.filtroFechaTareas = null;
+            
+            const btnFiltro = document.getElementById('btnFiltroFechaTareas');
+            const btnReset = document.getElementById('btnResetFiltroTareas');
+            const tituloTabla = document.getElementById('tituloTablaTareas');
+            
+            btnFiltro.classList.replace('bg-emerald-600', 'bg-slate-800');
+            btnFiltro.innerHTML = `
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                <span class="font-black text-[10px] uppercase">Filtrar fecha</span>
+            `;
+            btnReset.classList.add('hidden');
+            tituloTabla.textContent = 'Pedidos en proceso';
+            
+            renderizarTablaTareas();
+        };
+
+        // Función para renderizar tabla de tareas con filtro
+        const renderizarTablaTareas = async () => {
+            const snapshot = await get(tareasRef);
             const cuerpo = document.getElementById('cuerpoActividad');
             cuerpo.innerHTML = "";
-            const tareas = Object.values(data);
-            state.pausaDesayuno = !!tareas.find(t => t.estado === "en_pausa_sistema");
-            state.incidencia = !!tareas.find(t => t.estado === "en_incidencia_sistema");
-            state.reposicion = !!tareas.find(t => t.estado === "en_reposicion_sistema");
-            if (state.pausaDesayuno) state.ids.pausa = Object.keys(data).find(k => data[k].estado === "en_pausa_sistema");
-            if (state.incidencia) state.ids.incidencia = Object.keys(data).find(k => data[k].estado === "en_incidencia_sistema");
-            if (state.reposicion) state.ids.reposicion = Object.keys(data).find(k => data[k].estado === "en_reposicion_sistema");
+            
+            if (!snapshot.exists()) return;
+            
+            const data = snapshot.val();
+            const tareas = Object.entries(data);
+            
+            // Aplicar filtro de fecha si existe
+            let tareasFiltradas = tareas;
+            if (state.filtroFechaTareas) {
+                tareasFiltradas = tareas.filter(([id, t]) => {
+                    const fechaTarea = tsToFechaLocal(t.inicioMS);
+                    return fechaTarea === state.filtroFechaTareas;
+                });
+            }
+            
+            // Ordenar por inicioMS
+            tareasFiltradas.sort((a, b) => (a[1].inicioMS || 0) - (b[1].inicioMS || 0));
+            
+            // Actualizar estado de la línea basado en tareas SISTEMA (INCIDENCIA, PAUSA, etc.)
+            state.pausaDesayuno = !!tareas.find(([id, t]) => t.estado === "en_pausa_sistema");
+            state.incidencia = !!tareas.find(([id, t]) => t.estado === "en_incidencia_sistema");
+            state.reposicion = !!tareas.find(([id, t]) => t.estado === "en_reposicion_sistema");
+            if (state.pausaDesayuno) state.ids.pausa = tareas.find(([id, t]) => t.estado === "en_pausa_sistema")?.[0];
+            if (state.incidencia) state.ids.incidencia = tareas.find(([id, t]) => t.estado === "en_incidencia_sistema")?.[0];
+            if (state.reposicion) state.ids.reposicion = tareas.find(([id, t]) => t.estado === "en_reposicion_sistema")?.[0];
+            
             actualizarEstadoLineaUI();
             
-            const idsOrdenados = Object.keys(data).sort((a, b) => (data[a].inicioMS || 0) - (data[b].inicioMS || 0));
+            // Mostrar mensaje si no hay tareas en el filtro
+            if (tareasFiltradas.length === 0 && state.filtroFechaTareas) {
+                cuerpo.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="p-8 text-center text-slate-400">
+                            <div class="flex flex-col items-center gap-2">
+                                <svg class="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                <p class="font-bold text-sm">No hay tareas para ${state.filtroFechaTareas}</p>
+                                <button onclick="resetFiltroFechaTareas()" class="text-emerald-600 hover:text-emerald-700 font-black text-xs uppercase">Ver todas</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
             
-            idsOrdenados.forEach(id => {
-                const t = data[id];
+            tareasFiltradas.forEach(([id, t]) => {
                 const esActivo = t.estado === "activo";
                 const esPausado = t.estado === "pausa" || t.estado === "incidencia_pausa";
                 const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
@@ -1010,7 +1191,6 @@
                 else if(esHito) tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
                 else tiempoTexto = `${t.total}m`;
 
-                // Colores de fila y texto según tipo
                 const esIncidencia  = t.numSerie === "INCIDENCIA";
                 const esDesayuno    = t.numSerie === "PAUSA DESAYUNO";
                 const esReposicion  = t.numSerie === "REPOSICIÓN";
@@ -1025,14 +1205,12 @@
                                   esActivo     ? "bg-red-50 border-red-100" :
                                   esPausado    ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
 
-                // Color del texto de la columna Serie según tipo especial
                 const serieColorClase = esIncidencia  ? "text-red-600" :
                                         esDesayuno    ? "text-orange-500" :
                                         esReposicion  ? "text-purple-600" :
                                         esEntrada     ? "text-emerald-600" :
                                         esSalida      ? "text-red-600" : "";
 
-                // Nombre del cliente: visible siempre que exista (incluso tareas terminadas)
                 const clienteHtml = (!esHito && t.cliente && t.cliente.trim() && t.cliente !== "Sin cliente")
                     ? `<span class="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">👤 ${t.cliente}</span>`
                     : '';
@@ -1061,6 +1239,11 @@
                     <td class="p-3 text-right flex gap-3">${accionHtml}<button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
                 </tr>`;
             });
+        };
+
+        // Reemplazar onValue de tareasRef para usar la función de renderizado
+        onValue(tareasRef, () => {
+            renderizarTablaTareas();
         });
 
         onValue(planRef, (snap) => {
@@ -1224,7 +1407,6 @@
                     </tr>`).join('');
         });
 
-        // Listener en tiempo real para el gráfico tiempo por tarea
         onValue(tiempoPorTareaRef, (snap) => {
             if (!state.inicializado) return;
             const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
@@ -1249,7 +1431,6 @@
             await actualizarGraficoDiario(mesGuardado);
             await actualizarGraficoMensual(anioGuardado);
             
-            // Cargar datos del gráfico tiempo por tarea desde Firebase
             const datosGuardados = await obtenerTiempoPorTarea(fechaProdGuardada);
             const datosProd = Object.values(datosGuardados)
                 .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
@@ -1276,9 +1457,11 @@
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
     </style>
+<base target="_blank">
 </head>
 <body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
     
+    <!-- Modal para selección de operarios -->
     <div id="modalOperarios" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border-4 border-emerald-500">
             <h3 id="tituloModal" class="text-xl font-black uppercase mb-6">Seleccione Operarios</h3>
@@ -1288,6 +1471,49 @@
                 <button onclick="seleccionarOperarios(3)" class="bg-emerald-100 hover:bg-emerald-500 hover:text-white hover:scale-105 text-emerald-700 font-black p-6 rounded-2xl text-2xl transition-all border-2">3</button>
             </div>
             <button onclick="cerrarSelector()" class="text-slate-400 font-bold uppercase text-[10px] hover:text-red-500">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- NUEVO: Modal para exportar con rango de fechas -->
+    <div id="modalExportar" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-slate-200">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-black uppercase text-slate-800 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                    Exportar a Excel
+                </h3>
+                <button onclick="cerrarModalExportar()" class="text-slate-400 hover:text-red-500">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-black uppercase text-slate-500 mb-1">Fecha inicio</label>
+                    <input type="date" id="fechaInicioExport" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black uppercase text-slate-500 mb-1">Fecha fin</label>
+                    <input type="date" id="fechaFinExport" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:border-emerald-500 focus:outline-none">
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+                    <p class="font-bold flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+                        Se exportarán todas las tareas finalizadas en el rango seleccionado
+                    </p>
+                </div>
+                
+                <div class="flex gap-3 pt-2">
+                    <button onclick="cerrarModalExportar()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl transition-colors">
+                        Cancelar
+                    </button>
+                    <button onclick="exportarAExcelRango()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-colors">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                        Exportar
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1350,10 +1576,22 @@
 
             <div>
                 <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <h2 class="text-base font-black uppercase tracking-widest text-emerald-600 flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
-                        Pedidos en proceso
-                    </h2>
+                    <div class="flex items-center gap-3">
+                        <h2 id="tituloTablaTareas" class="text-base font-black uppercase tracking-widest text-emerald-600 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                            Pedidos en proceso
+                        </h2>
+                        <!-- NUEVO: Botón de filtro de fecha -->
+                        <button id="btnFiltroFechaTareas" onclick="mostrarFiltroFechaTareas()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase flex items-center gap-2 transition-colors">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                            <span class="font-black text-[10px] uppercase">Filtrar fecha</span>
+                        </button>
+                        <input type="date" id="inputFiltroFechaTareas" class="hidden" onchange="aplicarFiltroFechaTareas(this.value)">
+                        <button id="btnResetFiltroTareas" onclick="resetFiltroFechaTareas()" class="hidden bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1.5 rounded-lg font-black text-[10px] uppercase flex items-center gap-1 transition-colors">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                            Limpiar
+                        </button>
+                    </div>
                     <div class="flex items-center gap-2">
                         <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
                         <button onclick="exportarAExcel()" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow flex items-center gap-2">
