@@ -28,7 +28,7 @@ const reposicionRef = ref(db, 'estadoReposicion');
 const estadoLineaRef = ref(db, 'estadoLinea');
 const mantenimientoRef = ref(db, 'tareas_mantenimiento');
 const incidenciasTextoRef = ref(db, 'incidencias_texto');
-// Monitorear conexión Firebase
+
 const connectedRef = ref(db, '.info/connected');
 onValue(connectedRef, (snapshot) => {
 const led = document.getElementById('firebaseLed');
@@ -50,6 +50,7 @@ status.classList.remove('text-slate-600', 'text-green-600');
 status.classList.add('text-red-600');
 }
 });
+
 let estaPausadoGlobal = false;
 let hayIncidenciaGlobal = false;
 let hayReposicionGlobal = false;
@@ -67,8 +68,6 @@ let todasLasTareas = {};
 let primeraVez = true;
 
 function actualizarEstadoBotones() {
-console.log('=== actualizarEstadoBotones EJECUTADO ===');
-console.log('lineaIniciada:', lineaIniciada);
 const btnPausa = document.getElementById('btnPausa');
 const btnIncidencia = document.getElementById('btnIncidencia');
 const btnReposicion = document.getElementById('btnReposicion');
@@ -77,7 +76,6 @@ const btnEntrada = document.getElementById('btnEntrada');
 const btnSalida = document.getElementById('btnSalida');
 const indicadorLinea = document.getElementById('indicadorLinea');
 if (lineaIniciada) {
-console.log('→ Configurando botones para LÍNEA ACTIVA');
 btnPausa.disabled = false;
 btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
 btnIncidencia.disabled = false;
@@ -92,7 +90,6 @@ btnSalida.disabled = false;
 btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
 } else {
-console.log('→ Configurando botones para LÍNEA PARADA');
 btnPausa.disabled = true;
 btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
 btnIncidencia.disabled = true;
@@ -107,18 +104,15 @@ btnSalida.disabled = true;
 btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
 }
-console.log('=== FIN actualizarEstadoBotones ===');
 }
 
-// FORZAR PARADA DE LÍNEA
 window.forzarParadaLinea = async function() {
 const operario = document.getElementById('selectOperario').value;
 if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
-alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.
-Solo ese operario puede forzar la parada.`);
+alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede forzar la parada.`);
 return;
 }
-if (!confirm('⛔ ¿Forzar parada de línea?\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
+if (!confirm('⛔ ¿Forzar parada de línea?\nSe registrará una SALIDA ahora mismo.')) return;
 const horaActual = new Date().toLocaleTimeString('es-ES');
 const fechaActual = obtenerFecha();
 const ahora = Date.now();
@@ -139,6 +133,7 @@ numSerie: "---",
 codigo: "⛔ SALIDA FORZADA",
 fecha: fechaActual,
 inicio: horaActual,
+inicioMS: ahora,
 fin: "---",
 total: "REGISTRO",
 estado: "finalizado",
@@ -151,6 +146,7 @@ numSerie: "---",
 codigo: "🔴 SALIDA",
 fecha: fechaActual,
 inicio: horaActual,
+inicioMS: ahora,
 fin: "---",
 total: 0,
 tipo: "jornada",
@@ -160,11 +156,7 @@ timestamp: Date.now()
 lineaIniciada = false;
 numOperariosActivos = 1;
 operarioLineaActiva = null;
-await update(estadoLineaRef, {
-activa: false,
-operario: null,
-numOperarios: 0
-});
+await update(estadoLineaRef, { activa: false, operario: null, numOperarios: 0 });
 actualizarEstadoBotones();
 };
 
@@ -198,11 +190,25 @@ const partes = fechaHTML.split('-');
 return `${partes[2]}/${partes[1]}/${partes[0]}`;
 }
 
-function convertirHoraAMinutos(horaStr) {
-if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
-const [horas, minutos, segundos] = horaStr.split(':').map(Number);
-if (isNaN(horas) || isNaN(minutos)) return 0;
-return horas * 60 + minutos + (segundos || 0) / 60;
+// FUNCIÓN CORREGIDA: Convierte hora string + fecha a milisegundos (COMPATIBLE)
+function convertirHoraAMS(horaStr, fechaStr) {
+if (!horaStr || horaStr === '--:--' || horaStr === '---') return Date.now();
+const [dia, mes, anio] = fechaStr.split('/').map(Number);
+const partesHora = horaStr.split(':');
+const horas = parseInt(partesHora[0]) || 0;
+const minutos = parseInt(partesHora[1]) || 0;
+const segundos = parseInt(partesHora[2]) || 0;
+const fecha = new Date(anio, mes - 1, dia, horas, minutos, segundos);
+return fecha.getTime();
+}
+
+// FUNCIÓN CORREGIDA: Obtiene milisegundos de un registro (usa inicioMS si existe, sino convierte)
+function obtenerMS(tarea, campoMS, campoHora, campoFecha) {
+if (tarea[campoMS]) {
+return tarea[campoMS];
+}
+// Fallback: convertir desde string
+return convertirHoraAMS(tarea[campoHora], tarea[campoFecha]);
 }
 
 function parsearFecha(fechaStr) {
@@ -211,22 +217,22 @@ const [dia, mes, anio] = fechaStr.split('/').map(Number);
 return new Date(anio, mes - 1, dia);
 }
 
-// GRÁFICO 1: TAREAS INDIVIDUALES
+function convertirHoraAMinutos(horaStr) {
+if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
+const [horas, minutos, segundos] = horaStr.split(':').map(Number);
+if (isNaN(horas) || isNaN(minutos)) return 0;
+return horas * 60 + minutos + (segundos || 0) / 60;
+}
+
 function actualizarGraficoPuntos(fechaFiltro = null) {
 const tareasAdrian = [];
 const tareasAlberto = [];
-console.log('=== DEBUG GRÁFICO TAREAS ===');
-console.log('Fecha filtro:', fechaFiltro);
-console.log('Total tareas en historial:', Object.keys(todasLasTareas).length);
 if (todasLasTareas) {
 const tareasProduccion = Object.entries(todasLasTareas)
 .filter(([id, t]) => {
 const esProduccion = t.tipo === 'produccion';
 const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
 const cumpleFecha = !fechaFiltro || t.fecha === fechaFiltro;
-if (esProduccion && !cumpleFecha) {
-console.log('Tarea producción descartada por fecha:', t.fecha, 'vs filtro:', fechaFiltro);
-}
 return esProduccion && tieneTiempo && cumpleFecha;
 })
 .map(([id, t]) => ({
@@ -235,7 +241,6 @@ id: id,
 tiempoNum: parseInt(t.total),
 horaMinutos: convertirHoraAMinutos(t.inicio)
 }));
-console.log('Tareas producción filtradas:', tareasProduccion.length);
 tareasProduccion.sort((a, b) => a.horaMinutos - b.horaMinutos);
 tareasProduccion.forEach((t, index) => {
 const punto = {
@@ -254,7 +259,6 @@ tareasAdrian.push(punto);
 tareasAlberto.push(punto);
 }
 });
-console.log('Adrian:', tareasAdrian.length, 'Alberto:', tareasAlberto.length);
 }
 const ctx = document.getElementById('graficoTareas').getContext('2d');
 if (chartInstance) {
@@ -357,25 +361,13 @@ return [
 scales: {
 x: {
 display: true,
-title: {
-display: true,
-text: 'Número de tarea (orden cronológico)',
-font: { weight: 'bold' }
-},
-ticks: {
-callback: function(value) {
-return value + 1;
-}
-},
+title: { display: true, text: 'Número de tarea (orden cronológico)', font: { weight: 'bold' } },
+ticks: { callback: function(value) { return value + 1; } },
 grid: { color: '#e2e8f0' }
 },
 y: {
 beginAtZero: true,
-title: {
-display: true,
-text: 'Tiempo (minutos)',
-font: { weight: 'bold' }
-},
+title: { display: true, text: 'Tiempo (minutos)', font: { weight: 'bold' } },
 grid: { color: '#e2e8f0' }
 }
 }
@@ -384,9 +376,7 @@ grid: { color: '#e2e8f0' }
 }
 
 function calcularTendencia(datos) {
-const puntos = datos
-.map((y, x) => ({ x, y }))
-.filter(p => p.y !== null && !isNaN(p.y));
+const puntos = datos.map((y, x) => ({ x, y })).filter(p => p.y !== null && !isNaN(p.y));
 if (puntos.length < 2) return { tendencia: [], pendiente: 0 };
 const n = puntos.length;
 const sumaX = puntos.reduce((sum, p) => sum + p.x, 0);
@@ -402,7 +392,7 @@ return pendiente * x + intercept;
 return { tendencia, pendiente };
 }
 
-// GRÁFICO 2: PRODUCTIVIDAD DIARIA
+// GRÁFICO 2: PRODUCTIVIDAD DIARIA - CORREGIDO PARA COMPATIBILIDAD
 function calcularProductividadDiaria(anio, mes) {
 const diasDelMes = new Date(anio, mes, 0).getDate();
 const datosProductividad = new Array(diasDelMes).fill(null);
@@ -425,12 +415,16 @@ tareasPorDia[key]++;
 } else if (t.tipo === 'jornada') {
 if (!jornadasPorDia[key]) jornadasPorDia[key] = { entradas: [] };
 if (t.codigo && t.codigo.includes('ENTRADA')) {
+// USAR FUNCIÓN COMPATIBLE PARA OBTENER MILISEGUNDOS
 jornadasPorDia[key].entradas.push({
 hora: t.inicio,
+inicioMS: obtenerMS(t, 'inicioMS', 'inicio', 'fecha'),
 numOperarios: t.numOperarios || 1
 });
 } else if (t.codigo && t.codigo.includes('SALIDA')) {
+// USAR FUNCIÓN COMPATIBLE PARA OBTENER MILISEGUNDOS
 jornadasPorDia[key].salida = t.inicio;
+jornadasPorDia[key].salidaMS = obtenerMS(t, 'inicioMS', 'inicio', 'fecha');
 }
 }
 }
@@ -439,35 +433,37 @@ jornadasPorDia[key].salida = t.inicio;
 
 for (let dia = 1; dia <= diasDelMes; dia++) {
 const productividadesDia = [];
+
+// Procesar Adrian
 const keyAdrian = `${dia}-Adrian García`;
 const tareasAdrianCount = tareasPorDia[keyAdrian] || 0;
 const jornadaAdrian = jornadasPorDia[keyAdrian] || {};
 
-// Para el día actual en curso, usar hora actual como salida si no hay salida registrada
-let salidaAdrian = jornadaAdrian.salida;
-if (esMesActual && dia === diaActual && !salidaAdrian && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0) {
-salidaAdrian = new Date().toLocaleTimeString('es-ES');
+let salidaMS = jornadaAdrian.salidaMS;
+if (esMesActual && dia === diaActual && !salidaMS && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0) {
+salidaMS = Date.now();
 }
 
-if (salidaAdrian && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0 && tareasAdrianCount > 0) {
-const salidaMin = convertirHoraAMinutos(salidaAdrian);
+if (salidaMS && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0 && tareasAdrianCount > 0) {
 let horas1Op = 0;
 let horas2Op = 0;
+
 jornadaAdrian.entradas.forEach((entrada, index) => {
-const entradaMin = convertirHoraAMinutos(entrada.hora);
-let finPeriodoMin;
-if (index < jornadaAdrian.entradas.length - 1) {
-finPeriodoMin = convertirHoraAMinutos(jornadaAdrian.entradas[index + 1].hora);
-} else {
-finPeriodoMin = salidaMin;
-}
-const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+const inicioMS = entrada.inicioMS;
+const finMS = (index < jornadaAdrian.entradas.length - 1)
+? jornadaAdrian.entradas[index + 1].inicioMS
+: salidaMS;
+
+// CÁLCULO EN MILISEGUNDOS CON DIVISIÓN PRECISA
+const horasPeriodo = (finMS - inicioMS) / 3600000;
+
 if (entrada.numOperarios === 1) {
 horas1Op += horasPeriodo;
 } else if (entrada.numOperarios === 2) {
 horas2Op += horasPeriodo;
 }
 });
+
 const denominador = horas1Op + (horas2Op * 2);
 if (denominador > 0) {
 const prodAdrian = (tareasAdrianCount * 7) / denominador;
@@ -475,34 +471,35 @@ productividadesDia.push(prodAdrian);
 }
 }
 
+// Procesar Alberto
 const keyAlberto = `${dia}-Alberto Colmenero`;
 const tareasAlbertoCount = tareasPorDia[keyAlberto] || 0;
 const jornadaAlberto = jornadasPorDia[keyAlberto] || {};
 
-let salidaAlberto = jornadaAlberto.salida;
-if (esMesActual && dia === diaActual && !salidaAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0) {
-salidaAlberto = new Date().toLocaleTimeString('es-ES');
+let salidaMSAlberto = jornadaAlberto.salidaMS;
+if (esMesActual && dia === diaActual && !salidaMSAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0) {
+salidaMSAlberto = Date.now();
 }
 
-if (salidaAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0 && tareasAlbertoCount > 0) {
-const salidaMin = convertirHoraAMinutos(salidaAlberto);
+if (salidaMSAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0 && tareasAlbertoCount > 0) {
 let horas1Op = 0;
 let horas2Op = 0;
+
 jornadaAlberto.entradas.forEach((entrada, index) => {
-const entradaMin = convertirHoraAMinutos(entrada.hora);
-let finPeriodoMin;
-if (index < jornadaAlberto.entradas.length - 1) {
-finPeriodoMin = convertirHoraAMinutos(jornadaAlberto.entradas[index + 1].hora);
-} else {
-finPeriodoMin = salidaMin;
-}
-const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+const inicioMS = entrada.inicioMS;
+const finMS = (index < jornadaAlberto.entradas.length - 1)
+? jornadaAlberto.entradas[index + 1].inicioMS
+: salidaMSAlberto;
+
+const horasPeriodo = (finMS - inicioMS) / 3600000;
+
 if (entrada.numOperarios === 1) {
 horas1Op += horasPeriodo;
 } else if (entrada.numOperarios === 2) {
 horas2Op += horasPeriodo;
 }
 });
+
 const denominador = horas1Op + (horas2Op * 2);
 if (denominador > 0) {
 const prodAlberto = (tareasAlbertoCount * 7) / denominador;
@@ -612,29 +609,14 @@ window.cambiarMesProductividadDiaria = function() {
 actualizarGraficoProductividadDiaria();
 };
 
-// GRÁFICO 3: PRODUCTIVIDAD MENSUAL (TIEMPO REAL)
 function calcularProductividadMensual(anio) {
 const meses = Array.from({length: 12}, (_, i) => i + 1);
 const datosProductividad = new Array(12).fill(null);
-const hoy = new Date();
-const esAnioActual = (anio === hoy.getFullYear());
-const mesActual = hoy.getMonth() + 1;
-
 meses.forEach(mes => {
 const { datosProductividad: diasMes } = calcularProductividadDiaria(anio, mes);
 const valoresMes = diasMes.filter(v => v !== null && !isNaN(v));
-
-// Para el mes actual, calcular media en tiempo real incluso si no está completo
 if (valoresMes.length > 0) {
-let media = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
-
-// Si es el mes actual, mostramos la media de los días trabajados hasta ahora
-if (esAnioActual && mes === mesActual) {
-// La media ya está calculada con los días disponibles
-// Esto permite ver la productividad en tiempo real sin esperar a fin de mes
-}
-
-datosProductividad[mes - 1] = media;
+datosProductividad[mes - 1] = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
 }
 });
 return { datosProductividad };
@@ -948,6 +930,7 @@ numSerie: t.numSerie,
 codigo: t.codigo,
 fecha: t.fecha,
 inicio: t.inicio,
+inicioMS: t.inicioMS,
 fin: horaFin,
 total: tiempoTotal,
 tipo: "produccion",
@@ -996,6 +979,7 @@ numSerie: "---",
 codigo: "📦 REPOSICIÓN",
 fecha: infoR.fecha,
 inicio: infoR.horaTexto,
+inicioMS: infoR.inicioMS,
 fin: horaFin,
 total: duracion,
 estado: "finalizado",
@@ -1007,6 +991,7 @@ numSerie: "---",
 codigo: "📦 REPOSICIÓN",
 fecha: infoR.fecha,
 inicio: infoR.horaTexto,
+inicioMS: infoR.inicioMS,
 fin: horaFin,
 total: duracion,
 tipo: "reposicion",
@@ -1059,6 +1044,7 @@ numSerie: "---",
 codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
 fecha: infoInc.fecha,
 inicio: infoInc.horaTexto,
+inicioMS: infoInc.inicioMS,
 fin: horaFin,
 total: duracion,
 estado: "finalizado",
@@ -1070,6 +1056,7 @@ numSerie: "---",
 codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
 fecha: infoInc.fecha,
 inicio: infoInc.horaTexto,
+inicioMS: infoInc.inicioMS,
 fin: horaFin,
 total: duracion,
 tipo: "incidencia",
@@ -1115,6 +1102,7 @@ numSerie: "---",
 codigo: "☕ DESAYUNO",
 fecha: infoP.fecha,
 inicio: infoP.horaTexto,
+inicioMS: infoP.inicioMS,
 fin: horaFin,
 total: duracion,
 estado: "finalizado",
@@ -1126,6 +1114,7 @@ numSerie: "---",
 codigo: "☕ DESAYUNO",
 fecha: infoP.fecha,
 inicio: infoP.horaTexto,
+inicioMS: infoP.inicioMS,
 fin: horaFin,
 total: duracion,
 tipo: "descanso",
@@ -1145,8 +1134,6 @@ if (Object.keys(updates).length > 0) update(ref(db), updates);
 window.registrarJornada = async (tipo) => {
 const operario = document.getElementById('selectOperario').value;
 const esEntrada = tipo === 'INICIO';
-
-// VALIDACIÓN ESTRICTA: Una entrada = Una salida
 if (esEntrada && lineaIniciada) {
 alert('⚠️ ERROR: La línea ya está activa. No puedes registrar otra ENTRADA sin antes registrar una SALIDA.');
 return;
@@ -1159,7 +1146,6 @@ if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) {
 alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`);
 return;
 }
-
 if (esEntrada) {
 document.getElementById('modalOperarios').classList.remove('hidden');
 } else {
@@ -1182,7 +1168,6 @@ const horaActual = new Date().toLocaleTimeString('es-ES');
 const fechaActual = obtenerFecha();
 const esEntrada = tipo === 'INICIO';
 const ahora = Date.now();
-
 if (esEntrada) {
 numOperariosActivos = numOperarios;
 lineaIniciada = true;
@@ -1225,28 +1210,27 @@ operario: null,
 numOperarios: 0
 });
 }
-
 actualizarEstadoBotones();
-
 await push(tareasRef, {
 operario,
 numSerie: "---",
 codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
 fecha: fechaActual,
 inicio: horaActual,
+inicioMS: ahora,
 fin: "---",
 total: "REGISTRO",
 estado: "finalizado",
 tipo: "jornada",
 numOperarios: esEntrada ? numOperariosActivos : 0
 });
-
 await push(tareasHistorialRef, {
 operario,
 numSerie: "---",
 codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
 fecha: fechaActual,
 inicio: horaActual,
+inicioMS: ahora,
 fin: "---",
 total: 0,
 tipo: "jornada",
@@ -1280,7 +1264,6 @@ document.getElementById('codigo').value = '';
 document.getElementById('numSerie').focus();
 };
 
-// MANTENIMIENTO
 window.agregarMantenimiento = async function() {
 const descripcion = prompt("Descripción de la tarea de mantenimiento:");
 if (!descripcion || !descripcion.trim()) return;
@@ -1312,7 +1295,6 @@ if (!confirm('¿Eliminar esta incidencia?')) return;
 await remove(ref(db, `incidencias_texto/${id}`));
 };
 
-// ESCUCHADOR: MANTENIMIENTO
 onValue(mantenimientoRef, (snapshot) => {
 const cuerpo = document.getElementById('cuerpoMantenimiento');
 cuerpo.innerHTML = "";
@@ -1369,7 +1351,6 @@ ${t.descripcion}
 });
 });
 
-// ESCUCHADOR: INCIDENCIAS
 onValue(incidenciasTextoRef, (snapshot) => {
 const cuerpo = document.getElementById('cuerpoIncidencias');
 cuerpo.innerHTML = "";
@@ -1389,39 +1370,27 @@ cuerpo.innerHTML += `
 });
 });
 
-// ESCUCHADOR: HISTORIAL (persistente)
 onValue(tareasHistorialRef, (snapshot) => {
 todasLasTareas = snapshot.val() || {};
-
-// Establecer filtros por defecto la primera vez
 if (primeraVez) {
 const hoy = new Date();
 const anio = hoy.getFullYear();
 const mes = String(hoy.getMonth() + 1).padStart(2, '0');
 const dia = String(hoy.getDate()).padStart(2, '0');
-
-// Filtro fecha hoy para gráfico de tareas individuales
 const inputFecha = document.getElementById('filtroFecha');
 if (inputFecha) {
 inputFecha.value = `${anio}-${mes}-${dia}`;
 }
-
-// Filtro mes actual para productividad diaria
 const inputMes = document.getElementById('filtroMesProductividadDiaria');
 if (inputMes) {
 inputMes.value = `${anio}-${mes}`;
 }
-
-// Filtro año actual para productividad mensual
 const inputAnio = document.getElementById('selectAnioProductividadMensual');
 if (inputAnio) {
 inputAnio.value = anio.toString();
 }
-
 primeraVez = false;
 }
-
-// Actualizar gráficos con los filtros actuales
 const fechaInput = document.getElementById('filtroFecha').value;
 const fechaFiltro = fechaInput ? convertirFechaHTML(fechaInput) : null;
 actualizarGraficoPuntos(fechaFiltro);
@@ -1429,33 +1398,24 @@ actualizarGraficoProductividadDiaria();
 actualizarGraficoProductividadMensual();
 });
 
-// ESCUCHADOR: TAREAS - Actualiza la tabla con colores corregidos
 onValue(tareasRef, (snapshot) => {
 const cuerpo = document.getElementById('cuerpoTabla');
 cuerpo.innerHTML = "";
 const datos = snapshot.val();
 if (!datos) return;
-
 Object.keys(datos).forEach(id => {
 const t = datos[id];
-
-// Aplicar filtro de fecha si está activo
 if (filtroFechaTablaActual && t.fecha !== filtroFechaTablaActual) {
 return;
 }
-
 const activo = t.estado === "activo";
 let rowClass = "bg-white";
 let tiempoMostrado = "";
-
-// COLORES CORREGIDOS SEGÚN REQUERIMIENTOS
 if (t.tipo === 'jornada') {
 if (t.codigo && t.codigo.includes('ENTRADA')) {
-// Entrada: texto verde con fondo verde
 rowClass = "bg-green-100 border-l-4 border-green-500";
 tiempoMostrado = `<span class="text-green-700 font-black uppercase">🟢 ENTRADA</span>`;
 } else if (t.codigo && t.codigo.includes('SALIDA')) {
-// Salida: texto rojo con fondo rojo
 rowClass = "bg-red-100 border-l-4 border-red-500";
 tiempoMostrado = `<span class="text-red-700 font-black uppercase">🔴 SALIDA</span>`;
 } else {
@@ -1472,15 +1432,12 @@ tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumu
 rowClass = "bg-purple-50";
 tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
 } else if (t.estado === "pausado_desayuno") {
-// Desayuno: color naranja
 rowClass = "bg-orange-50 border-l-4 border-orange-400";
 tiempoMostrado = `<span class="text-orange-600 font-bold uppercase">☕ DESAYUNO</span>`;
 } else if (t.estado === "pausa_incidencia") {
-// Incidencia: color rojo llamativo
 rowClass = "bg-red-50 border-l-4 border-red-600";
 tiempoMostrado = `<span class="text-red-600 font-black uppercase animate-pulse">🛠️ INCIDENCIA</span>`;
 } else if (t.estado === "pausa_reposicion") {
-// Reposición: color violeta con fondo violeta
 rowClass = "bg-violet-100 border-l-4 border-violet-500";
 tiempoMostrado = `<span class="text-violet-700 font-bold uppercase">📦 REPOSICIÓN</span>`;
 } else if (t.tipo === 'reposicion') {
@@ -1493,10 +1450,8 @@ tiempoMostrado = `<span class="text-red-600 font-bold">${t.total} min</span>`;
 rowClass = "bg-orange-50";
 tiempoMostrado = `<span class="text-orange-600 font-bold">${t.total} min</span>`;
 } else {
-// Tarea de producción finalizada
 tiempoMostrado = `<span class="text-slate-700 font-bold">${t.total} min</span>`;
 }
-
 cuerpo.innerHTML += `
 <tr class="${rowClass} border-b border-slate-100 transition-all">
 <td class="p-4 font-bold text-slate-700">${t.operario}</td>
@@ -1536,8 +1491,6 @@ document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposic
 
 onValue(estadoLineaRef, s => {
 const d = s.val();
-console.log('=== LISTENER estadoLineaRef EJECUTADO ===');
-console.log('Datos de Firebase:', d);
 if (d) {
 lineaIniciada = d.activa || false;
 operarioLineaActiva = d.operario || null;
@@ -1547,12 +1500,6 @@ lineaIniciada = false;
 operarioLineaActiva = null;
 numOperariosActivos = 1;
 }
-console.log('Estado línea actualizado:', {
-lineaIniciada,
-operarioLineaActiva,
-numOperariosActivos
-});
-console.log('Llamando a actualizarEstadoBotones()');
 actualizarEstadoBotones();
 });
 
@@ -1654,23 +1601,17 @@ alert(`✅ Exportados ${datosFiltrados.length} registros`);
 </script>
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
-<!-- Modal para eliminar punto -->
 <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
 <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
 <h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
 <div id="infoTareaEliminar" class="bg-slate-50 rounded-xl p-4 mb-6 text-sm"></div>
 <div class="flex gap-3">
-<button onclick="cerrarModalEliminar()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
-Cancelar
-</button>
-<button id="btnConfirmarEliminar" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold uppercase transition-colors">
-Eliminar Permanentemente
-</button>
+<button onclick="cerrarModalEliminar()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
+<button id="btnConfirmarEliminar" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold uppercase transition-colors">Eliminar Permanentemente</button>
 </div>
 </div>
 </div>
 
-<!-- Modal para seleccionar número de operarios -->
 <div id="modalOperarios" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
 <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
 <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">👥 Registro de Entrada</h3>
@@ -1682,7 +1623,6 @@ Eliminar Permanentemente
 <div class="text-3xl font-black">1</div>
 <div class="text-sm font-bold uppercase tracking-wider">Operario</div>
 </div>
-<div class="absolute inset-0 rounded-2xl ring-4 ring-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 </button>
 <button onclick="confirmarEntradaOperarios(2)" class="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
 <div class="flex flex-col items-center gap-4">
@@ -1690,17 +1630,13 @@ Eliminar Permanentemente
 <div class="text-3xl font-black">2</div>
 <div class="text-sm font-bold uppercase tracking-wider">Operarios</div>
 </div>
-<div class="absolute inset-0 rounded-2xl ring-4 ring-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 </button>
 </div>
-<button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
-Cancelar
-</button>
+<button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
 </div>
 </div>
 
 <div class="max-w-7xl mx-auto">
-<!-- Firebase Connection Indicator -->
 <div class="flex justify-end mb-4">
 <div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
 <div class="relative">
@@ -1711,13 +1647,10 @@ Cancelar
 </div>
 </div>
 
-<!-- Header -->
 <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
 <div class="flex items-center gap-4">
-<a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">
-← Volver
-</a>
+<a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">← Volver</a>
 <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dosmart <span class="text-amber-500">Production</span></h1>
 </div>
 <div class="flex flex-wrap justify-center gap-3">
@@ -1732,13 +1665,11 @@ Cancelar
 </div>
 </div>
 
-<!-- Botones Entrada/Salida -->
 <div class="grid grid-cols-2 gap-4 mb-6">
 <button id="btnEntrada" onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
 <button id="btnSalida" onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
 </div>
 
-<!-- Formulario Nueva Tarea -->
 <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
 <div class="flex flex-col">
 <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
@@ -1758,21 +1689,16 @@ Cancelar
 <button id="btnIniciarTarea" onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
 </div>
 
-<!-- Indicador Estado Línea -->
 <div id="indicadorLinea" class="flex justify-center mb-6">
 <span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>
 </div>
 
-<!-- TABLA DE TAREAS (sin palabra "Temporal") -->
 <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
 <div class="bg-slate-900 p-4 flex justify-between items-center">
 <h3 class="text-amber-400 font-black uppercase text-sm">Tabla de Tareas en Proceso</h3>
 <div class="flex items-center gap-3">
-<input type="date" id="filtroFechaTabla" onchange="filtrarTablaTemporalPorFecha()"
-class="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
-<button onclick="limpiarFiltroTabla()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-🔄 Mostrar Todo
-</button>
+<input type="date" id="filtroFechaTabla" onchange="filtrarTablaTemporalPorFecha()" class="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+<button onclick="limpiarFiltroTabla()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">🔄 Mostrar Todo</button>
 <span class="text-slate-400 text-xs">Se puede borrar sin afectar los gráficos</span>
 </div>
 </div>
@@ -1793,25 +1719,19 @@ class="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 te
 </table>
 </div>
 
-<!-- BOTÓN FORZAR PARADA -->
 <div class="flex justify-end mb-6">
-<button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">
-⛔ Forzar Parada de Línea
-</button>
+<button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">⛔ Forzar Parada de Línea</button>
 </div>
 
-<!-- GRÁFICO 1: TAREAS INDIVIDUALES -->
 <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
 <div>
 <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
 <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos | Eje X = orden cronológico</p>
-<p class="text-xs text-amber-600 font-bold mt-1">💡 Solo muestra tareas finalizadas con el botón "Fin"</p>
 </div>
 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
 <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
-<input type="date" id="filtroFecha" onchange="filtrarPorFecha()"
-class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+<input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
 </div>
 </div>
 <div class="h-96 w-full">
@@ -1828,24 +1748,19 @@ class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold t
 <span class="font-bold text-slate-700">Alberto Colmenero</span>
 </div>
 </div>
-<div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">
-Cargando...
-</div>
+<div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">Cargando...</div>
 </div>
 </div>
 
-<!-- GRÁFICO 2: PRODUCTIVIDAD DIARIA -->
 <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
 <div>
 <h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
-<p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / ((Salida - Entrada) × Nº Operarios)</p>
-<p class="text-xs text-amber-600 font-bold mt-1">💡 Haz clic en un punto para eliminar TODAS las tareas de ese día</p>
+<p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Horas × Nº Operarios) - Cálculo en milisegundos</p>
 </div>
 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
 <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
-<input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()"
-class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+<input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
 </div>
 </div>
 <div class="h-96 w-full">
@@ -1863,17 +1778,12 @@ class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold t
 </div>
 </div>
 <div class="text-right">
-<div id="mediaProductividadDiaria" class="text-lg font-black text-amber-500">
-Media del mes: 0.00
-</div>
-<div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">
-Días con datos: 0
-</div>
+<div id="mediaProductividadDiaria" class="text-lg font-black text-amber-500">Media del mes: 0.00</div>
+<div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">Días con datos: 0</div>
 </div>
 </div>
 </div>
 
-<!-- GRÁFICO 3: PRODUCTIVIDAD MENSUAL -->
 <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
 <div>
@@ -1882,8 +1792,7 @@ Días con datos: 0
 </div>
 <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
 <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
-<select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()"
-class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+<select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
 <option value="2024">2024</option>
 <option value="2025" selected>2025</option>
 <option value="2026">2026</option>
@@ -1909,27 +1818,17 @@ class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold t
 </div>
 </div>
 <div class="text-right">
-<div id="mediaProductividadAnual" class="text-lg font-black text-amber-500">
-Media del año: 0.00
-</div>
-<div id="mesesConDatos" class="text-xs font-bold text-slate-500">
-Meses con datos: 0
-</div>
+<div id="mediaProductividadAnual" class="text-lg font-black text-amber-500">Media del año: 0.00</div>
+<div id="mesesConDatos" class="text-xs font-bold text-slate-500">Meses con datos: 0</div>
 </div>
 </div>
 </div>
 
-<!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-<!-- TABLA MANTENIMIENTO -->
 <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
 <div class="bg-blue-500 p-4 flex items-center justify-between">
-<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-🔧 Mantenimiento
-</h3>
-<button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">
-+ Añadir tarea
-</button>
+<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">🔧 Mantenimiento</h3>
+<button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">+ Añadir tarea</button>
 </div>
 <div class="max-h-96 overflow-y-auto">
 <table class="w-full text-left">
@@ -1947,12 +1846,9 @@ Meses con datos: 0
 </div>
 </div>
 
-<!-- TABLA INCIDENCIAS -->
 <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
 <div class="bg-orange-500 p-4">
-<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-⚠️ Registro de Incidencias
-</h3>
+<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">⚠️ Registro de Incidencias</h3>
 </div>
 <div class="max-h-96 overflow-y-auto">
 <table class="w-full text-left">
