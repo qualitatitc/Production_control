@@ -47,6 +47,9 @@
         let primeraVez = true; // Para establecer filtro inicial
 
         function actualizarEstadoBotones() {
+            console.log('=== actualizarEstadoBotones EJECUTADO ===');
+            console.log('lineaIniciada:', lineaIniciada);
+            
             const btnPausa = document.getElementById('btnPausa');
             const btnIncidencia = document.getElementById('btnIncidencia');
             const btnReposicion = document.getElementById('btnReposicion');
@@ -56,6 +59,7 @@
             const indicadorLinea = document.getElementById('indicadorLinea');
             
             if (lineaIniciada) {
+                console.log('→ Configurando botones para LÍNEA ACTIVA');
                 btnPausa.disabled = false;
                 btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
                 
@@ -75,6 +79,7 @@
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
             } else {
+                console.log('→ Configurando botones para LÍNEA PARADA');
                 btnPausa.disabled = true;
                 btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
                 
@@ -94,6 +99,7 @@
                 
                 indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
             }
+            console.log('=== FIN actualizarEstadoBotones ===');
         }
 
         // FORZAR PARADA DE LÍNEA
@@ -1612,26 +1618,26 @@
             const d = s.val(); hayIncidenciaGlobal = d?.activa; inicioIncidenciaMS = d?.inicioMS;
             document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
             document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
-            actualizarEstadoBotones();
         });
         
         onValue(pausaRef, s => {
             const d = s.val(); estaPausadoGlobal = d?.activa; inicioPausaMS = d?.inicioMS;
             document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
             document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
-            actualizarEstadoBotones();
         });
         
         onValue(reposicionRef, s => {
             const d = s.val(); hayReposicionGlobal = d?.activa; inicioReposicionMS = d?.inicioMS;
             document.getElementById('btnReposicion').innerHTML = hayReposicionGlobal ? "📦 LISTO" : "📦 REPOSICIÓN";
             document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposicionGlobal);
-            actualizarEstadoBotones();
         });
 
         // Listener para estado de línea - maneja la sincronización del estado
         onValue(estadoLineaRef, s => {
             const d = s.val();
+            
+            console.log('=== LISTENER estadoLineaRef EJECUTADO ===');
+            console.log('Datos de Firebase:', d);
             
             // Si hay datos en Firebase, usarlos
             if (d) {
@@ -1645,7 +1651,12 @@
                 numOperariosActivos = 1;
             }
             
-            console.log('Estado línea actualizado:', { lineaIniciada, operarioLineaActiva, numOperariosActivos });
+            console.log('Estado línea actualizado:', { 
+                lineaIniciada, 
+                operarioLineaActiva, 
+                numOperariosActivos 
+            });
+            console.log('Llamando a actualizarEstadoBotones()');
             actualizarEstadoBotones();
         });
 
