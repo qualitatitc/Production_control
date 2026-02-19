@@ -1,2155 +1,1974 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dosmart Production - Control de Tareas</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",
-            authDomain: "dosmart-2f395.firebaseapp.com",
-            databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",
-            projectId: "dosmart-2f395",
-            storageBucket: "dosmart-2f395.appspot.com",
-            appId: "1:854942502621:web:5c1a7428f7492c3a382664"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const tareasRef = ref(db, 'tareas');
-        const tareasHistorialRef = ref(db, 'historial_tareas');
-        const pausaRef = ref(db, 'estadoPausa');
-        const incidenciaRef = ref(db, 'estadoIncidencia');
-        const reposicionRef = ref(db, 'estadoReposicion');
-        const estadoLineaRef = ref(db, 'estadoLinea');
-        const mantenimientoRef = ref(db, 'tareas_mantenimiento');
-        const incidenciasTextoRef = ref(db, 'incidencias_texto');
-
-        // Monitorear conexión Firebase
-        const connectedRef = ref(db, '.info/connected');
-        onValue(connectedRef, (snapshot) => {
-            const led = document.getElementById('firebaseLed');
-            const pulse = document.getElementById('firebaseLedPulse');
-            const status = document.getElementById('firebaseStatus');
-            
-            if (snapshot.val() === true) {
-                led.classList.remove('bg-gray-400', 'bg-red-500');
-                led.classList.add('bg-green-500');
-                pulse.classList.remove('opacity-0');
-                status.textContent = 'Conectado';
-                status.classList.remove('text-slate-600', 'text-red-600');
-                status.classList.add('text-green-600');
-            } else {
-                led.classList.remove('bg-gray-400', 'bg-green-500');
-                led.classList.add('bg-red-500');
-                pulse.classList.add('opacity-0');
-                status.textContent = 'Desconectado';
-                status.classList.remove('text-slate-600', 'text-green-600');
-                status.classList.add('text-red-600');
-            }
-        });
-
-        let estaPausadoGlobal = false;
-        let hayIncidenciaGlobal = false;
-        let hayReposicionGlobal = false;
-        let lineaIniciada = false;
-        let numOperariosActivos = 1;
-        let operarioLineaActiva = null;
-        let filtroFechaTablaActual = null; // Filtro de fecha para tabla temporal
-        let inicioPausaMS = 0;
-        let inicioIncidenciaMS = 0;
-        let inicioReposicionMS = 0;
-        let chartInstance = null;
-        let chartProductividad = null;
-        let todasLasTareas = {};
-        let primeraVez = true; // Para establecer filtro inicial
-
-        function actualizarEstadoBotones() {
-            console.log('=== actualizarEstadoBotones EJECUTADO ===');
-            console.log('lineaIniciada:', lineaIniciada);
-            
-            const btnPausa = document.getElementById('btnPausa');
-            const btnIncidencia = document.getElementById('btnIncidencia');
-            const btnReposicion = document.getElementById('btnReposicion');
-            const btnIniciarTarea = document.getElementById('btnIniciarTarea');
-            const btnEntrada = document.getElementById('btnEntrada');
-            const btnSalida = document.getElementById('btnSalida');
-            const indicadorLinea = document.getElementById('indicadorLinea');
-            
-            if (lineaIniciada) {
-                console.log('→ Configurando botones para LÍNEA ACTIVA');
-                btnPausa.disabled = false;
-                btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnIncidencia.disabled = false;
-                btnIncidencia.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnReposicion.disabled = true;
-                btnReposicion.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnIniciarTarea.disabled = false;
-                btnIniciarTarea.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnEntrada.disabled = true;
-                btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
-                btnSalida.disabled = false;
-                btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
-            } else {
-                console.log('→ Configurando botones para LÍNEA PARADA');
-                btnPausa.disabled = true;
-                btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnIncidencia.disabled = true;
-                btnIncidencia.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnReposicion.disabled = false;
-                btnReposicion.classList.remove('opacity-50', 'cursor-not-allowed');
-                
-                btnIniciarTarea.disabled = true;
-                btnIniciarTarea.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                btnEntrada.disabled = false;
-                btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnSalida.disabled = true;
-                btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
-            }
-            console.log('=== FIN actualizarEstadoBotones ===');
-        }
-
-        // FORZAR PARADA DE LÍNEA
-        window.forzarParadaLinea = async function() {
-            const operario = document.getElementById('selectOperario').value;
-            
-            // Validar operario si la línea está activa
-            if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
-                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede forzar la parada.`);
-                return;
-            }
-
-            if (!confirm('⛔ ¿Forzar parada de línea?\n\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
-
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            const ahora = Date.now();
-
-            // Pausar tareas activas
-            const snapTareas = await get(tareasRef);
-            const tareas = snapTareas.val() || {};
-            const updates = {};
-
-            Object.keys(tareas).forEach(id => {
-                if (tareas[id].estado === "activo") {
-                    const acumuladoSesion = ahora - tareas[id].inicioMS;
-                    updates[`tareas/${id}/estado`] = "pausa_salida_linea";
-                    updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                }
-            });
-            if (Object.keys(updates).length > 0) await update(ref(db), updates);
-
-            // Registrar SALIDA en tabla temporal
-            await push(tareasRef, {
-                operario,
-                numSerie: "---",
-                codigo: "⛔ SALIDA FORZADA",
-                fecha: fechaActual,
-                inicio: horaActual,
-                fin: "---",
-                total: "REGISTRO",
-                estado: "finalizado",
-                tipo: "jornada",
-                numOperarios: 0
-            });
-
-            // Registrar SALIDA en historial (para que el cálculo de productividad lo tome)
-            await push(tareasHistorialRef, {
-                operario,
-                numSerie: "---",
-                codigo: "🔴 SALIDA",
-                fecha: fechaActual,
-                inicio: horaActual,
-                fin: "---",
-                total: 0,
-                tipo: "jornada",
-                numOperarios: 0,
-                timestamp: Date.now()
-            });
-
-            // Actualizar estado local
-            lineaIniciada = false;
-            numOperariosActivos = 1;
-            operarioLineaActiva = null;
-            
-            // Limpiar estado en Firebase
-            await update(estadoLineaRef, {
-                activa: false,
-                operario: null,
-                numOperarios: 0
-            });
-            
-            actualizarEstadoBotones();
-        };
-
-        const obtenerFecha = () => {
-            const hoy = new Date();
-            const dia = String(hoy.getDate()).padStart(2, '0');
-            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-            const anio = hoy.getFullYear();
-            return `${dia}/${mes}/${anio}`;
-        };
-        const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
-
-        // NUEVA FUNCIÓN: Obtener fecha de hoy en formato HTML (YYYY-MM-DD)
-        function obtenerFechaHoy() {
-            const hoy = new Date();
-            const anio = hoy.getFullYear();
-            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-            const dia = String(hoy.getDate()).padStart(2, '0');
-            return `${anio}-${mes}-${dia}`;
-        }
-
-        function formatTime(ms) {
-            if (!ms || ms < 0) return "0m 0s";
-            const min = Math.floor(ms / 60000);
-            const seg = Math.floor((ms % 60000) / 1000);
-            return `${min}m ${seg}s`;
-        }
-
-        function convertirFechaHTML(fechaHTML) {
-            const partes = fechaHTML.split('-');
-            return `${partes[2]}/${partes[1]}/${partes[0]}`;
-        }
-
-        function convertirHoraAMinutos(horaStr) {
-            if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
-            const [horas, minutos, segundos] = horaStr.split(':').map(Number);
-            if (isNaN(horas) || isNaN(minutos)) return 0;
-            return horas * 60 + minutos + (segundos || 0) / 60;
-        }
-
-        function parsearFecha(fechaStr) {
-            if (!fechaStr || !fechaStr.includes('/')) return null;
-            const [dia, mes, anio] = fechaStr.split('/').map(Number);
-            return new Date(anio, mes - 1, dia);
-        }
-
-        // GRÁFICO 1: TAREAS INDIVIDUALES - Muestra cada tarea con su tiempo
-        function actualizarGraficoPuntos(fechaFiltro = null) {
-            const tareasAdrian = [];
-            const tareasAlberto = [];
-            
-            console.log('=== DEBUG GRÁFICO TAREAS ===');
-            console.log('Fecha filtro:', fechaFiltro);
-            console.log('Total tareas en historial:', Object.keys(todasLasTareas).length);
-            
-            if (todasLasTareas) {
-                // Filtrar solo tareas de producción finalizadas
-                const tareasProduccion = Object.entries(todasLasTareas)
-                    .filter(([id, t]) => {
-                        // Debe ser producción y tener tiempo numérico válido
-                        const esProduccion = t.tipo === 'produccion';
-                        const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
-                        const cumpleFecha = !fechaFiltro || t.fecha === fechaFiltro;
-                        
-                        if (esProduccion && !cumpleFecha) {
-                            console.log('Tarea producción descartada por fecha:', t.fecha, 'vs filtro:', fechaFiltro);
-                        }
-                        
-                        return esProduccion && tieneTiempo && cumpleFecha;
-                    })
-                    .map(([id, t]) => ({
-                        id: id,
-                        ...t,
-                        tiempoNum: parseInt(t.total),
-                        horaMinutos: convertirHoraAMinutos(t.inicio)
-                    }));
-                
-                console.log('Tareas producción filtradas:', tareasProduccion.length);
-                
-                // Ordenar por hora de inicio
-                tareasProduccion.sort((a, b) => a.horaMinutos - b.horaMinutos);
-                
-                // Asignar índice secuencial a cada tarea
-                tareasProduccion.forEach((t, index) => {
-                    const punto = {
-                        x: index, // Índice de la tarea en orden cronológico
-                        y: t.tiempoNum, // Tiempo en minutos (eje Y)
-                        tarea: t.codigo,
-                        serie: t.numSerie,
-                        hora: t.inicio,
-                        fecha: t.fecha,
-                        firebaseId: t.id,
-                        operario: t.operario
-                    };
-                    
-                    if (t.operario === 'Adrian García') {
-                        tareasAdrian.push(punto);
-                    } else if (t.operario === 'Alberto Colmenero') {
-                        tareasAlberto.push(punto);
-                    }
-                });
-                
-                console.log('Adrian:', tareasAdrian.length, 'Alberto:', tareasAlberto.length);
-            }
-
-            const ctx = document.getElementById('graficoTareas').getContext('2d');
-            
-            if (chartInstance) {
-                chartInstance.destroy();
-            }
-
-            // Si no hay datos, mostrar mensaje
-            if (tareasAdrian.length === 0 && tareasAlberto.length === 0) {
-                document.getElementById('contadorTareas').textContent = 
-                    fechaFiltro ? `Sin datos para ${fechaFiltro}` : 'Sin tareas en el historial';
-            } else {
-                const totalTareas = tareasAdrian.length + tareasAlberto.length;
-                document.getElementById('contadorTareas').textContent = 
-                    fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
-            }
-
-            // Calcular tiempo medio de todas las tareas
-            const todosTiempos = [...tareasAdrian, ...tareasAlberto].map(t => t.y);
-            const tiempoMedio = todosTiempos.length > 0 
-                ? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length 
-                : 0;
-            
-            // Crear array para línea de media (cubrir todo el rango X)
-            const maxX = Math.max(tareasAdrian.length, tareasAlberto.length) - 1;
-            const lineaMedia = maxX >= 0 ? [
-                { x: 0, y: tiempoMedio },
-                { x: maxX, y: tiempoMedio }
-            ] : [];
-
-            chartInstance = new Chart(ctx, {
-                type: 'scatter',
-                data: {
-                    datasets: [
-                        {
-                            label: 'Adrian García',
-                            data: tareasAdrian,
-                            backgroundColor: '#3b82f6',
-                            borderColor: '#2563eb',
-                            borderWidth: 2,
-                            pointRadius: 8,
-                            pointHoverRadius: 12,
-                            order: 2
-                        },
-                        {
-                            label: 'Alberto Colmenero',
-                            data: tareasAlberto,
-                            backgroundColor: '#ef4444',
-                            borderColor: '#dc2626',
-                            borderWidth: 2,
-                            pointRadius: 8,
-                            pointHoverRadius: 12,
-                            order: 2
-                        },
-                        {
-                            label: 'Tiempo Medio',
-                            data: lineaMedia,
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                            borderWidth: 3,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            showLine: true,
-                            order: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (e) => {
-                        const points = chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                        if (points.length) {
-                            const firstPoint = points[0];
-                            const datasetIndex = firstPoint.datasetIndex;
-                            const index = firstPoint.index;
-                            const dataset = chartInstance.data.datasets[datasetIndex];
-                            const punto = dataset.data[index];
-                            mostrarModalEliminar(punto);
-                        }
-                    },
-                    onHover: (e, activeElements) => {
-                        e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                title: function(context) {
-                                    return `Tarea #${context[0].parsed.x + 1}`;
-                                },
-                                label: function(context) {
-                                    const point = context.raw;
-                                    const operario = context.datasetIndex === 0 ? 'Adrian' : 'Alberto';
-                                    return [
-                                        `Operario: ${operario}`,
-                                        `Tarea: ${point.tarea}`,
-                                        `Serie: ${point.serie}`,
-                                        `Hora: ${point.hora}`,
-                                        `Tiempo: ${point.y} minutos`
-                                    ];
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            display: true,
-                            title: { 
-                                display: true, 
-                                text: 'Número de tarea (orden cronológico)',
-                                font: { weight: 'bold' }
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return value + 1;
-                                }
-                            },
-                            grid: { color: '#e2e8f0' }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Tiempo (minutos)',
-                                font: { weight: 'bold' }
-                            },
-                            grid: { color: '#e2e8f0' }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Función para calcular línea de tendencia (regresión lineal)
-        function calcularTendencia(datos) {
-            const puntos = datos
-                .map((y, x) => ({ x, y }))
-                .filter(p => p.y !== null && !isNaN(p.y));
-            
-            if (puntos.length < 2) return { tendencia: [], pendiente: 0 };
-            
-            const n = puntos.length;
-            const sumaX = puntos.reduce((sum, p) => sum + p.x, 0);
-            const sumaY = puntos.reduce((sum, p) => sum + p.y, 0);
-            const sumaXY = puntos.reduce((sum, p) => sum + p.x * p.y, 0);
-            const sumaX2 = puntos.reduce((sum, p) => sum + p.x * p.x, 0);
-            
-            const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
-            const intercept = (sumaY - pendiente * sumaX) / n;
-            
-            const tendencia = datos.map((_, x) => {
-                if (datos[x] === null) return null;
-                return pendiente * x + intercept;
-            });
-            
-            return { tendencia, pendiente };
-        }
-
-        // GRÁFICO 2: PRODUCTIVIDAD DIARIA (de un mes) - Media de ambos operarios
-        function calcularProductividadDiaria(anio, mes) {
-            const diasDelMes = new Date(anio, mes, 0).getDate();
-            const datosProductividad = new Array(diasDelMes).fill(null);
-            
-            const tareasPorDia = {};
-            const jornadasPorDia = {};
-            
-            if (todasLasTareas) {
-                Object.values(todasLasTareas).forEach(t => {
-                    const fecha = parsearFecha(t.fecha);
-                    if (!fecha) return;
-                    
-                    if (fecha.getFullYear() === anio && fecha.getMonth() === mes - 1) {
-                        const dia = fecha.getDate();
-                        const key = `${dia}-${t.operario}`;
-                        
-                        if (t.tipo === 'produccion') {
-                            if (!tareasPorDia[key]) tareasPorDia[key] = 0;
-                            tareasPorDia[key]++;
-                        } else if (t.tipo === 'jornada') {
-                            if (!jornadasPorDia[key]) jornadasPorDia[key] = { entradas: [] };
-                            if (t.codigo && t.codigo.includes('ENTRADA')) {
-                                jornadasPorDia[key].entradas.push({
-                                    hora: t.inicio,
-                                    numOperarios: t.numOperarios || 1
-                                });
-                            } else if (t.codigo && t.codigo.includes('SALIDA')) {
-                                jornadasPorDia[key].salida = t.inicio;
-                            }
-                        }
-                    }
-                });
-            }
-            
-            for (let dia = 1; dia <= diasDelMes; dia++) {
-                const productividadesDia = [];
-                
-                // Procesar Adrian
-                const keyAdrian = `${dia}-Adrian García`;
-                const tareasAdrianCount = tareasPorDia[keyAdrian] || 0;
-                const jornadaAdrian = jornadasPorDia[keyAdrian] || {};
-                
-                if (jornadaAdrian.salida && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0 && tareasAdrianCount > 0) {
-                    const salidaMin = convertirHoraAMinutos(jornadaAdrian.salida);
-                    
-                    let horas1Op = 0;
-                    let horas2Op = 0;
-                    
-                    // Calcular horas por cada configuración de operarios
-                    jornadaAdrian.entradas.forEach((entrada, index) => {
-                        const entradaMin = convertirHoraAMinutos(entrada.hora);
-                        let finPeriodoMin;
-                        
-                        if (index < jornadaAdrian.entradas.length - 1) {
-                            finPeriodoMin = convertirHoraAMinutos(jornadaAdrian.entradas[index + 1].hora);
-                        } else {
-                            finPeriodoMin = salidaMin;
-                        }
-                        
-                        const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
-                        
-                        if (entrada.numOperarios === 1) {
-                            horas1Op += horasPeriodo;
-                        } else if (entrada.numOperarios === 2) {
-                            horas2Op += horasPeriodo;
-                        }
-                    });
-                    
-                    // Fórmula: (Tareas × 7) / (Horas1Op + (Horas2Op × 2))
-                    const denominador = horas1Op + (horas2Op * 2);
-                    if (denominador > 0) {
-                        const prodAdrian = (tareasAdrianCount * 7) / denominador;
-                        productividadesDia.push(prodAdrian);
-                    }
-                }
-                
-                // Procesar Alberto
-                const keyAlberto = `${dia}-Alberto Colmenero`;
-                const tareasAlbertoCount = tareasPorDia[keyAlberto] || 0;
-                const jornadaAlberto = jornadasPorDia[keyAlberto] || {};
-                
-                if (jornadaAlberto.salida && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0 && tareasAlbertoCount > 0) {
-                    const salidaMin = convertirHoraAMinutos(jornadaAlberto.salida);
-                    
-                    let horas1Op = 0;
-                    let horas2Op = 0;
-                    
-                    // Calcular horas por cada configuración de operarios
-                    jornadaAlberto.entradas.forEach((entrada, index) => {
-                        const entradaMin = convertirHoraAMinutos(entrada.hora);
-                        let finPeriodoMin;
-                        
-                        if (index < jornadaAlberto.entradas.length - 1) {
-                            finPeriodoMin = convertirHoraAMinutos(jornadaAlberto.entradas[index + 1].hora);
-                        } else {
-                            finPeriodoMin = salidaMin;
-                        }
-                        
-                        const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
-                        
-                        if (entrada.numOperarios === 1) {
-                            horas1Op += horasPeriodo;
-                        } else if (entrada.numOperarios === 2) {
-                            horas2Op += horasPeriodo;
-                        }
-                    });
-                    
-                    // Fórmula: (Tareas × 7) / (Horas1Op + (Horas2Op × 2))
-                    const denominador = horas1Op + (horas2Op * 2);
-                    if (denominador > 0) {
-                        const prodAlberto = (tareasAlbertoCount * 7) / denominador;
-                        productividadesDia.push(prodAlberto);
-                    }
-                }
-                
-                // Calcular media del día (ambos operarios)
-                if (productividadesDia.length > 0) {
-                    datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
-                }
-            }
-            
-            return { datosProductividad, diasDelMes };
-        }
-
-        function actualizarGraficoProductividadDiaria() {
-            const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
-            if (!inputMes) return;
-            
-            const [anio, mes] = inputMes.split('-').map(Number);
-            
-            const { datosProductividad, diasDelMes } = calcularProductividadDiaria(anio, mes);
-            
-            const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
-            const media = todosLosValores.length > 0 ? 
-                todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
-            
-            const lineaMedia = new Array(diasDelMes).fill(media);
-            const labels = Array.from({length: diasDelMes}, (_, i) => i + 1);
-            
-            const ctx = document.getElementById('graficoProductividadDiaria').getContext('2d');
-            
-            if (chartProductividad) {
-                chartProductividad.destroy();
-            }
-
-            chartProductividad = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Productividad',
-                            data: datosProductividad,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 3,
-                            pointRadius: 6,
-                            pointBackgroundColor: '#3b82f6',
-                            fill: true,
-                            tension: 0.3,
-                            spanGaps: true,
-                            order: 2
-                        },
-                        {
-                            label: 'Media',
-                            data: lineaMedia,
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                            borderWidth: 3,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0,
-                            order: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: async (e) => {
-                        const points = chartProductividad.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                        if (points.length) {
-                            const firstPoint = points[0];
-                            const datasetIndex = firstPoint.datasetIndex;
-                            
-                            // No hacer nada si es la línea de media (datasetIndex === 1)
-                            if (datasetIndex === 1) return;
-                            
-                            const index = firstPoint.index;
-                            const dia = index + 1;
-                            
-                            const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
-                            const [anioSel, mesSel] = inputMes.split('-').map(Number);
-                            const fechaBuscar = `${String(dia).padStart(2, '0')}/${String(mesSel).padStart(2, '0')}/${anioSel}`;
-                            
-                            mostrarModalEliminarDiaTodos(dia, mesSel, anioSel, fechaBuscar);
-                        }
-                    },
-                    onHover: (e, activeElements) => {
-                        e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
-                    },
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const value = context.raw;
-                                    if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
-                                    return `${context.dataset.label}: ${value.toFixed(2)} tareas/hora`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
-                        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
-                    }
-                }
-            });
-
-            const diasConDatos = todosLosValores.length;
-            const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-            document.getElementById('mediaProductividadDiaria').textContent = `Media de ${nombreMes}: ${media.toFixed(2)}`;
-            document.getElementById('diasConDatosDiaria').textContent = `Días con datos: ${diasConDatos}`;
-        }
-
-        window.cambiarMesProductividadDiaria = function() {
-            actualizarGraficoProductividadDiaria();
-        };
-
-        // GRÁFICO 3: PRODUCTIVIDAD MENSUAL - Media de productividad diaria de cada mes
-        let chartProductividadMensual = null;
-
-        function calcularProductividadMensual(anio) {
-            const meses = Array.from({length: 12}, (_, i) => i + 1);
-            const datosProductividad = new Array(12).fill(null);
-            
-            meses.forEach(mes => {
-                // Obtener los datos de productividad diaria del mes
-                const { datosProductividad: diasMes } = calcularProductividadDiaria(anio, mes);
-                
-                // Calcular la media simple de los días con datos
-                const valoresMes = diasMes.filter(v => v !== null && !isNaN(v));
-                if (valoresMes.length > 0) {
-                    datosProductividad[mes - 1] = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
-                }
-            });
-            
-            return { datosProductividad };
-        }
-
-        function actualizarGraficoProductividadMensual() {
-            const anio = parseInt(document.getElementById('selectAnioProductividadMensual').value);
-            
-            const { datosProductividad } = calcularProductividadMensual(anio);
-            
-            const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
-            const media = todosLosValores.length > 0 ? 
-                todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
-            
-            // Calcular línea de tendencia
-            const { tendencia, pendiente } = calcularTendencia(datosProductividad);
-            const esTendenciaPositiva = pendiente > 0;
-            const colorTendencia = esTendenciaPositiva ? '#10b981' : '#ef4444'; // Verde si positivo, rojo si negativo
-            
-            const lineaMedia = new Array(12).fill(media);
-            const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-            
-            const ctx = document.getElementById('graficoProductividadMensual').getContext('2d');
-            
-            if (chartProductividadMensual) {
-                chartProductividadMensual.destroy();
-            }
-
-            chartProductividadMensual = new Chart(ctx, {
-                type: 'scatter',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Productividad Mensual',
-                            data: datosProductividad
-                                .map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
-                                .filter(p => p !== null),
-                            backgroundColor: '#3b82f6',
-                            borderColor: '#2563eb',
-                            pointRadius: 8,
-                            pointHoverRadius: 12,
-                            showLine: false,
-                            order: 3
-                        },
-                        {
-                            label: 'Media Anual',
-                            data: lineaMedia
-                                .map((val, idx) => val !== null && !isNaN(val) && val > 0 ? { x: idx, y: val } : null)
-                                .filter(p => p !== null),
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                            borderWidth: 3,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0,
-                            order: 1
-                        },
-                        {
-                            label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
-                            data: tendencia
-                                .map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
-                                .filter(p => p !== null),
-                            type: 'line',
-                            borderColor: colorTendencia,
-                            backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            borderWidth: 3,
-                            pointRadius: 0,
-                            fill: false,
-                            tension: 0,
-                            order: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const value = context.raw?.y || context.raw;
-                                    if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
-                                    return `${context.dataset.label}: ${value.toFixed(2)} tareas/hora`;
-                                },
-                                title: function(context) {
-                                    return labels[context[0].parsed.x];
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { 
-                            type: 'linear',
-                            display: true,
-                            min: 0,
-                            max: 11,
-                            ticks: {
-                                stepSize: 1,
-                                callback: function(value) {
-                                    return labels[value] || '';
-                                }
-                            },
-                            title: { display: true, text: 'Meses del año', font: { weight: 'bold' } }, 
-                            grid: { color: '#e2e8f0' } 
-                        },
-                        y: { 
-                            beginAtZero: true, 
-                            title: { display: true, text: 'Productividad Media (tareas×7 / (h×op))', font: { weight: 'bold' } }, 
-                            grid: { color: '#e2e8f0' } 
-                        }
-                    }
-                }
-            });
-
-            const mesesConDatos = todosLosValores.length;
-            const tendenciaTexto = esTendenciaPositiva ? 
-                `<span class="text-green-600">↗ Tendencia positiva</span>` : 
-                `<span class="text-red-600">↘ Tendencia negativa</span>`;
-            
-            document.getElementById('mediaProductividadAnual').textContent = `Media de ${anio}: ${media.toFixed(2)}`;
-            document.getElementById('mesesConDatos').innerHTML = `Meses: ${mesesConDatos} | ${tendenciaTexto}`;
-        }
-
-        window.cambiarAnioProductividadMensual = function() {
-            actualizarGraficoProductividadMensual();
-        };
-
-        window.mostrarModalEliminar = function(punto) {
-            const modal = document.getElementById('modalEliminar');
-            const info = document.getElementById('infoTareaEliminar');
-            const btnEliminar = document.getElementById('btnConfirmarEliminar');
-            
-            const colorOperario = punto.operario === 'Adrian García' ? 'text-blue-600' : 'text-red-600';
-            
-            info.innerHTML = `
-                <div class="space-y-2">
-                    <p><span class="font-bold text-slate-600">Operario:</span> <span class="${colorOperario} font-bold">${punto.operario}</span></p>
-                    <p><span class="font-bold text-slate-600">Tarea:</span> ${punto.tarea}</p>
-                    <p><span class="font-bold text-slate-600">Serie:</span> ${punto.serie}</p>
-                    <p><span class="font-bold text-slate-600">Fecha:</span> ${punto.fecha}</p>
-                    <p><span class="font-bold text-slate-600">Hora:</span> ${punto.hora}</p>
-                    <p><span class="font-bold text-slate-600">Tiempo:</span> ${punto.y} minutos</p>
-                </div>
-            `;
-            
-            btnEliminar.onclick = () => eliminarPuntoGrafico(punto.firebaseId);
-            modal.classList.remove('hidden');
-        };
-
-        window.mostrarModalEliminarDia = function(dia, mes, anio, operario, fecha) {
-            const modal = document.getElementById('modalEliminar');
-            const info = document.getElementById('infoTareaEliminar');
-            const btnEliminar = document.getElementById('btnConfirmarEliminar');
-            
-            const colorOperario = operario === 'Adrian García' ? 'text-blue-600' : 'text-red-600';
-            const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
-            
-            // Contar cuántas tareas hay ese día
-            let contadorTareas = 0;
-            if (todasLasTareas) {
-                Object.values(todasLasTareas).forEach(t => {
-                    if (t.tipo === 'produccion' && t.fecha === fecha && t.operario === operario) {
-                        contadorTareas++;
-                    }
-                });
-            }
-            
-            info.innerHTML = `
-                <div class="space-y-2">
-                    <p><span class="font-bold text-slate-600">Operario:</span> <span class="${colorOperario} font-bold">${operario}</span></p>
-                    <p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
-                    <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción</span></p>
-                    <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
-                </div>
-            `;
-            
-            btnEliminar.onclick = () => eliminarTareasDia(fecha, operario);
-            modal.classList.remove('hidden');
-        };
-
-        window.eliminarTareasDia = async function(fecha, operario) {
-            if (!confirm(`¿Estás seguro de eliminar TODAS las tareas de ${operario} del ${fecha}?`)) {
-                cerrarModalEliminar();
-                return;
-            }
-            
-            try {
-                const snapshot = await get(tareasHistorialRef);
-                const tareas = snapshot.val() || {};
-                let eliminadas = 0;
-                
-                for (const [id, tarea] of Object.entries(tareas)) {
-                    if (tarea.tipo === 'produccion' && tarea.fecha === fecha && tarea.operario === operario) {
-                        await remove(ref(db, `historial_tareas/${id}`));
-                        eliminadas++;
-                    }
-                }
-                
-                alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
-                cerrarModalEliminar();
-            } catch (error) {
-                alert('Error al eliminar: ' + error.message);
-            }
-        };
-
-        window.mostrarModalEliminarDiaTodos = function(dia, mes, anio, fecha) {
-            const modal = document.getElementById('modalEliminar');
-            const info = document.getElementById('infoTareaEliminar');
-            const btnEliminar = document.getElementById('btnConfirmarEliminar');
-            
-            const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
-            
-            // Contar cuántas tareas hay ese día (ambos operarios)
-            let contadorTareas = 0;
-            if (todasLasTareas) {
-                Object.values(todasLasTareas).forEach(t => {
-                    if (t.tipo === 'produccion' && t.fecha === fecha) {
-                        contadorTareas++;
-                    }
-                });
-            }
-            
-            info.innerHTML = `
-                <div class="space-y-2">
-                    <p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
-                    <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción (todos los operarios)</span></p>
-                    <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
-                </div>
-            `;
-            
-            btnEliminar.onclick = () => eliminarTareasDiaTodos(fecha);
-            modal.classList.remove('hidden');
-        };
-
-        window.eliminarTareasDiaTodos = async function(fecha) {
-            if (!confirm(`¿Estás seguro de eliminar TODAS las tareas del ${fecha}?`)) {
-                cerrarModalEliminar();
-                return;
-            }
-            
-            try {
-                const snapshot = await get(tareasHistorialRef);
-                const tareas = snapshot.val() || {};
-                let eliminadas = 0;
-                
-                for (const [id, tarea] of Object.entries(tareas)) {
-                    if (tarea.tipo === 'produccion' && tarea.fecha === fecha) {
-                        await remove(ref(db, `historial_tareas/${id}`));
-                        eliminadas++;
-                    }
-                }
-                
-                alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
-                cerrarModalEliminar();
-            } catch (error) {
-                alert('Error al eliminar: ' + error.message);
-            }
-        };
-
-        window.cerrarModalEliminar = function() {
-            document.getElementById('modalEliminar').classList.add('hidden');
-        };
-
-        window.eliminarPuntoGrafico = async function(firebaseId) {
-            if (!confirm('¿Estás seguro de eliminar este punto del historial?')) return;
-            try {
-                await remove(ref(db, `historial_tareas/${firebaseId}`));
-                cerrarModalEliminar();
-            } catch (error) {
-                alert('Error al eliminar: ' + error.message);
-            }
-        };
-
-        window.filtrarPorFecha = function() {
-            const fechaInput = document.getElementById('filtroFecha').value;
-            if (fechaInput) {
-                actualizarGraficoPuntos(convertirFechaHTML(fechaInput));
-            } else {
-                // Si se borra la fecha, volver a mostrar hoy
-                document.getElementById('filtroFecha').value = obtenerFechaHoy();
-                actualizarGraficoPuntos(obtenerFecha());
-            }
-        };
-
-        setInterval(() => {
-            const ahora = Date.now();
-            if (!estaPausadoGlobal && !hayIncidenciaGlobal && !hayReposicionGlobal) {
-                document.querySelectorAll('.contador-vivo').forEach(el => {
-                    const inicioMS = parseInt(el.dataset.inicio);
-                    const acumuladoPrevio = parseInt(el.dataset.acumulado || 0);
-                    el.innerText = formatTime((ahora - inicioMS) + acumuladoPrevio);
-                });
-            }
-            if (estaPausadoGlobal) {
-                const caja = document.getElementById('tiempoDesayuno');
-                if(caja) caja.innerText = formatTime(ahora - inicioPausaMS);
-            }
-            if (hayIncidenciaGlobal) {
-                const cajaInc = document.getElementById('tiempoIncidencia');
-                if(cajaInc) cajaInc.innerText = formatTime(ahora - inicioIncidenciaMS);
-            }
-            if (hayReposicionGlobal) {
-                const cajaRep = document.getElementById('tiempoReposicion');
-                if(cajaRep) cajaRep.innerText = formatTime(ahora - inicioReposicionMS);
-            }
-        }, 1000);
-
-        window.togglePausaTarea = async function(id) {
-            const ahora = Date.now();
-            const snap = await get(ref(db, `tareas/${id}`));
-            const t = snap.val();
-            if (t.estado === "activo") {
-                const nuevoAcumulado = (t.acumuladoMS || 0) + (ahora - t.inicioMS);
-                update(ref(db, `tareas/${id}`), { estado: "pausa_manual", acumuladoMS: nuevoAcumulado });
-            } else if (t.estado === "pausa_manual") {
-                update(ref(db, `tareas/${id}`), { estado: "activo", inicioMS: ahora });
-            }
-        };
-
-        // FINALIZAR TAREA - Guarda en historial
-        window.finalizarTarea = async function(id) {
-            if(!confirm('¿Finalizar tarea?')) return;
-            const snap = await get(ref(db, `tareas/${id}`));
-            const t = snap.val();
-            let totalMS = (t.acumuladoMS || 0);
-            if(t.estado === "activo") totalMS += (Date.now() - t.inicioMS);
-            
-            const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
-            const horaFin = new Date().toLocaleTimeString('es-ES');
-            
-            // Actualizar tabla temporal
-            await update(ref(db, `tareas/${id}`), { 
-                fin: horaFin, 
-                total: tiempoTotal, 
-                estado: "finalizado" 
-            });
-            
-            // Guardar en HISTORIAL para gráficos
-            await push(tareasHistorialRef, {
-                operario: t.operario,
-                numSerie: t.numSerie,
-                codigo: t.codigo,
-                fecha: t.fecha,
-                inicio: t.inicio,
-                fin: horaFin,
-                total: tiempoTotal,
-                tipo: "produccion",
-                timestamp: Date.now()
-            });
-        };
-
-        window.borrarTarea = (id) => { 
-            if (confirm('¿Borrar tarea de la tabla temporal?')) remove(ref(db, `tareas/${id}`)); 
-        };
-        
-        window.borrarTodoElRegistro = () => { 
-            if (confirm("¿BORRAR TODA LA TABLA TEMPORAL?\n\nLos datos de los gráficos NO se borrarán.")) {
-                remove(tareasRef);
-            }
-        };
-
-        window.borrarHistorialGrafico = () => {
-            if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\n\nEsto borrará todos los datos de los gráficos.")) {
-                remove(tareasHistorialRef);
-            }
-        };
-
-        window.toggleReposicion = async function() {
-            const ahora = Date.now();
-            const snapTareas = await get(tareasRef);
-            const tareas = snapTareas.val() || {};
-            const updates = {};
-
-            if (!hayReposicionGlobal) {
-                update(reposicionRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "activo") {
-                        const acumuladoSesion = ahora - tareas[id].inicioMS;
-                        updates[`tareas/${id}/estado`] = "pausa_reposicion";
-                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                    }
-                });
-            } else {
-                const snapR = await get(reposicionRef);
-                const infoR = snapR.val();
-                const horaFin = new Date().toLocaleTimeString('es-ES');
-                const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
-                
-                // Tabla temporal
-                await push(tareasRef, { 
-                    operario: infoR.operario || "SISTEMA", 
-                    numSerie: "---", 
-                    codigo: "📦 REPOSICIÓN", 
-                    fecha: infoR.fecha, 
-                    inicio: infoR.horaTexto, 
-                    fin: horaFin, 
-                    total: duracion, 
-                    estado: "finalizado", 
-                    tipo: "reposicion" 
-                });
-                
-                // Historial
-                await push(tareasHistorialRef, {
-                    operario: infoR.operario || "SISTEMA",
-                    numSerie: "---",
-                    codigo: "📦 REPOSICIÓN",
-                    fecha: infoR.fecha,
-                    inicio: infoR.horaTexto,
-                    fin: horaFin,
-                    total: duracion,
-                    tipo: "reposicion",
-                    timestamp: Date.now()
-                });
-                
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausa_reposicion") {
-                        updates[`tareas/${id}/estado`] = "activo";
-                        updates[`tareas/${id}/inicioMS`] = ahora;
-                    }
-                });
-                update(reposicionRef, { activa: false, inicioMS: 0 });
-            }
-            if (Object.keys(updates).length > 0) update(ref(db), updates);
-        };
-
-        window.toggleIncidencia = async function() {
-            if (!lineaIniciada && !hayIncidenciaGlobal) {
-                alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias');
-                return;
-            }
-            
-            const ahora = Date.now();
-            const snapTareas = await get(tareasRef);
-            const tareas = snapTareas.val() || {};
-            const updates = {};
-            
-            if (!hayIncidenciaGlobal) {
-                const motivo = prompt("Motivo de la incidencia:"); 
-                if (!motivo) return;
-                
-                // Guardar en tabla de incidencias (registro permanente)
-                await push(incidenciasTextoRef, {
-                    descripcion: motivo.trim(),
-                    fecha: obtenerFecha(),
-                    timestamp: Date.now()
-                });
-                
-                update(incidenciaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual() });
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "activo") {
-                        const acumuladoSesion = ahora - tareas[id].inicioMS;
-                        updates[`tareas/${id}/estado`] = "pausa_incidencia";
-                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                    }
-                });
-            } else {
-                const snapI = await get(incidenciaRef);
-                const infoInc = snapI.val();
-                const horaFin = new Date().toLocaleTimeString('es-ES');
-                const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
-                
-                await push(tareasRef, { 
-                    operario: infoInc.operario || "SISTEMA", 
-                    numSerie: "---", 
-                    codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, 
-                    fecha: infoInc.fecha, 
-                    inicio: infoInc.horaTexto, 
-                    fin: horaFin, 
-                    total: duracion, 
-                    estado: "finalizado", 
-                    tipo: "incidencia" 
-                });
-                
-                await push(tareasHistorialRef, {
-                    operario: infoInc.operario || "SISTEMA",
-                    numSerie: "---",
-                    codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
-                    fecha: infoInc.fecha,
-                    inicio: infoInc.horaTexto,
-                    fin: horaFin,
-                    total: duracion,
-                    tipo: "incidencia",
-                    timestamp: Date.now()
-                });
-                
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausa_incidencia") { 
-                        updates[`tareas/${id}/estado`] = "activo"; 
-                        updates[`tareas/${id}/inicioMS`] = ahora; 
-                    }
-                });
-                update(incidenciaRef, { activa: false, inicioMS: 0 });
-            }
-            if (Object.keys(updates).length > 0) update(ref(db), updates);
-        };
-
-        window.togglePausa = async function() {
-            if (!lineaIniciada && !estaPausadoGlobal) {
-                alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno');
-                return;
-            }
-            
-            const ahora = Date.now(); 
-            const snapTareas = await get(tareasRef); 
-            const tareas = snapTareas.val() || {}; 
-            const updates = {};
-            
-            if (!estaPausadoGlobal) {
-                update(pausaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "activo") {
-                        const acumuladoSesion = ahora - tareas[id].inicioMS;
-                        updates[`tareas/${id}/estado`] = "pausado_desayuno";
-                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                    }
-                });
-            } else {
-                const snapP = await get(pausaRef);
-                const infoP = snapP.val();
-                const horaFin = new Date().toLocaleTimeString('es-ES');
-                const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
-                
-                await push(tareasRef, { 
-                    operario: infoP.operario || "SISTEMA", 
-                    numSerie: "---", 
-                    codigo: "☕ DESAYUNO", 
-                    fecha: infoP.fecha, 
-                    inicio: infoP.horaTexto, 
-                    fin: horaFin, 
-                    total: duracion, 
-                    estado: "finalizado", 
-                    tipo: "descanso" 
-                });
-                
-                await push(tareasHistorialRef, {
-                    operario: infoP.operario || "SISTEMA",
-                    numSerie: "---",
-                    codigo: "☕ DESAYUNO",
-                    fecha: infoP.fecha,
-                    inicio: infoP.horaTexto,
-                    fin: horaFin,
-                    total: duracion,
-                    tipo: "descanso",
-                    timestamp: Date.now()
-                });
-                
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausado_desayuno") { 
-                        updates[`tareas/${id}/estado`] = "activo"; 
-                        updates[`tareas/${id}/inicioMS`] = ahora; 
-                    }
-                });
-                update(pausaRef, { activa: false, inicioMS: 0 });
-            }
-            if (Object.keys(updates).length > 0) update(ref(db), updates);
-        };
-
-        window.registrarJornada = async (tipo) => {
-            const operario = document.getElementById('selectOperario').value;
-            const esEntrada = tipo === 'INICIO';
-            
-            if (esEntrada && lineaIniciada) {
-                alert('⚠️ La línea ya está activa. Debes registrar SALIDA primero.');
-                return;
-            }
-            
-            if (!esEntrada && !lineaIniciada) {
-                alert('⚠️ La línea ya está parada. Debes registrar ENTRADA primero.');
-                return;
-            }
-
-            // Validar que la salida la registra el mismo operario que la entrada
-            if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) {
-                alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`);
-                return;
-            }
-            
-            if (esEntrada) {
-                document.getElementById('modalOperarios').classList.remove('hidden');
-            } else {
-                await ejecutarRegistroJornada('FIN', 0);
-            }
-        };
-
-        window.confirmarEntradaOperarios = async function(numOperarios) {
-            cerrarModalOperarios();
-            await ejecutarRegistroJornada('INICIO', numOperarios);
-        };
-
-        window.cerrarModalOperarios = function() {
-            document.getElementById('modalOperarios').classList.add('hidden');
-        };
-
-        async function ejecutarRegistroJornada(tipo, numOperarios) {
-            const operario = document.getElementById('selectOperario').value;
-            const horaActual = new Date().toLocaleTimeString('es-ES');
-            const fechaActual = obtenerFecha();
-            const esEntrada = tipo === 'INICIO';
-            const ahora = Date.now();
-            
-            if (esEntrada) {
-                numOperariosActivos = numOperarios;
-                lineaIniciada = true;
-                operarioLineaActiva = operario;
-                
-                // Guardar estado en Firebase
-                await update(estadoLineaRef, {
-                    activa: true,
-                    operario: operario,
-                    numOperarios: numOperarios,
-                    horaInicio: horaActual,
-                    fecha: fechaActual
-                });
-                
-                const snapTareas = await get(tareasRef);
-                const tareas = snapTareas.val() || {};
-                const updates = {};
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "pausa_salida_linea") {
-                        updates[`tareas/${id}/estado`] = "activo";
-                        updates[`tareas/${id}/inicioMS`] = ahora;
-                    }
-                });
-                if (Object.keys(updates).length > 0) await update(ref(db), updates);
-            } else {
-                const snapTareas = await get(tareasRef);
-                const tareas = snapTareas.val() || {};
-                const updates = {};
-                Object.keys(tareas).forEach(id => {
-                    if (tareas[id].estado === "activo") {
-                        const acumuladoSesion = ahora - tareas[id].inicioMS;
-                        updates[`tareas/${id}/estado`] = "pausa_salida_linea";
-                        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
-                    }
-                });
-                if (Object.keys(updates).length > 0) await update(ref(db), updates);
-                
-                lineaIniciada = false;
-                numOperariosActivos = 1;
-                operarioLineaActiva = null;
-                
-                // Limpiar estado en Firebase
-                await update(estadoLineaRef, {
-                    activa: false,
-                    operario: null,
-                    numOperarios: 0
-                });
-            }
-            
-            // Actualizar UI inmediatamente después de cambiar el estado
-            actualizarEstadoBotones();
-            
-            await push(tareasRef, { 
-                operario, 
-                numSerie: "---", 
-                codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA", 
-                fecha: fechaActual, 
-                inicio: horaActual, 
-                fin: "---", 
-                total: "REGISTRO",
-                estado: "finalizado", 
-                tipo: "jornada",
-                numOperarios: esEntrada ? numOperariosActivos : 0
-            });
-            
-            await push(tareasHistorialRef, {
-                operario,
-                numSerie: "---",
-                codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
-                fecha: fechaActual,
-                inicio: horaActual,
-                fin: "---",
-                total: 0,
-                tipo: "jornada",
-                numOperarios: esEntrada ? numOperariosActivos : 0,
-                timestamp: Date.now()
-            });
-        }
-
-        window.iniciarTarea = function() {
-            // Verificar que la línea esté iniciada
-            if (!lineaIniciada) {
-                alert('⚠️ Debes registrar la ENTRADA antes de iniciar tareas');
-                return;
-            }
-            
-            const operario = document.getElementById('selectOperario').value;
-            const serie = document.getElementById('numSerie').value.trim().toUpperCase();
-            const cod = document.getElementById('codigo').value.trim().toUpperCase();
-            if (!serie || !cod) return;
-            
-            push(tareasRef, { 
-                operario, 
-                numSerie: serie, 
-                codigo: cod, 
-                fecha: obtenerFecha(), 
-                inicio: new Date().toLocaleTimeString('es-ES'), 
-                inicioMS: Date.now(), 
-                acumuladoMS: 0, 
-                estado: "activo", 
-                tipo: "produccion" 
-            });
-            
-            document.getElementById('numSerie').value = ''; 
-            document.getElementById('codigo').value = ''; 
-            document.getElementById('numSerie').focus();
-        };
-
-        // MANTENIMIENTO
-        window.agregarMantenimiento = async function() {
-            const descripcion = prompt("Descripción de la tarea de mantenimiento:");
-            if (!descripcion || !descripcion.trim()) return;
-            
-            await push(mantenimientoRef, {
-                descripcion: descripcion.trim(),
-                fecha: obtenerFecha(),
-                completada: false,
-                timestamp: Date.now()
-            });
-        };
-
-        window.completarMantenimiento = async function(id) {
-            if (!confirm('¿Marcar tarea como realizada?')) return;
-            const tareaRef = ref(db, `tareas_mantenimiento/${id}`);
-            await update(tareaRef, { 
-                completada: true,
-                fechaCompletada: obtenerFecha(),
-                horaCompletada: new Date().toLocaleTimeString('es-ES')
-            });
-        };
-
-        window.borrarMantenimiento = async function(id) {
-            if (!confirm('¿Eliminar esta tarea de mantenimiento?')) return;
-            await remove(ref(db, `tareas_mantenimiento/${id}`));
-        };
-
-        window.borrarIncidenciaTexto = async function(id) {
-            if (!confirm('¿Eliminar esta incidencia?')) return;
-            await remove(ref(db, `incidencias_texto/${id}`));
-        };
-
-        // ESCUCHADOR: MANTENIMIENTO
-        onValue(mantenimientoRef, (snapshot) => {
-            const cuerpo = document.getElementById('cuerpoMantenimiento');
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val();
-            
-            if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento</td></tr>';
-                return;
-            }
-            
-            // Separar pendientes y completadas
-            const tareasPendientes = [];
-            const tareasCompletadas = [];
-            
-            Object.keys(datos).forEach(id => {
-                const t = datos[id];
-                if (t.completada) {
-                    tareasCompletadas.push({ id, ...t });
-                } else {
-                    tareasPendientes.push({ id, ...t });
-                }
-            });
-            
-            // Ordenar por timestamp (más recientes primero)
-            tareasPendientes.sort((a, b) => b.timestamp - a.timestamp);
-            tareasCompletadas.sort((a, b) => b.timestamp - a.timestamp);
-            
-            // Mostrar pendientes primero
-            tareasPendientes.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-white border-b border-slate-100 hover:bg-blue-50 transition-all">
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-800 font-semibold">
-                            <span class="inline-flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                                ${t.descripcion}
-                            </span>
-                        </td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            <button onclick="completarMantenimiento('${t.id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
-                                ✓ Realizada
-                            </button>
-                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-            
-            // Mostrar completadas
-            tareasCompletadas.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-green-50 border-b border-slate-100 opacity-60">
-                        <td class="p-4 text-slate-500 font-medium text-sm line-through">${t.fecha}</td>
-                        <td class="p-4 text-slate-600 font-semibold line-through">
-                            <span class="inline-flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                                ${t.descripcion}
-                            </span>
-                            <div class="text-xs text-green-600 mt-1">✓ Completada el ${t.fechaCompletada} a las ${t.horaCompletada}</div>
-                        </td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            <button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-        });
-
-        // ESCUCHADOR: INCIDENCIAS
-        onValue(incidenciasTextoRef, (snapshot) => {
-            const cuerpo = document.getElementById('cuerpoIncidencias');
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val();
-            
-            if (!datos) {
-                cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
-                return;
-            }
-            
-            const incidenciasArray = Object.keys(datos).map(id => ({ id, ...datos[id] }));
-            incidenciasArray.sort((a, b) => b.timestamp - a.timestamp);
-            
-            incidenciasArray.forEach(t => {
-                cuerpo.innerHTML += `
-                    <tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
-                        <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-                        <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
-                    </tr>`;
-            });
-        });
-
-        // ESCUCHADOR: HISTORIAL (persistente) - Actualiza ambos gráficos
-        onValue(tareasHistorialRef, (snapshot) => {
-            todasLasTareas = snapshot.val() || {};
-            
-            // MODIFICACIÓN: Establecer filtro de fecha de hoy la primera vez
-            if (primeraVez) {
-                const inputFecha = document.getElementById('filtroFecha');
-                if (inputFecha) {
-                    inputFecha.value = obtenerFechaHoy();
-                }
-                
-                // Establecer mes actual para productividad diaria
-                const inputMes = document.getElementById('filtroMesProductividadDiaria');
-                if (inputMes) {
-                    const hoy = new Date();
-                    const anio = hoy.getFullYear();
-                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-                    inputMes.value = `${anio}-${mes}`;
-                }
-                
-                primeraVez = false;
-            }
-            
-            // Actualizar gráfico de tareas individuales con el filtro actual
-            const fechaInput = document.getElementById('filtroFecha').value;
-            const fechaFiltro = fechaInput ? convertirFechaHTML(fechaInput) : null;
-            actualizarGraficoPuntos(fechaFiltro);
-            
-            // Actualizar gráfico de productividad diaria
-            actualizarGraficoProductividadDiaria();
-            
-            // Actualizar gráfico de productividad mensual
-            actualizarGraficoProductividadMensual();
-        });
-
-        // ESCUCHADOR: TAREAS (temporal) - Solo actualiza la tabla
-        onValue(tareasRef, (snapshot) => {
-            const cuerpo = document.getElementById('cuerpoTabla'); 
-            cuerpo.innerHTML = "";
-            const datos = snapshot.val(); 
-            
-            if (!datos) return;
-            
-            Object.keys(datos).forEach(id => {
-                const t = datos[id];
-                
-                // Aplicar filtro de fecha si está activo
-                if (filtroFechaTablaActual && t.fecha !== filtroFechaTablaActual) {
-                    return; // Skip esta tarea
-                }
-                
-                const activo = t.estado === "activo";
-                let rowClass = "bg-white";
-                if(activo) rowClass = "bg-amber-50";
-                if(t.estado === "pausa_manual") rowClass = "bg-blue-50";
-                if(t.estado === "pausa_salida_linea") rowClass = "bg-purple-50";
-                if(t.estado === "pausa_incidencia") rowClass = "bg-red-50";
-                if(t.estado === "pausado_desayuno") rowClass = "bg-orange-50";
-                if(t.estado === "pausa_reposicion") rowClass = "bg-yellow-50";
-
-                let tiempoMostrado;
-                if (activo) {
-                    tiempoMostrado = `<span class="contador-vivo text-amber-600" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
-                } else if (t.estado === "pausa_manual") {
-                    tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumuladoMS)}</span>`;
-                } else if (t.estado === "pausa_salida_linea") {
-                    tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
-                } else if (t.estado === "pausa_incidencia") {
-                    tiempoMostrado = `<span class="text-red-400 italic">🛠️ En Incidencia</span>`;
-                } else if (t.estado === "pausa_reposicion") {
-                    tiempoMostrado = `<span class="text-yellow-600 italic">📦 En Reposición</span>`;
-                } else if (t.estado === "pausado_desayuno") {
-                    tiempoMostrado = `<span class="text-orange-400 italic">☕ En Desayuno</span>`;
-                } else if (t.tipo === 'jornada') {
-                    tiempoMostrado = `<span class="text-slate-500 font-bold text-xs">REGISTRO</span>`;
-                } else {
-                    tiempoMostrado = `${t.total} min`;
-                }
-
-                cuerpo.innerHTML += `
-                    <tr class="${rowClass} border-b border-slate-100 transition-all">
-                        <td class="p-4 font-bold text-slate-700">${t.operario}</td>
-                        <td class="p-4 text-slate-600 font-medium">${t.fecha || '-'}</td>
-                        <td class="p-4 font-mono text-slate-500">${t.numSerie}</td>
-                        <td class="p-4 font-bold text-slate-800">${t.codigo}</td>
-                        <td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
-                        <td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
-                        <td class="p-4 font-black text-center">${tiempoMostrado}</td>
-                        <td class="p-4 text-right flex justify-end gap-2">
-                            ${activo ? `
-                                <button onclick="finalizarTarea('${id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>
-                            ` : (t.estado && t.estado.includes('pausa_') ? '⏸️' : '✓')}
-                            <button onclick="borrarTarea('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
-                        </td>
-                    </tr>`;
-            });
-        });
-
-        onValue(incidenciaRef, s => {
-            const d = s.val(); hayIncidenciaGlobal = d?.activa; inicioIncidenciaMS = d?.inicioMS;
-            document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
-            document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
-        });
-        
-        onValue(pausaRef, s => {
-            const d = s.val(); estaPausadoGlobal = d?.activa; inicioPausaMS = d?.inicioMS;
-            document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
-            document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
-        });
-        
-        onValue(reposicionRef, s => {
-            const d = s.val(); hayReposicionGlobal = d?.activa; inicioReposicionMS = d?.inicioMS;
-            document.getElementById('btnReposicion').innerHTML = hayReposicionGlobal ? "📦 LISTO" : "📦 REPOSICIÓN";
-            document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposicionGlobal);
-        });
-
-        // Listener para estado de línea - maneja la sincronización del estado
-        onValue(estadoLineaRef, s => {
-            const d = s.val();
-            
-            console.log('=== LISTENER estadoLineaRef EJECUTADO ===');
-            console.log('Datos de Firebase:', d);
-            
-            // Si hay datos en Firebase, usarlos
-            if (d) {
-                lineaIniciada = d.activa || false;
-                operarioLineaActiva = d.operario || null;
-                numOperariosActivos = d.numOperarios || 1;
-            } else {
-                // Si no hay datos en Firebase, inicializar estado parado
-                lineaIniciada = false;
-                operarioLineaActiva = null;
-                numOperariosActivos = 1;
-            }
-            
-            console.log('Estado línea actualizado:', { 
-                lineaIniciada, 
-                operarioLineaActiva, 
-                numOperariosActivos 
-            });
-            console.log('Llamando a actualizarEstadoBotones()');
-            actualizarEstadoBotones();
-        });
-
-        // Al cargar la página, sincronizar el estado si no existe en Firebase pero hay tareas
-        get(estadoLineaRef).then(snapshot => {
-            if (!snapshot.exists()) {
-                // No hay estado guardado, intentar deducirlo de las tareas
-                get(tareasRef).then(tareasSnap => {
-                    const tareas = tareasSnap.val();
-                    if (tareas) {
-                        // Buscar la última entrada sin salida correspondiente
-                        let ultimaEntrada = null;
-                        let hayEntradaSinSalida = false;
-                        
-                        Object.values(tareas).forEach(t => {
-                            if (t.tipo === 'jornada') {
-                                if (t.codigo && t.codigo.includes('ENTRADA')) {
-                                    ultimaEntrada = t;
-                                    hayEntradaSinSalida = true;
-                                } else if (t.codigo && t.codigo.includes('SALIDA')) {
-                                    hayEntradaSinSalida = false;
-                                }
-                            }
-                        });
-                        
-                        // Si hay entrada sin salida, activar la línea
-                        if (hayEntradaSinSalida && ultimaEntrada) {
-                            const match = ultimaEntrada.codigo.match(/\((\d+) op\.\)/);
-                            const numOp = match ? parseInt(match[1]) : 1;
-                            
-                            update(estadoLineaRef, {
-                                activa: true,
-                                operario: ultimaEntrada.operario,
-                                numOperarios: numOp,
-                                horaInicio: ultimaEntrada.inicio,
-                                fecha: ultimaEntrada.fecha
-                            });
-                        }
-                    }
-                });
-            }
-        });
-
-        window.handleKeyPress = (e, nextId) => { 
-            if (e.key === 'Enter') { 
-                e.preventDefault(); 
-                if (nextId) document.getElementById(nextId).focus(); 
-                else window.iniciarTarea(); 
-            } 
-        };
-
-        window.filtrarTablaTemporalPorFecha = function() {
-            const fechaInput = document.getElementById('filtroFechaTabla').value;
-            if (!fechaInput) {
-                filtroFechaTablaActual = null;
-                return;
-            }
-            
-            // Convertir YYYY-MM-DD a DD/MM/YYYY
-            const [anio, mes, dia] = fechaInput.split('-');
-            filtroFechaTablaActual = `${dia}/${mes}/${anio}`;
-            
-            // El listener se re-ejecutará automáticamente y filtrará
-        };
-
-        window.limpiarFiltroTabla = function() {
-            document.getElementById('filtroFechaTabla').value = '';
-            filtroFechaTablaActual = null;
-        };
-        
-        window.exportarExcel = async () => {
-            // Pedir rango de fechas
-            const fechaInicio = prompt('📅 Fecha de inicio (DD/MM/YYYY):');
-            if (!fechaInicio) return;
-            
-            const fechaFin = prompt('📅 Fecha de fin (DD/MM/YYYY):');
-            if (!fechaFin) return;
-            
-            // Obtener datos del historial
-            const snapshot = await get(tareasHistorialRef);
-            const datos = snapshot.val();
-            
-            if (!datos) {
-                alert('❌ No hay datos para exportar');
-                return;
-            }
-            
-            // Filtrar por rango de fechas
-            const datosFiltrados = Object.values(datos).filter(tarea => {
-                if (!tarea.fecha) return false;
-                
-                // Comparar fechas
-                const fechaTarea = parsearFecha(tarea.fecha);
-                const inicio = parsearFecha(fechaInicio);
-                const fin = parsearFecha(fechaFin);
-                
-                if (!fechaTarea || !inicio || !fin) return false;
-                
-                return fechaTarea >= inicio && fechaTarea <= fin;
-            });
-            
-            if (datosFiltrados.length === 0) {
-                alert('❌ No hay datos en el rango seleccionado');
-                return;
-            }
-            
-            // Crear tabla para Excel
-            const datosExcel = datosFiltrados.map(t => ({
-                'Operario': t.operario,
-                'Fecha': t.fecha,
-                'Serie': t.numSerie || '---',
-                'Tarea': t.codigo,
-                'Hora Inicio': t.inicio,
-                'Hora Fin': t.fin || '---',
-                'Tiempo (min)': t.total || '---',
-                'Tipo': t.tipo
-            }));
-            
-            // Crear y descargar Excel
-            const ws = XLSX.utils.json_to_sheet(datosExcel);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Producción");
-            XLSX.writeFile(wb, `Dosmart_Produccion_${fechaInicio.replace(/\//g, '-')}_${fechaFin.replace(/\//g, '-')}.xlsx`);
-            
-            alert(`✅ Exportados ${datosFiltrados.length} registros`);
-        };
-    </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dosmart Production - Control de Tareas</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+const firebaseConfig = {
+apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",
+authDomain: "dosmart-2f395.firebaseapp.com",
+databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",
+projectId: "dosmart-2f395",
+storageBucket: "dosmart-2f395.appspot.com",
+appId: "1:854942502621:web:5c1a7428f7492c3a382664"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const tareasRef = ref(db, 'tareas');
+const tareasHistorialRef = ref(db, 'historial_tareas');
+const pausaRef = ref(db, 'estadoPausa');
+const incidenciaRef = ref(db, 'estadoIncidencia');
+const reposicionRef = ref(db, 'estadoReposicion');
+const estadoLineaRef = ref(db, 'estadoLinea');
+const mantenimientoRef = ref(db, 'tareas_mantenimiento');
+const incidenciasTextoRef = ref(db, 'incidencias_texto');
+// Monitorear conexión Firebase
+const connectedRef = ref(db, '.info/connected');
+onValue(connectedRef, (snapshot) => {
+const led = document.getElementById('firebaseLed');
+const pulse = document.getElementById('firebaseLedPulse');
+const status = document.getElementById('firebaseStatus');
+if (snapshot.val() === true) {
+led.classList.remove('bg-gray-400', 'bg-red-500');
+led.classList.add('bg-green-500');
+pulse.classList.remove('opacity-0');
+status.textContent = 'Conectado';
+status.classList.remove('text-slate-600', 'text-red-600');
+status.classList.add('text-green-600');
+} else {
+led.classList.remove('bg-gray-400', 'bg-green-500');
+led.classList.add('bg-red-500');
+pulse.classList.add('opacity-0');
+status.textContent = 'Desconectado';
+status.classList.remove('text-slate-600', 'text-green-600');
+status.classList.add('text-red-600');
+}
+});
+let estaPausadoGlobal = false;
+let hayIncidenciaGlobal = false;
+let hayReposicionGlobal = false;
+let lineaIniciada = false;
+let numOperariosActivos = 1;
+let operarioLineaActiva = null;
+let filtroFechaTablaActual = null;
+let inicioPausaMS = 0;
+let inicioIncidenciaMS = 0;
+let inicioReposicionMS = 0;
+let chartInstance = null;
+let chartProductividad = null;
+let chartProductividadMensual = null;
+let todasLasTareas = {};
+let primeraVez = true;
+
+function actualizarEstadoBotones() {
+console.log('=== actualizarEstadoBotones EJECUTADO ===');
+console.log('lineaIniciada:', lineaIniciada);
+const btnPausa = document.getElementById('btnPausa');
+const btnIncidencia = document.getElementById('btnIncidencia');
+const btnReposicion = document.getElementById('btnReposicion');
+const btnIniciarTarea = document.getElementById('btnIniciarTarea');
+const btnEntrada = document.getElementById('btnEntrada');
+const btnSalida = document.getElementById('btnSalida');
+const indicadorLinea = document.getElementById('indicadorLinea');
+if (lineaIniciada) {
+console.log('→ Configurando botones para LÍNEA ACTIVA');
+btnPausa.disabled = false;
+btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
+btnIncidencia.disabled = false;
+btnIncidencia.classList.remove('opacity-50', 'cursor-not-allowed');
+btnReposicion.disabled = true;
+btnReposicion.classList.add('opacity-50', 'cursor-not-allowed');
+btnIniciarTarea.disabled = false;
+btnIniciarTarea.classList.remove('opacity-50', 'cursor-not-allowed');
+btnEntrada.disabled = true;
+btnEntrada.classList.add('opacity-50', 'cursor-not-allowed');
+btnSalida.disabled = false;
+btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
+indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
+} else {
+console.log('→ Configurando botones para LÍNEA PARADA');
+btnPausa.disabled = true;
+btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
+btnIncidencia.disabled = true;
+btnIncidencia.classList.add('opacity-50', 'cursor-not-allowed');
+btnReposicion.disabled = false;
+btnReposicion.classList.remove('opacity-50', 'cursor-not-allowed');
+btnIniciarTarea.disabled = true;
+btnIniciarTarea.classList.add('opacity-50', 'cursor-not-allowed');
+btnEntrada.disabled = false;
+btnEntrada.classList.remove('opacity-50', 'cursor-not-allowed');
+btnSalida.disabled = true;
+btnSalida.classList.add('opacity-50', 'cursor-not-allowed');
+indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>';
+}
+console.log('=== FIN actualizarEstadoBotones ===');
+}
+
+// FORZAR PARADA DE LÍNEA
+window.forzarParadaLinea = async function() {
+const operario = document.getElementById('selectOperario').value;
+if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
+alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.
+Solo ese operario puede forzar la parada.`);
+return;
+}
+if (!confirm('⛔ ¿Forzar parada de línea?\nSe registrará una SALIDA ahora mismo para poder calcular la productividad del día.')) return;
+const horaActual = new Date().toLocaleTimeString('es-ES');
+const fechaActual = obtenerFecha();
+const ahora = Date.now();
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "activo") {
+const acumuladoSesion = ahora - tareas[id].inicioMS;
+updates[`tareas/${id}/estado`] = "pausa_salida_linea";
+updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+}
+});
+if (Object.keys(updates).length > 0) await update(ref(db), updates);
+await push(tareasRef, {
+operario,
+numSerie: "---",
+codigo: "⛔ SALIDA FORZADA",
+fecha: fechaActual,
+inicio: horaActual,
+fin: "---",
+total: "REGISTRO",
+estado: "finalizado",
+tipo: "jornada",
+numOperarios: 0
+});
+await push(tareasHistorialRef, {
+operario,
+numSerie: "---",
+codigo: "🔴 SALIDA",
+fecha: fechaActual,
+inicio: horaActual,
+fin: "---",
+total: 0,
+tipo: "jornada",
+numOperarios: 0,
+timestamp: Date.now()
+});
+lineaIniciada = false;
+numOperariosActivos = 1;
+operarioLineaActiva = null;
+await update(estadoLineaRef, {
+activa: false,
+operario: null,
+numOperarios: 0
+});
+actualizarEstadoBotones();
+};
+
+const obtenerFecha = () => {
+const hoy = new Date();
+const dia = String(hoy.getDate()).padStart(2, '0');
+const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+const anio = hoy.getFullYear();
+return `${dia}/${mes}/${anio}`;
+};
+
+const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
+
+function obtenerFechaHoy() {
+const hoy = new Date();
+const anio = hoy.getFullYear();
+const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+const dia = String(hoy.getDate()).padStart(2, '0');
+return `${anio}-${mes}-${dia}`;
+}
+
+function formatTime(ms) {
+if (!ms || ms < 0) return "0m 0s";
+const min = Math.floor(ms / 60000);
+const seg = Math.floor((ms % 60000) / 1000);
+return `${min}m ${seg}s`;
+}
+
+function convertirFechaHTML(fechaHTML) {
+const partes = fechaHTML.split('-');
+return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function convertirHoraAMinutos(horaStr) {
+if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
+const [horas, minutos, segundos] = horaStr.split(':').map(Number);
+if (isNaN(horas) || isNaN(minutos)) return 0;
+return horas * 60 + minutos + (segundos || 0) / 60;
+}
+
+function parsearFecha(fechaStr) {
+if (!fechaStr || !fechaStr.includes('/')) return null;
+const [dia, mes, anio] = fechaStr.split('/').map(Number);
+return new Date(anio, mes - 1, dia);
+}
+
+// GRÁFICO 1: TAREAS INDIVIDUALES
+function actualizarGraficoPuntos(fechaFiltro = null) {
+const tareasAdrian = [];
+const tareasAlberto = [];
+console.log('=== DEBUG GRÁFICO TAREAS ===');
+console.log('Fecha filtro:', fechaFiltro);
+console.log('Total tareas en historial:', Object.keys(todasLasTareas).length);
+if (todasLasTareas) {
+const tareasProduccion = Object.entries(todasLasTareas)
+.filter(([id, t]) => {
+const esProduccion = t.tipo === 'produccion';
+const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
+const cumpleFecha = !fechaFiltro || t.fecha === fechaFiltro;
+if (esProduccion && !cumpleFecha) {
+console.log('Tarea producción descartada por fecha:', t.fecha, 'vs filtro:', fechaFiltro);
+}
+return esProduccion && tieneTiempo && cumpleFecha;
+})
+.map(([id, t]) => ({
+id: id,
+...t,
+tiempoNum: parseInt(t.total),
+horaMinutos: convertirHoraAMinutos(t.inicio)
+}));
+console.log('Tareas producción filtradas:', tareasProduccion.length);
+tareasProduccion.sort((a, b) => a.horaMinutos - b.horaMinutos);
+tareasProduccion.forEach((t, index) => {
+const punto = {
+x: index,
+y: t.tiempoNum,
+tarea: t.codigo,
+serie: t.numSerie,
+hora: t.inicio,
+fecha: t.fecha,
+firebaseId: t.id,
+operario: t.operario
+};
+if (t.operario === 'Adrian García') {
+tareasAdrian.push(punto);
+} else if (t.operario === 'Alberto Colmenero') {
+tareasAlberto.push(punto);
+}
+});
+console.log('Adrian:', tareasAdrian.length, 'Alberto:', tareasAlberto.length);
+}
+const ctx = document.getElementById('graficoTareas').getContext('2d');
+if (chartInstance) {
+chartInstance.destroy();
+}
+if (tareasAdrian.length === 0 && tareasAlberto.length === 0) {
+document.getElementById('contadorTareas').textContent =
+fechaFiltro ? `Sin datos para ${fechaFiltro}` : 'Sin tareas en el historial';
+} else {
+const totalTareas = tareasAdrian.length + tareasAlberto.length;
+document.getElementById('contadorTareas').textContent =
+fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
+}
+const todosTiempos = [...tareasAdrian, ...tareasAlberto].map(t => t.y);
+const tiempoMedio = todosTiempos.length > 0
+? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length
+: 0;
+const maxX = Math.max(tareasAdrian.length, tareasAlberto.length) - 1;
+const lineaMedia = maxX >= 0 ? [
+{ x: 0, y: tiempoMedio },
+{ x: maxX, y: tiempoMedio }
+] : [];
+chartInstance = new Chart(ctx, {
+type: 'scatter',
+data: {
+datasets: [
+{
+label: 'Adrian García',
+data: tareasAdrian,
+backgroundColor: '#3b82f6',
+borderColor: '#2563eb',
+borderWidth: 2,
+pointRadius: 8,
+pointHoverRadius: 12,
+order: 2
+},
+{
+label: 'Alberto Colmenero',
+data: tareasAlberto,
+backgroundColor: '#ef4444',
+borderColor: '#dc2626',
+borderWidth: 2,
+pointRadius: 8,
+pointHoverRadius: 12,
+order: 2
+},
+{
+label: 'Tiempo Medio',
+data: lineaMedia,
+type: 'line',
+borderColor: '#fbbf24',
+backgroundColor: 'rgba(251, 191, 36, 0.1)',
+borderWidth: 3,
+borderDash: [5, 5],
+pointRadius: 0,
+fill: false,
+showLine: true,
+order: 1
+}
+]
+},
+options: {
+responsive: true,
+maintainAspectRatio: false,
+onClick: (e) => {
+const points = chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+if (points.length) {
+const firstPoint = points[0];
+const datasetIndex = firstPoint.datasetIndex;
+const index = firstPoint.index;
+const dataset = chartInstance.data.datasets[datasetIndex];
+const punto = dataset.data[index];
+mostrarModalEliminar(punto);
+}
+},
+onHover: (e, activeElements) => {
+e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+},
+plugins: {
+legend: { display: false },
+tooltip: {
+callbacks: {
+title: function(context) {
+return `Tarea #${context[0].parsed.x + 1}`;
+},
+label: function(context) {
+const point = context.raw;
+const operario = context.datasetIndex === 0 ? 'Adrian' : 'Alberto';
+return [
+`Operario: ${operario}`,
+`Tarea: ${point.tarea}`,
+`Serie: ${point.serie}`,
+`Hora: ${point.hora}`,
+`Tiempo: ${point.y} minutos`
+];
+}
+}
+}
+},
+scales: {
+x: {
+display: true,
+title: {
+display: true,
+text: 'Número de tarea (orden cronológico)',
+font: { weight: 'bold' }
+},
+ticks: {
+callback: function(value) {
+return value + 1;
+}
+},
+grid: { color: '#e2e8f0' }
+},
+y: {
+beginAtZero: true,
+title: {
+display: true,
+text: 'Tiempo (minutos)',
+font: { weight: 'bold' }
+},
+grid: { color: '#e2e8f0' }
+}
+}
+}
+});
+}
+
+function calcularTendencia(datos) {
+const puntos = datos
+.map((y, x) => ({ x, y }))
+.filter(p => p.y !== null && !isNaN(p.y));
+if (puntos.length < 2) return { tendencia: [], pendiente: 0 };
+const n = puntos.length;
+const sumaX = puntos.reduce((sum, p) => sum + p.x, 0);
+const sumaY = puntos.reduce((sum, p) => sum + p.y, 0);
+const sumaXY = puntos.reduce((sum, p) => sum + p.x * p.y, 0);
+const sumaX2 = puntos.reduce((sum, p) => sum + p.x * p.x, 0);
+const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
+const intercept = (sumaY - pendiente * sumaX) / n;
+const tendencia = datos.map((_, x) => {
+if (datos[x] === null) return null;
+return pendiente * x + intercept;
+});
+return { tendencia, pendiente };
+}
+
+// GRÁFICO 2: PRODUCTIVIDAD DIARIA
+function calcularProductividadDiaria(anio, mes) {
+const diasDelMes = new Date(anio, mes, 0).getDate();
+const datosProductividad = new Array(diasDelMes).fill(null);
+const tareasPorDia = {};
+const jornadasPorDia = {};
+const hoy = new Date();
+const esMesActual = (mes === hoy.getMonth() + 1 && anio === hoy.getFullYear());
+const diaActual = hoy.getDate();
+
+if (todasLasTareas) {
+Object.values(todasLasTareas).forEach(t => {
+const fecha = parsearFecha(t.fecha);
+if (!fecha) return;
+if (fecha.getFullYear() === anio && fecha.getMonth() === mes - 1) {
+const dia = fecha.getDate();
+const key = `${dia}-${t.operario}`;
+if (t.tipo === 'produccion') {
+if (!tareasPorDia[key]) tareasPorDia[key] = 0;
+tareasPorDia[key]++;
+} else if (t.tipo === 'jornada') {
+if (!jornadasPorDia[key]) jornadasPorDia[key] = { entradas: [] };
+if (t.codigo && t.codigo.includes('ENTRADA')) {
+jornadasPorDia[key].entradas.push({
+hora: t.inicio,
+numOperarios: t.numOperarios || 1
+});
+} else if (t.codigo && t.codigo.includes('SALIDA')) {
+jornadasPorDia[key].salida = t.inicio;
+}
+}
+}
+});
+}
+
+for (let dia = 1; dia <= diasDelMes; dia++) {
+const productividadesDia = [];
+const keyAdrian = `${dia}-Adrian García`;
+const tareasAdrianCount = tareasPorDia[keyAdrian] || 0;
+const jornadaAdrian = jornadasPorDia[keyAdrian] || {};
+
+// Para el día actual en curso, usar hora actual como salida si no hay salida registrada
+let salidaAdrian = jornadaAdrian.salida;
+if (esMesActual && dia === diaActual && !salidaAdrian && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0) {
+salidaAdrian = new Date().toLocaleTimeString('es-ES');
+}
+
+if (salidaAdrian && jornadaAdrian.entradas && jornadaAdrian.entradas.length > 0 && tareasAdrianCount > 0) {
+const salidaMin = convertirHoraAMinutos(salidaAdrian);
+let horas1Op = 0;
+let horas2Op = 0;
+jornadaAdrian.entradas.forEach((entrada, index) => {
+const entradaMin = convertirHoraAMinutos(entrada.hora);
+let finPeriodoMin;
+if (index < jornadaAdrian.entradas.length - 1) {
+finPeriodoMin = convertirHoraAMinutos(jornadaAdrian.entradas[index + 1].hora);
+} else {
+finPeriodoMin = salidaMin;
+}
+const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+if (entrada.numOperarios === 1) {
+horas1Op += horasPeriodo;
+} else if (entrada.numOperarios === 2) {
+horas2Op += horasPeriodo;
+}
+});
+const denominador = horas1Op + (horas2Op * 2);
+if (denominador > 0) {
+const prodAdrian = (tareasAdrianCount * 7) / denominador;
+productividadesDia.push(prodAdrian);
+}
+}
+
+const keyAlberto = `${dia}-Alberto Colmenero`;
+const tareasAlbertoCount = tareasPorDia[keyAlberto] || 0;
+const jornadaAlberto = jornadasPorDia[keyAlberto] || {};
+
+let salidaAlberto = jornadaAlberto.salida;
+if (esMesActual && dia === diaActual && !salidaAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0) {
+salidaAlberto = new Date().toLocaleTimeString('es-ES');
+}
+
+if (salidaAlberto && jornadaAlberto.entradas && jornadaAlberto.entradas.length > 0 && tareasAlbertoCount > 0) {
+const salidaMin = convertirHoraAMinutos(salidaAlberto);
+let horas1Op = 0;
+let horas2Op = 0;
+jornadaAlberto.entradas.forEach((entrada, index) => {
+const entradaMin = convertirHoraAMinutos(entrada.hora);
+let finPeriodoMin;
+if (index < jornadaAlberto.entradas.length - 1) {
+finPeriodoMin = convertirHoraAMinutos(jornadaAlberto.entradas[index + 1].hora);
+} else {
+finPeriodoMin = salidaMin;
+}
+const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+if (entrada.numOperarios === 1) {
+horas1Op += horasPeriodo;
+} else if (entrada.numOperarios === 2) {
+horas2Op += horasPeriodo;
+}
+});
+const denominador = horas1Op + (horas2Op * 2);
+if (denominador > 0) {
+const prodAlberto = (tareasAlbertoCount * 7) / denominador;
+productividadesDia.push(prodAlberto);
+}
+}
+
+if (productividadesDia.length > 0) {
+datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
+}
+}
+return { datosProductividad, diasDelMes };
+}
+
+function actualizarGraficoProductividadDiaria() {
+const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
+if (!inputMes) return;
+const [anio, mes] = inputMes.split('-').map(Number);
+const { datosProductividad, diasDelMes } = calcularProductividadDiaria(anio, mes);
+const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
+const media = todosLosValores.length > 0 ?
+todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
+const lineaMedia = new Array(diasDelMes).fill(media);
+const labels = Array.from({length: diasDelMes}, (_, i) => i + 1);
+const ctx = document.getElementById('graficoProductividadDiaria').getContext('2d');
+if (chartProductividad) {
+chartProductividad.destroy();
+}
+chartProductividad = new Chart(ctx, {
+type: 'line',
+data: {
+labels: labels,
+datasets: [
+{
+label: 'Productividad',
+data: datosProductividad,
+borderColor: '#3b82f6',
+backgroundColor: 'rgba(59, 130, 246, 0.1)',
+borderWidth: 3,
+pointRadius: 6,
+pointBackgroundColor: '#3b82f6',
+fill: true,
+tension: 0.3,
+spanGaps: true,
+order: 2
+},
+{
+label: 'Media',
+data: lineaMedia,
+borderColor: '#fbbf24',
+backgroundColor: 'rgba(251, 191, 36, 0.1)',
+borderWidth: 3,
+borderDash: [5, 5],
+pointRadius: 0,
+fill: false,
+tension: 0,
+order: 1
+}
+]
+},
+options: {
+responsive: true,
+maintainAspectRatio: false,
+onClick: async (e) => {
+const points = chartProductividad.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+if (points.length) {
+const firstPoint = points[0];
+const datasetIndex = firstPoint.datasetIndex;
+if (datasetIndex === 1) return;
+const index = firstPoint.index;
+const dia = index + 1;
+const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
+const [anioSel, mesSel] = inputMes.split('-').map(Number);
+const fechaBuscar = `${String(dia).padStart(2, '0')}/${String(mesSel).padStart(2, '0')}/${anioSel}`;
+mostrarModalEliminarDiaTodos(dia, mesSel, anioSel, fechaBuscar);
+}
+},
+onHover: (e, activeElements) => {
+e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+},
+interaction: { mode: 'index', intersect: false },
+plugins: {
+legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
+tooltip: {
+callbacks: {
+label: function(context) {
+const value = context.raw;
+if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
+return `${context.dataset.label}: ${value.toFixed(2)} tareas/hora`;
+}
+}
+}
+},
+scales: {
+x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
+y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
+}
+}
+});
+const diasConDatos = todosLosValores.length;
+const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+document.getElementById('mediaProductividadDiaria').textContent = `Media de ${nombreMes}: ${media.toFixed(2)}`;
+document.getElementById('diasConDatosDiaria').textContent = `Días con datos: ${diasConDatos}`;
+}
+
+window.cambiarMesProductividadDiaria = function() {
+actualizarGraficoProductividadDiaria();
+};
+
+// GRÁFICO 3: PRODUCTIVIDAD MENSUAL (TIEMPO REAL)
+function calcularProductividadMensual(anio) {
+const meses = Array.from({length: 12}, (_, i) => i + 1);
+const datosProductividad = new Array(12).fill(null);
+const hoy = new Date();
+const esAnioActual = (anio === hoy.getFullYear());
+const mesActual = hoy.getMonth() + 1;
+
+meses.forEach(mes => {
+const { datosProductividad: diasMes } = calcularProductividadDiaria(anio, mes);
+const valoresMes = diasMes.filter(v => v !== null && !isNaN(v));
+
+// Para el mes actual, calcular media en tiempo real incluso si no está completo
+if (valoresMes.length > 0) {
+let media = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
+
+// Si es el mes actual, mostramos la media de los días trabajados hasta ahora
+if (esAnioActual && mes === mesActual) {
+// La media ya está calculada con los días disponibles
+// Esto permite ver la productividad en tiempo real sin esperar a fin de mes
+}
+
+datosProductividad[mes - 1] = media;
+}
+});
+return { datosProductividad };
+}
+
+function actualizarGraficoProductividadMensual() {
+const anio = parseInt(document.getElementById('selectAnioProductividadMensual').value);
+const { datosProductividad } = calcularProductividadMensual(anio);
+const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
+const media = todosLosValores.length > 0 ?
+todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
+const { tendencia, pendiente } = calcularTendencia(datosProductividad);
+const esTendenciaPositiva = pendiente > 0;
+const colorTendencia = esTendenciaPositiva ? '#10b981' : '#ef4444';
+const lineaMedia = new Array(12).fill(media);
+const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const ctx = document.getElementById('graficoProductividadMensual').getContext('2d');
+if (chartProductividadMensual) {
+chartProductividadMensual.destroy();
+}
+chartProductividadMensual = new Chart(ctx, {
+type: 'scatter',
+data: {
+labels: labels,
+datasets: [
+{
+label: 'Productividad Mensual',
+data: datosProductividad
+.map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
+.filter(p => p !== null),
+backgroundColor: '#3b82f6',
+borderColor: '#2563eb',
+pointRadius: 8,
+pointHoverRadius: 12,
+showLine: false,
+order: 3
+},
+{
+label: 'Media Anual',
+data: lineaMedia
+.map((val, idx) => val !== null && !isNaN(val) && val > 0 ? { x: idx, y: val } : null)
+.filter(p => p !== null),
+type: 'line',
+borderColor: '#fbbf24',
+backgroundColor: 'rgba(251, 191, 36, 0.1)',
+borderWidth: 3,
+borderDash: [5, 5],
+pointRadius: 0,
+fill: false,
+tension: 0,
+order: 1
+},
+{
+label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
+data: tendencia
+.map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null)
+.filter(p => p !== null),
+type: 'line',
+borderColor: colorTendencia,
+backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+borderWidth: 3,
+pointRadius: 0,
+fill: false,
+tension: 0,
+order: 2
+}
+]
+},
+options: {
+responsive: true,
+maintainAspectRatio: false,
+interaction: { mode: 'index', intersect: false },
+plugins: {
+legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
+tooltip: {
+callbacks: {
+label: function(context) {
+const value = context.raw?.y || context.raw;
+if (value === null || isNaN(value)) return `${context.dataset.label}: Sin datos`;
+return `${context.dataset.label}: ${value.toFixed(2)} tareas/hora`;
+},
+title: function(context) {
+return labels[context[0].parsed.x];
+}
+}
+}
+},
+scales: {
+x: {
+type: 'linear',
+display: true,
+min: 0,
+max: 11,
+ticks: {
+stepSize: 1,
+callback: function(value) {
+return labels[value] || '';
+}
+},
+title: { display: true, text: 'Meses del año', font: { weight: 'bold' } },
+grid: { color: '#e2e8f0' }
+},
+y: {
+beginAtZero: true,
+title: { display: true, text: 'Productividad Media (tareas×7 / (h×op))', font: { weight: 'bold' } },
+grid: { color: '#e2e8f0' }
+}
+}
+}
+});
+const mesesConDatos = todosLosValores.length;
+const tendenciaTexto = esTendenciaPositiva ?
+`<span class="text-green-600">↗ Tendencia positiva</span>` :
+`<span class="text-red-600">↘ Tendencia negativa</span>`;
+document.getElementById('mediaProductividadAnual').textContent = `Media de ${anio}: ${media.toFixed(2)}`;
+document.getElementById('mesesConDatos').innerHTML = `Meses: ${mesesConDatos} | ${tendenciaTexto}`;
+}
+
+window.cambiarAnioProductividadMensual = function() {
+actualizarGraficoProductividadMensual();
+};
+
+window.mostrarModalEliminar = function(punto) {
+const modal = document.getElementById('modalEliminar');
+const info = document.getElementById('infoTareaEliminar');
+const btnEliminar = document.getElementById('btnConfirmarEliminar');
+const colorOperario = punto.operario === 'Adrian García' ? 'text-blue-600' : 'text-red-600';
+info.innerHTML = `
+<div class="space-y-2">
+<p><span class="font-bold text-slate-600">Operario:</span> <span class="${colorOperario} font-bold">${punto.operario}</span></p>
+<p><span class="font-bold text-slate-600">Tarea:</span> ${punto.tarea}</p>
+<p><span class="font-bold text-slate-600">Serie:</span> ${punto.serie}</p>
+<p><span class="font-bold text-slate-600">Fecha:</span> ${punto.fecha}</p>
+<p><span class="font-bold text-slate-600">Hora:</span> ${punto.hora}</p>
+<p><span class="font-bold text-slate-600">Tiempo:</span> ${punto.y} minutos</p>
+</div>
+`;
+btnEliminar.onclick = () => eliminarPuntoGrafico(punto.firebaseId);
+modal.classList.remove('hidden');
+};
+
+window.mostrarModalEliminarDia = function(dia, mes, anio, operario, fecha) {
+const modal = document.getElementById('modalEliminar');
+const info = document.getElementById('infoTareaEliminar');
+const btnEliminar = document.getElementById('btnConfirmarEliminar');
+const colorOperario = operario === 'Adrian García' ? 'text-blue-600' : 'text-red-600';
+const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
+let contadorTareas = 0;
+if (todasLasTareas) {
+Object.values(todasLasTareas).forEach(t => {
+if (t.tipo === 'produccion' && t.fecha === fecha && t.operario === operario) {
+contadorTareas++;
+}
+});
+}
+info.innerHTML = `
+<div class="space-y-2">
+<p><span class="font-bold text-slate-600">Operario:</span> <span class="${colorOperario} font-bold">${operario}</span></p>
+<p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
+<p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción</span></p>
+<p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
+</div>
+`;
+btnEliminar.onclick = () => eliminarTareasDia(fecha, operario);
+modal.classList.remove('hidden');
+};
+
+window.eliminarTareasDia = async function(fecha, operario) {
+if (!confirm(`¿Estás seguro de eliminar TODAS las tareas de ${operario} del ${fecha}?`)) {
+cerrarModalEliminar();
+return;
+}
+try {
+const snapshot = await get(tareasHistorialRef);
+const tareas = snapshot.val() || {};
+let eliminadas = 0;
+for (const [id, tarea] of Object.entries(tareas)) {
+if (tarea.tipo === 'produccion' && tarea.fecha === fecha && tarea.operario === operario) {
+await remove(ref(db, `historial_tareas/${id}`));
+eliminadas++;
+}
+}
+alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
+cerrarModalEliminar();
+} catch (error) {
+alert('Error al eliminar: ' + error.message);
+}
+};
+
+window.mostrarModalEliminarDiaTodos = function(dia, mes, anio, fecha) {
+const modal = document.getElementById('modalEliminar');
+const info = document.getElementById('infoTareaEliminar');
+const btnEliminar = document.getElementById('btnConfirmarEliminar');
+const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
+let contadorTareas = 0;
+if (todasLasTareas) {
+Object.values(todasLasTareas).forEach(t => {
+if (t.tipo === 'produccion' && t.fecha === fecha) {
+contadorTareas++;
+}
+});
+}
+info.innerHTML = `
+<div class="space-y-2">
+<p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
+<p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción (todos los operarios)</span></p>
+<p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
+</div>
+`;
+btnEliminar.onclick = () => eliminarTareasDiaTodos(fecha);
+modal.classList.remove('hidden');
+};
+
+window.eliminarTareasDiaTodos = async function(fecha) {
+if (!confirm(`¿Estás seguro de eliminar TODAS las tareas del ${fecha}?`)) {
+cerrarModalEliminar();
+return;
+}
+try {
+const snapshot = await get(tareasHistorialRef);
+const tareas = snapshot.val() || {};
+let eliminadas = 0;
+for (const [id, tarea] of Object.entries(tareas)) {
+if (tarea.tipo === 'produccion' && tarea.fecha === fecha) {
+await remove(ref(db, `historial_tareas/${id}`));
+eliminadas++;
+}
+}
+alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
+cerrarModalEliminar();
+} catch (error) {
+alert('Error al eliminar: ' + error.message);
+}
+};
+
+window.cerrarModalEliminar = function() {
+document.getElementById('modalEliminar').classList.add('hidden');
+};
+
+window.eliminarPuntoGrafico = async function(firebaseId) {
+if (!confirm('¿Estás seguro de eliminar este punto del historial?')) return;
+try {
+await remove(ref(db, `historial_tareas/${firebaseId}`));
+cerrarModalEliminar();
+} catch (error) {
+alert('Error al eliminar: ' + error.message);
+}
+};
+
+window.filtrarPorFecha = function() {
+const fechaInput = document.getElementById('filtroFecha').value;
+if (fechaInput) {
+actualizarGraficoPuntos(convertirFechaHTML(fechaInput));
+} else {
+document.getElementById('filtroFecha').value = obtenerFechaHoy();
+actualizarGraficoPuntos(obtenerFecha());
+}
+};
+
+setInterval(() => {
+const ahora = Date.now();
+if (!estaPausadoGlobal && !hayIncidenciaGlobal && !hayReposicionGlobal) {
+document.querySelectorAll('.contador-vivo').forEach(el => {
+const inicioMS = parseInt(el.dataset.inicio);
+const acumuladoPrevio = parseInt(el.dataset.acumulado || 0);
+el.innerText = formatTime((ahora - inicioMS) + acumuladoPrevio);
+});
+}
+if (estaPausadoGlobal) {
+const caja = document.getElementById('tiempoDesayuno');
+if(caja) caja.innerText = formatTime(ahora - inicioPausaMS);
+}
+if (hayIncidenciaGlobal) {
+const cajaInc = document.getElementById('tiempoIncidencia');
+if(cajaInc) cajaInc.innerText = formatTime(ahora - inicioIncidenciaMS);
+}
+if (hayReposicionGlobal) {
+const cajaRep = document.getElementById('tiempoReposicion');
+if(cajaRep) cajaRep.innerText = formatTime(ahora - inicioReposicionMS);
+}
+}, 1000);
+
+window.togglePausaTarea = async function(id) {
+const ahora = Date.now();
+const snap = await get(ref(db, `tareas/${id}`));
+const t = snap.val();
+if (t.estado === "activo") {
+const nuevoAcumulado = (t.acumuladoMS || 0) + (ahora - t.inicioMS);
+update(ref(db, `tareas/${id}`), { estado: "pausa_manual", acumuladoMS: nuevoAcumulado });
+} else if (t.estado === "pausa_manual") {
+update(ref(db, `tareas/${id}`), { estado: "activo", inicioMS: ahora });
+}
+};
+
+window.finalizarTarea = async function(id) {
+if(!confirm('¿Finalizar tarea?')) return;
+const snap = await get(ref(db, `tareas/${id}`));
+const t = snap.val();
+let totalMS = (t.acumuladoMS || 0);
+if(t.estado === "activo") totalMS += (Date.now() - t.inicioMS);
+const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
+const horaFin = new Date().toLocaleTimeString('es-ES');
+await update(ref(db, `tareas/${id}`), {
+fin: horaFin,
+total: tiempoTotal,
+estado: "finalizado"
+});
+await push(tareasHistorialRef, {
+operario: t.operario,
+numSerie: t.numSerie,
+codigo: t.codigo,
+fecha: t.fecha,
+inicio: t.inicio,
+fin: horaFin,
+total: tiempoTotal,
+tipo: "produccion",
+timestamp: Date.now()
+});
+};
+
+window.borrarTarea = (id) => {
+if (confirm('¿Borrar tarea de la tabla?')) remove(ref(db, `tareas/${id}`));
+};
+
+window.borrarTodoElRegistro = () => {
+if (confirm("¿BORRAR TODA LA TABLA?\nLos datos de los gráficos NO se borrarán.")) {
+remove(tareasRef);
+}
+};
+
+window.borrarHistorialGrafico = () => {
+if (confirm("⚠️ ¿BORRAR PERMANENTEMENTE EL HISTORIAL?\nEsto borrará todos los datos de los gráficos.")) {
+remove(tareasHistorialRef);
+}
+};
+
+window.toggleReposicion = async function() {
+const ahora = Date.now();
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+if (!hayReposicionGlobal) {
+update(reposicionRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "activo") {
+const acumuladoSesion = ahora - tareas[id].inicioMS;
+updates[`tareas/${id}/estado`] = "pausa_reposicion";
+updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+}
+});
+} else {
+const snapR = await get(reposicionRef);
+const infoR = snapR.val();
+const horaFin = new Date().toLocaleTimeString('es-ES');
+const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
+await push(tareasRef, {
+operario: infoR.operario || "SISTEMA",
+numSerie: "---",
+codigo: "📦 REPOSICIÓN",
+fecha: infoR.fecha,
+inicio: infoR.horaTexto,
+fin: horaFin,
+total: duracion,
+estado: "finalizado",
+tipo: "reposicion"
+});
+await push(tareasHistorialRef, {
+operario: infoR.operario || "SISTEMA",
+numSerie: "---",
+codigo: "📦 REPOSICIÓN",
+fecha: infoR.fecha,
+inicio: infoR.horaTexto,
+fin: horaFin,
+total: duracion,
+tipo: "reposicion",
+timestamp: Date.now()
+});
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "pausa_reposicion") {
+updates[`tareas/${id}/estado`] = "activo";
+updates[`tareas/${id}/inicioMS`] = ahora;
+}
+});
+update(reposicionRef, { activa: false, inicioMS: 0 });
+}
+if (Object.keys(updates).length > 0) update(ref(db), updates);
+};
+
+window.toggleIncidencia = async function() {
+if (!lineaIniciada && !hayIncidenciaGlobal) {
+alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias');
+return;
+}
+const ahora = Date.now();
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+if (!hayIncidenciaGlobal) {
+const motivo = prompt("Motivo de la incidencia:");
+if (!motivo) return;
+await push(incidenciasTextoRef, {
+descripcion: motivo.trim(),
+fecha: obtenerFecha(),
+timestamp: Date.now()
+});
+update(incidenciaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual() });
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "activo") {
+const acumuladoSesion = ahora - tareas[id].inicioMS;
+updates[`tareas/${id}/estado`] = "pausa_incidencia";
+updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+}
+});
+} else {
+const snapI = await get(incidenciaRef);
+const infoInc = snapI.val();
+const horaFin = new Date().toLocaleTimeString('es-ES');
+const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
+await push(tareasRef, {
+operario: infoInc.operario || "SISTEMA",
+numSerie: "---",
+codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
+fecha: infoInc.fecha,
+inicio: infoInc.horaTexto,
+fin: horaFin,
+total: duracion,
+estado: "finalizado",
+tipo: "incidencia"
+});
+await push(tareasHistorialRef, {
+operario: infoInc.operario || "SISTEMA",
+numSerie: "---",
+codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`,
+fecha: infoInc.fecha,
+inicio: infoInc.horaTexto,
+fin: horaFin,
+total: duracion,
+tipo: "incidencia",
+timestamp: Date.now()
+});
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "pausa_incidencia") {
+updates[`tareas/${id}/estado`] = "activo";
+updates[`tareas/${id}/inicioMS`] = ahora;
+}
+});
+update(incidenciaRef, { activa: false, inicioMS: 0 });
+}
+if (Object.keys(updates).length > 0) update(ref(db), updates);
+};
+
+window.togglePausa = async function() {
+if (!lineaIniciada && !estaPausadoGlobal) {
+alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno');
+return;
+}
+const ahora = Date.now();
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+if (!estaPausadoGlobal) {
+update(pausaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "activo") {
+const acumuladoSesion = ahora - tareas[id].inicioMS;
+updates[`tareas/${id}/estado`] = "pausado_desayuno";
+updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+}
+});
+} else {
+const snapP = await get(pausaRef);
+const infoP = snapP.val();
+const horaFin = new Date().toLocaleTimeString('es-ES');
+const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
+await push(tareasRef, {
+operario: infoP.operario || "SISTEMA",
+numSerie: "---",
+codigo: "☕ DESAYUNO",
+fecha: infoP.fecha,
+inicio: infoP.horaTexto,
+fin: horaFin,
+total: duracion,
+estado: "finalizado",
+tipo: "descanso"
+});
+await push(tareasHistorialRef, {
+operario: infoP.operario || "SISTEMA",
+numSerie: "---",
+codigo: "☕ DESAYUNO",
+fecha: infoP.fecha,
+inicio: infoP.horaTexto,
+fin: horaFin,
+total: duracion,
+tipo: "descanso",
+timestamp: Date.now()
+});
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "pausado_desayuno") {
+updates[`tareas/${id}/estado`] = "activo";
+updates[`tareas/${id}/inicioMS`] = ahora;
+}
+});
+update(pausaRef, { activa: false, inicioMS: 0 });
+}
+if (Object.keys(updates).length > 0) update(ref(db), updates);
+};
+
+window.registrarJornada = async (tipo) => {
+const operario = document.getElementById('selectOperario').value;
+const esEntrada = tipo === 'INICIO';
+
+// VALIDACIÓN ESTRICTA: Una entrada = Una salida
+if (esEntrada && lineaIniciada) {
+alert('⚠️ ERROR: La línea ya está activa. No puedes registrar otra ENTRADA sin antes registrar una SALIDA.');
+return;
+}
+if (!esEntrada && !lineaIniciada) {
+alert('⚠️ ERROR: La línea ya está parada. No puedes registrar SALIDA sin una ENTRADA previa.');
+return;
+}
+if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) {
+alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`);
+return;
+}
+
+if (esEntrada) {
+document.getElementById('modalOperarios').classList.remove('hidden');
+} else {
+await ejecutarRegistroJornada('FIN', 0);
+}
+};
+
+window.confirmarEntradaOperarios = async function(numOperarios) {
+cerrarModalOperarios();
+await ejecutarRegistroJornada('INICIO', numOperarios);
+};
+
+window.cerrarModalOperarios = function() {
+document.getElementById('modalOperarios').classList.add('hidden');
+};
+
+async function ejecutarRegistroJornada(tipo, numOperarios) {
+const operario = document.getElementById('selectOperario').value;
+const horaActual = new Date().toLocaleTimeString('es-ES');
+const fechaActual = obtenerFecha();
+const esEntrada = tipo === 'INICIO';
+const ahora = Date.now();
+
+if (esEntrada) {
+numOperariosActivos = numOperarios;
+lineaIniciada = true;
+operarioLineaActiva = operario;
+await update(estadoLineaRef, {
+activa: true,
+operario: operario,
+numOperarios: numOperarios,
+horaInicio: horaActual,
+fecha: fechaActual
+});
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "pausa_salida_linea") {
+updates[`tareas/${id}/estado`] = "activo";
+updates[`tareas/${id}/inicioMS`] = ahora;
+}
+});
+if (Object.keys(updates).length > 0) await update(ref(db), updates);
+} else {
+const snapTareas = await get(tareasRef);
+const tareas = snapTareas.val() || {};
+const updates = {};
+Object.keys(tareas).forEach(id => {
+if (tareas[id].estado === "activo") {
+const acumuladoSesion = ahora - tareas[id].inicioMS;
+updates[`tareas/${id}/estado`] = "pausa_salida_linea";
+updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + acumuladoSesion;
+}
+});
+if (Object.keys(updates).length > 0) await update(ref(db), updates);
+lineaIniciada = false;
+numOperariosActivos = 1;
+operarioLineaActiva = null;
+await update(estadoLineaRef, {
+activa: false,
+operario: null,
+numOperarios: 0
+});
+}
+
+actualizarEstadoBotones();
+
+await push(tareasRef, {
+operario,
+numSerie: "---",
+codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
+fecha: fechaActual,
+inicio: horaActual,
+fin: "---",
+total: "REGISTRO",
+estado: "finalizado",
+tipo: "jornada",
+numOperarios: esEntrada ? numOperariosActivos : 0
+});
+
+await push(tareasHistorialRef, {
+operario,
+numSerie: "---",
+codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
+fecha: fechaActual,
+inicio: horaActual,
+fin: "---",
+total: 0,
+tipo: "jornada",
+numOperarios: esEntrada ? numOperariosActivos : 0,
+timestamp: Date.now()
+});
+}
+
+window.iniciarTarea = function() {
+if (!lineaIniciada) {
+alert('⚠️ Debes registrar la ENTRADA antes de iniciar tareas');
+return;
+}
+const operario = document.getElementById('selectOperario').value;
+const serie = document.getElementById('numSerie').value.trim().toUpperCase();
+const cod = document.getElementById('codigo').value.trim().toUpperCase();
+if (!serie || !cod) return;
+push(tareasRef, {
+operario,
+numSerie: serie,
+codigo: cod,
+fecha: obtenerFecha(),
+inicio: new Date().toLocaleTimeString('es-ES'),
+inicioMS: Date.now(),
+acumuladoMS: 0,
+estado: "activo",
+tipo: "produccion"
+});
+document.getElementById('numSerie').value = '';
+document.getElementById('codigo').value = '';
+document.getElementById('numSerie').focus();
+};
+
+// MANTENIMIENTO
+window.agregarMantenimiento = async function() {
+const descripcion = prompt("Descripción de la tarea de mantenimiento:");
+if (!descripcion || !descripcion.trim()) return;
+await push(mantenimientoRef, {
+descripcion: descripcion.trim(),
+fecha: obtenerFecha(),
+completada: false,
+timestamp: Date.now()
+});
+};
+
+window.completarMantenimiento = async function(id) {
+if (!confirm('¿Marcar tarea como realizada?')) return;
+const tareaRef = ref(db, `tareas_mantenimiento/${id}`);
+await update(tareaRef, {
+completada: true,
+fechaCompletada: obtenerFecha(),
+horaCompletada: new Date().toLocaleTimeString('es-ES')
+});
+};
+
+window.borrarMantenimiento = async function(id) {
+if (!confirm('¿Eliminar esta tarea de mantenimiento?')) return;
+await remove(ref(db, `tareas_mantenimiento/${id}`));
+};
+
+window.borrarIncidenciaTexto = async function(id) {
+if (!confirm('¿Eliminar esta incidencia?')) return;
+await remove(ref(db, `incidencias_texto/${id}`));
+};
+
+// ESCUCHADOR: MANTENIMIENTO
+onValue(mantenimientoRef, (snapshot) => {
+const cuerpo = document.getElementById('cuerpoMantenimiento');
+cuerpo.innerHTML = "";
+const datos = snapshot.val();
+if (!datos) {
+cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay tareas de mantenimiento</td></tr>';
+return;
+}
+const tareasPendientes = [];
+const tareasCompletadas = [];
+Object.keys(datos).forEach(id => {
+const t = datos[id];
+if (t.completada) {
+tareasCompletadas.push({ id, ...t });
+} else {
+tareasPendientes.push({ id, ...t });
+}
+});
+tareasPendientes.sort((a, b) => b.timestamp - a.timestamp);
+tareasCompletadas.sort((a, b) => b.timestamp - a.timestamp);
+tareasPendientes.forEach(t => {
+cuerpo.innerHTML += `
+<tr class="bg-white border-b border-slate-100 hover:bg-blue-50 transition-all">
+<td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
+<td class="p-4 text-slate-800 font-semibold">
+<span class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+${t.descripcion}
+</span>
+</td>
+<td class="p-4 text-right flex justify-end gap-2">
+<button onclick="completarMantenimiento('${t.id}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold uppercase shadow-sm transition-colors">
+✓ Realizada
+</button>
+<button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
+</td>
+</tr>`;
+});
+tareasCompletadas.forEach(t => {
+cuerpo.innerHTML += `
+<tr class="bg-green-50 border-b border-slate-100 opacity-60">
+<td class="p-4 text-slate-500 font-medium text-sm line-through">${t.fecha}</td>
+<td class="p-4 text-slate-600 font-semibold line-through">
+<span class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+${t.descripcion}
+</span>
+<div class="text-xs text-green-600 mt-1">✓ Completada el ${t.fechaCompletada} a las ${t.horaCompletada}</div>
+</td>
+<td class="p-4 text-right flex justify-end gap-2">
+<button onclick="borrarMantenimiento('${t.id}')" class="text-slate-300 hover:text-red-500">🗑️</button>
+</td>
+</tr>`;
+});
+});
+
+// ESCUCHADOR: INCIDENCIAS
+onValue(incidenciasTextoRef, (snapshot) => {
+const cuerpo = document.getElementById('cuerpoIncidencias');
+cuerpo.innerHTML = "";
+const datos = snapshot.val();
+if (!datos) {
+cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>';
+return;
+}
+const incidenciasArray = Object.keys(datos).map(id => ({ id, ...datos[id] }));
+incidenciasArray.sort((a, b) => b.timestamp - a.timestamp);
+incidenciasArray.forEach(t => {
+cuerpo.innerHTML += `
+<tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
+<td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
+<td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+</tr>`;
+});
+});
+
+// ESCUCHADOR: HISTORIAL (persistente)
+onValue(tareasHistorialRef, (snapshot) => {
+todasLasTareas = snapshot.val() || {};
+
+// Establecer filtros por defecto la primera vez
+if (primeraVez) {
+const hoy = new Date();
+const anio = hoy.getFullYear();
+const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+const dia = String(hoy.getDate()).padStart(2, '0');
+
+// Filtro fecha hoy para gráfico de tareas individuales
+const inputFecha = document.getElementById('filtroFecha');
+if (inputFecha) {
+inputFecha.value = `${anio}-${mes}-${dia}`;
+}
+
+// Filtro mes actual para productividad diaria
+const inputMes = document.getElementById('filtroMesProductividadDiaria');
+if (inputMes) {
+inputMes.value = `${anio}-${mes}`;
+}
+
+// Filtro año actual para productividad mensual
+const inputAnio = document.getElementById('selectAnioProductividadMensual');
+if (inputAnio) {
+inputAnio.value = anio.toString();
+}
+
+primeraVez = false;
+}
+
+// Actualizar gráficos con los filtros actuales
+const fechaInput = document.getElementById('filtroFecha').value;
+const fechaFiltro = fechaInput ? convertirFechaHTML(fechaInput) : null;
+actualizarGraficoPuntos(fechaFiltro);
+actualizarGraficoProductividadDiaria();
+actualizarGraficoProductividadMensual();
+});
+
+// ESCUCHADOR: TAREAS - Actualiza la tabla con colores corregidos
+onValue(tareasRef, (snapshot) => {
+const cuerpo = document.getElementById('cuerpoTabla');
+cuerpo.innerHTML = "";
+const datos = snapshot.val();
+if (!datos) return;
+
+Object.keys(datos).forEach(id => {
+const t = datos[id];
+
+// Aplicar filtro de fecha si está activo
+if (filtroFechaTablaActual && t.fecha !== filtroFechaTablaActual) {
+return;
+}
+
+const activo = t.estado === "activo";
+let rowClass = "bg-white";
+let tiempoMostrado = "";
+
+// COLORES CORREGIDOS SEGÚN REQUERIMIENTOS
+if (t.tipo === 'jornada') {
+if (t.codigo && t.codigo.includes('ENTRADA')) {
+// Entrada: texto verde con fondo verde
+rowClass = "bg-green-100 border-l-4 border-green-500";
+tiempoMostrado = `<span class="text-green-700 font-black uppercase">🟢 ENTRADA</span>`;
+} else if (t.codigo && t.codigo.includes('SALIDA')) {
+// Salida: texto rojo con fondo rojo
+rowClass = "bg-red-100 border-l-4 border-red-500";
+tiempoMostrado = `<span class="text-red-700 font-black uppercase">🔴 SALIDA</span>`;
+} else {
+rowClass = "bg-slate-50";
+tiempoMostrado = `<span class="text-slate-500 font-bold text-xs">REGISTRO</span>`;
+}
+} else if (activo) {
+rowClass = "bg-amber-50";
+tiempoMostrado = `<span class="contador-vivo text-amber-600 font-bold" data-inicio="${t.inicioMS}" data-acumulado="${t.acumuladoMS}">...</span>`;
+} else if (t.estado === "pausa_manual") {
+rowClass = "bg-blue-50";
+tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumuladoMS)}</span>`;
+} else if (t.estado === "pausa_salida_linea") {
+rowClass = "bg-purple-50";
+tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
+} else if (t.estado === "pausado_desayuno") {
+// Desayuno: color naranja
+rowClass = "bg-orange-50 border-l-4 border-orange-400";
+tiempoMostrado = `<span class="text-orange-600 font-bold uppercase">☕ DESAYUNO</span>`;
+} else if (t.estado === "pausa_incidencia") {
+// Incidencia: color rojo llamativo
+rowClass = "bg-red-50 border-l-4 border-red-600";
+tiempoMostrado = `<span class="text-red-600 font-black uppercase animate-pulse">🛠️ INCIDENCIA</span>`;
+} else if (t.estado === "pausa_reposicion") {
+// Reposición: color violeta con fondo violeta
+rowClass = "bg-violet-100 border-l-4 border-violet-500";
+tiempoMostrado = `<span class="text-violet-700 font-bold uppercase">📦 REPOSICIÓN</span>`;
+} else if (t.tipo === 'reposicion') {
+rowClass = "bg-violet-50";
+tiempoMostrado = `<span class="text-violet-600 font-bold">${t.total} min</span>`;
+} else if (t.tipo === 'incidencia') {
+rowClass = "bg-red-50";
+tiempoMostrado = `<span class="text-red-600 font-bold">${t.total} min</span>`;
+} else if (t.tipo === 'descanso') {
+rowClass = "bg-orange-50";
+tiempoMostrado = `<span class="text-orange-600 font-bold">${t.total} min</span>`;
+} else {
+// Tarea de producción finalizada
+tiempoMostrado = `<span class="text-slate-700 font-bold">${t.total} min</span>`;
+}
+
+cuerpo.innerHTML += `
+<tr class="${rowClass} border-b border-slate-100 transition-all">
+<td class="p-4 font-bold text-slate-700">${t.operario}</td>
+<td class="p-4 text-slate-600 font-medium">${t.fecha || '-'}</td>
+<td class="p-4 font-mono text-slate-500">${t.numSerie}</td>
+<td class="p-4 font-bold text-slate-800">${t.codigo}</td>
+<td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
+<td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
+<td class="p-4 font-black text-center">${tiempoMostrado}</td>
+<td class="p-4 text-right flex justify-end gap-2">
+${activo ? `
+<button onclick="finalizarTarea('${id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>
+` : (t.estado && t.estado.includes('pausa_') ? '⏸️' : '✓')}
+<button onclick="borrarTarea('${id}')" class="text-slate-300 hover:text-red-500 ml-2">🗑️</button>
+</td>
+</tr>`;
+});
+});
+
+onValue(incidenciaRef, s => {
+const d = s.val(); hayIncidenciaGlobal = d?.activa; inicioIncidenciaMS = d?.inicioMS;
+document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
+document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
+});
+
+onValue(pausaRef, s => {
+const d = s.val(); estaPausadoGlobal = d?.activa; inicioPausaMS = d?.inicioMS;
+document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
+document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
+});
+
+onValue(reposicionRef, s => {
+const d = s.val(); hayReposicionGlobal = d?.activa; inicioReposicionMS = d?.inicioMS;
+document.getElementById('btnReposicion').innerHTML = hayReposicionGlobal ? "📦 LISTO" : "📦 REPOSICIÓN";
+document.getElementById('cajaReposicion').classList.toggle('hidden', !hayReposicionGlobal);
+});
+
+onValue(estadoLineaRef, s => {
+const d = s.val();
+console.log('=== LISTENER estadoLineaRef EJECUTADO ===');
+console.log('Datos de Firebase:', d);
+if (d) {
+lineaIniciada = d.activa || false;
+operarioLineaActiva = d.operario || null;
+numOperariosActivos = d.numOperarios || 1;
+} else {
+lineaIniciada = false;
+operarioLineaActiva = null;
+numOperariosActivos = 1;
+}
+console.log('Estado línea actualizado:', {
+lineaIniciada,
+operarioLineaActiva,
+numOperariosActivos
+});
+console.log('Llamando a actualizarEstadoBotones()');
+actualizarEstadoBotones();
+});
+
+get(estadoLineaRef).then(snapshot => {
+if (!snapshot.exists()) {
+get(tareasRef).then(tareasSnap => {
+const tareas = tareasSnap.val();
+if (tareas) {
+let ultimaEntrada = null;
+let hayEntradaSinSalida = false;
+Object.values(tareas).forEach(t => {
+if (t.tipo === 'jornada') {
+if (t.codigo && t.codigo.includes('ENTRADA')) {
+ultimaEntrada = t;
+hayEntradaSinSalida = true;
+} else if (t.codigo && t.codigo.includes('SALIDA')) {
+hayEntradaSinSalida = false;
+}
+}
+});
+if (hayEntradaSinSalida && ultimaEntrada) {
+const match = ultimaEntrada.codigo.match(/\((\d+) op\.\)/);
+const numOp = match ? parseInt(match[1]) : 1;
+update(estadoLineaRef, {
+activa: true,
+operario: ultimaEntrada.operario,
+numOperarios: numOp,
+horaInicio: ultimaEntrada.inicio,
+fecha: ultimaEntrada.fecha
+});
+}
+}
+});
+}
+});
+
+window.handleKeyPress = (e, nextId) => {
+if (e.key === 'Enter') {
+e.preventDefault();
+if (nextId) document.getElementById(nextId).focus();
+else window.iniciarTarea();
+}
+};
+
+window.filtrarTablaTemporalPorFecha = function() {
+const fechaInput = document.getElementById('filtroFechaTabla').value;
+if (!fechaInput) {
+filtroFechaTablaActual = null;
+return;
+}
+const [anio, mes, dia] = fechaInput.split('-');
+filtroFechaTablaActual = `${dia}/${mes}/${anio}`;
+};
+
+window.limpiarFiltroTabla = function() {
+document.getElementById('filtroFechaTabla').value = '';
+filtroFechaTablaActual = null;
+};
+
+window.exportarExcel = async () => {
+const fechaInicio = prompt('📅 Fecha de inicio (DD/MM/YYYY):');
+if (!fechaInicio) return;
+const fechaFin = prompt('📅 Fecha de fin (DD/MM/YYYY):');
+if (!fechaFin) return;
+const snapshot = await get(tareasHistorialRef);
+const datos = snapshot.val();
+if (!datos) {
+alert('❌ No hay datos para exportar');
+return;
+}
+const datosFiltrados = Object.values(datos).filter(tarea => {
+if (!tarea.fecha) return false;
+const fechaTarea = parsearFecha(tarea.fecha);
+const inicio = parsearFecha(fechaInicio);
+const fin = parsearFecha(fechaFin);
+if (!fechaTarea || !inicio || !fin) return false;
+return fechaTarea >= inicio && fechaTarea <= fin;
+});
+if (datosFiltrados.length === 0) {
+alert('❌ No hay datos en el rango seleccionado');
+return;
+}
+const datosExcel = datosFiltrados.map(t => ({
+'Operario': t.operario,
+'Fecha': t.fecha,
+'Serie': t.numSerie || '---',
+'Tarea': t.codigo,
+'Hora Inicio': t.inicio,
+'Hora Fin': t.fin || '---',
+'Tiempo (min)': t.total || '---',
+'Tipo': t.tipo
+}));
+const ws = XLSX.utils.json_to_sheet(datosExcel);
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, "Producción");
+XLSX.writeFile(wb, `Dosmart_Produccion_${fechaInicio.replace(/\//g, '-')}_${fechaFin.replace(/\//g, '-')}.xlsx`);
+alert(`✅ Exportados ${datosFiltrados.length} registros`);
+};
+</script>
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
-    <!-- Modal para eliminar punto -->
-    <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
-            <h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
-            <div id="infoTareaEliminar" class="bg-slate-50 rounded-xl p-4 mb-6 text-sm"></div>
-            <div class="flex gap-3">
-                <button onclick="cerrarModalEliminar()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
-                    Cancelar
-                </button>
-                <button id="btnConfirmarEliminar" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold uppercase transition-colors">
-                    Eliminar Permanentemente
-                </button>
-            </div>
-        </div>
-    </div>
+<!-- Modal para eliminar punto -->
+<div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+<div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
+<h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
+<div id="infoTareaEliminar" class="bg-slate-50 rounded-xl p-4 mb-6 text-sm"></div>
+<div class="flex gap-3">
+<button onclick="cerrarModalEliminar()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
+Cancelar
+</button>
+<button id="btnConfirmarEliminar" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold uppercase transition-colors">
+Eliminar Permanentemente
+</button>
+</div>
+</div>
+</div>
 
-    <!-- Modal para seleccionar número de operarios -->
-    <div id="modalOperarios" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
-            <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">👥 Registro de Entrada</h3>
-            <p class="text-slate-600 text-center mb-8">¿Cuántos operarios van a trabajar?</p>
-            
-            <div class="grid grid-cols-2 gap-6">
-                <!-- 1 Operario -->
-                <button onclick="confirmarEntradaOperarios(1)" class="group relative bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
-                    <div class="flex flex-col items-center gap-4">
-                        <div class="text-6xl">👤</div>
-                        <div class="text-3xl font-black">1</div>
-                        <div class="text-sm font-bold uppercase tracking-wider">Operario</div>
-                    </div>
-                    <div class="absolute inset-0 rounded-2xl ring-4 ring-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </button>
-                
-                <!-- 2 Operarios -->
-                <button onclick="confirmarEntradaOperarios(2)" class="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
-                    <div class="flex flex-col items-center gap-4">
-                        <div class="text-6xl">👥</div>
-                        <div class="text-3xl font-black">2</div>
-                        <div class="text-sm font-bold uppercase tracking-wider">Operarios</div>
-                    </div>
-                    <div class="absolute inset-0 rounded-2xl ring-4 ring-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </button>
-            </div>
-            
-            <button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
-                Cancelar
-            </button>
-        </div>
-    </div>
+<!-- Modal para seleccionar número de operarios -->
+<div id="modalOperarios" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+<div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
+<h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">👥 Registro de Entrada</h3>
+<p class="text-slate-600 text-center mb-8">¿Cuántos operarios van a trabajar?</p>
+<div class="grid grid-cols-2 gap-6">
+<button onclick="confirmarEntradaOperarios(1)" class="group relative bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+<div class="flex flex-col items-center gap-4">
+<div class="text-6xl">👤</div>
+<div class="text-3xl font-black">1</div>
+<div class="text-sm font-bold uppercase tracking-wider">Operario</div>
+</div>
+<div class="absolute inset-0 rounded-2xl ring-4 ring-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<button onclick="confirmarEntradaOperarios(2)" class="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+<div class="flex flex-col items-center gap-4">
+<div class="text-6xl">👥</div>
+<div class="text-3xl font-black">2</div>
+<div class="text-sm font-bold uppercase tracking-wider">Operarios</div>
+</div>
+<div class="absolute inset-0 rounded-2xl ring-4 ring-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+</div>
+<button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">
+Cancelar
+</button>
+</div>
+</div>
 
-    <div class="max-w-7xl mx-auto">
-        <!-- Firebase Connection Indicator - Top Right -->
-        <div class="flex justify-end mb-4">
-            <div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
-                <div class="relative">
-                    <div id="firebaseLed" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                    <div id="firebaseLedPulse" class="absolute top-0 left-0 w-3 h-3 rounded-full bg-green-500 opacity-0 animate-ping"></div>
-                </div>
-                <span id="firebaseStatus" class="text-xs font-bold text-slate-600">Conectando...</span>
-            </div>
-        </div>
+<div class="max-w-7xl mx-auto">
+<!-- Firebase Connection Indicator -->
+<div class="flex justify-end mb-4">
+<div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
+<div class="relative">
+<div id="firebaseLed" class="w-3 h-3 rounded-full bg-gray-400"></div>
+<div id="firebaseLedPulse" class="absolute top-0 left-0 w-3 h-3 rounded-full bg-green-500 opacity-0 animate-ping"></div>
+</div>
+<span id="firebaseStatus" class="text-xs font-bold text-slate-600">Conectando...</span>
+</div>
+</div>
 
-        <!-- Header with Title and Buttons -->
-        <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <!-- Left: Back button and Title -->
-                <div class="flex items-center gap-4">
-                    <a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">
-                        ← Volver
-                    </a>
-                    <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dosmart <span class="text-amber-500">Production</span></h1>
-                </div>
-                
-                <!-- Right: Action buttons -->
-                <div class="flex flex-wrap justify-center gap-3">
-                <div id="cajaIncidencia" class="hidden bg-red-100 p-2 rounded-xl text-right"><span id="tiempoIncidencia" class="font-mono font-bold text-red-700"></span></div>
-                <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
-                <div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
-                
-                <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
-                <button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
-                <button id="btnPausa" onclick="togglePausa()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs"></button>
-                <button onclick="exportarExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase">Exportar a Excel</button>
-                </div>
-            </div>
-        </div>
+<!-- Header -->
+<div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
+<div class="flex flex-col md:flex-row justify-between items-center gap-4">
+<div class="flex items-center gap-4">
+<a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">
+← Volver
+</a>
+<h1 class="text-4xl font-black uppercase italic tracking-tighter">Dosmart <span class="text-amber-500">Production</span></h1>
+</div>
+<div class="flex flex-wrap justify-center gap-3">
+<div id="cajaIncidencia" class="hidden bg-red-100 p-2 rounded-xl text-right"><span id="tiempoIncidencia" class="font-mono font-bold text-red-700"></span></div>
+<div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
+<div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
+<button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
+<button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
+<button id="btnPausa" onclick="togglePausa()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs"></button>
+<button onclick="exportarExcel()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase">Exportar a Excel</button>
+</div>
+</div>
+</div>
 
-        <!-- Botones Entrada/Salida -->
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <button id="btnEntrada" onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
-            <button id="btnSalida" onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
-        </div>
+<!-- Botones Entrada/Salida -->
+<div class="grid grid-cols-2 gap-4 mb-6">
+<button id="btnEntrada" onclick="registrarJornada('INICIO')" class="bg-emerald-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-emerald-600 transition-colors">☀️ Entrada</button>
+<button id="btnSalida" onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
+</div>
 
-        <!-- Formulario Nueva Tarea -->
-        <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
-                <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
-                    <option>Adrian García</option>
-                    <option selected>Alberto Colmenero</option>
-                </select>
-            </div>
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
-                <input id="numSerie" type="text" onkeypress="handleKeyPress(event, 'codigo')" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
-            </div>
-            <div class="flex flex-col">
-                <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Tarea</label>
-                <input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
-            </div>
-            <button id="btnIniciarTarea" onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
-        </div>
+<!-- Formulario Nueva Tarea -->
+<div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
+<div class="flex flex-col">
+<label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
+<select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
+<option>Adrian García</option>
+<option selected>Alberto Colmenero</option>
+</select>
+</div>
+<div class="flex flex-col">
+<label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
+<input id="numSerie" type="text" onkeypress="handleKeyPress(event, 'codigo')" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
+</div>
+<div class="flex flex-col">
+<label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Tarea</label>
+<input id="codigo" type="text" onkeypress="handleKeyPress(event, null)" oninput="this.value = this.value.toUpperCase()" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400 uppercase">
+</div>
+<button id="btnIniciarTarea" onclick="iniciarTarea()" class="bg-amber-400 text-slate-900 font-black rounded-xl h-[56px] mt-5 hover:bg-slate-900 hover:text-white transition-all uppercase italic">Iniciar</button>
+</div>
 
-        <!-- Indicador Estado Línea -->
-        <div id="indicadorLinea" class="flex justify-center mb-6">
-            <span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>
-        </div>
+<!-- Indicador Estado Línea -->
+<div id="indicadorLinea" class="flex justify-center mb-6">
+<span class="inline-flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg">🔴 Línea Parada</span>
+</div>
 
-        <!-- TABLA TEMPORAL -->
-        <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
-            <div class="bg-slate-900 p-4 flex justify-between items-center">
-                <h3 class="text-amber-400 font-black uppercase text-sm">Tabla de Tareas (Temporal)</h3>
-                <div class="flex items-center gap-3">
-                    <input type="date" id="filtroFechaTabla" onchange="filtrarTablaTemporalPorFecha()" 
-                           class="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
-                    <button onclick="limpiarFiltroTabla()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                        🔄 Mostrar Todo
-                    </button>
-                    <span class="text-slate-400 text-xs">Se puede borrar sin afectar los gráficos</span>
-                </div>
-            </div>
-            <table id="tablaProduccion" class="w-full text-left">
-                <thead class="bg-slate-800 text-amber-400 text-[10px] font-black uppercase">
-                    <tr>
-                        <th class="p-4">Operario</th>
-                        <th class="p-4">Fecha</th>
-                        <th class="p-4">Serie</th>
-                        <th class="p-4">Tarea</th>
-                        <th class="p-4">H. Inicio</th>
-                        <th class="p-4">H. Fin</th>
-                        <th class="p-4 text-center">Tiempo</th>
-                        <th class="p-4 text-right">Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="cuerpoTabla" class="divide-y divide-slate-100"></tbody>
-            </table>
-        </div>
+<!-- TABLA DE TAREAS (sin palabra "Temporal") -->
+<div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200 mb-8">
+<div class="bg-slate-900 p-4 flex justify-between items-center">
+<h3 class="text-amber-400 font-black uppercase text-sm">Tabla de Tareas en Proceso</h3>
+<div class="flex items-center gap-3">
+<input type="date" id="filtroFechaTabla" onchange="filtrarTablaTemporalPorFecha()"
+class="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+<button onclick="limpiarFiltroTabla()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+🔄 Mostrar Todo
+</button>
+<span class="text-slate-400 text-xs">Se puede borrar sin afectar los gráficos</span>
+</div>
+</div>
+<table id="tablaProduccion" class="w-full text-left">
+<thead class="bg-slate-800 text-amber-400 text-[10px] font-black uppercase">
+<tr>
+<th class="p-4">Operario</th>
+<th class="p-4">Fecha</th>
+<th class="p-4">Serie</th>
+<th class="p-4">Tarea</th>
+<th class="p-4">H. Inicio</th>
+<th class="p-4">H. Fin</th>
+<th class="p-4 text-center">Tiempo</th>
+<th class="p-4 text-right">Acción</th>
+</tr>
+</thead>
+<tbody id="cuerpoTabla" class="divide-y divide-slate-100"></tbody>
+</table>
+</div>
 
-        <!-- BOTÓN FORZAR PARADA -->
-        <div class="flex justify-end mb-6">
-            <button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">
-                ⛔ Forzar Parada de Línea
-            </button>
-        </div>
+<!-- BOTÓN FORZAR PARADA -->
+<div class="flex justify-end mb-6">
+<button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">
+⛔ Forzar Parada de Línea
+</button>
+</div>
 
-        <!-- GRÁFICO 1: TAREAS INDIVIDUALES -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <div>
-                    <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
-                    <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos | Eje X = orden cronológico</p>
-                    <p class="text-xs text-amber-600 font-bold mt-1">💡 Solo muestra tareas finalizadas con el botón "Fin"</p>
-                </div>
-                
-                <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
-                    <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" 
-                           class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-                </div>
-            </div>
-            
-            <div class="h-96 w-full">
-                <canvas id="graficoTareas"></canvas>
-            </div>
-            
-            <div class="flex justify-between items-center mt-4">
-                <div class="flex justify-center gap-8">
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded-full bg-blue-500"></div>
-                        <span class="font-bold text-slate-700">Adrian García</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded-full bg-red-500"></div>
-                        <span class="font-bold text-slate-700">Alberto Colmenero</span>
-                    </div>
-                </div>
-                <div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">
-                    Cargando...
-                </div>
-            </div>
-        </div>
+<!-- GRÁFICO 1: TAREAS INDIVIDUALES -->
+<div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
+<div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+<div>
+<h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
+<p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos | Eje X = orden cronológico</p>
+<p class="text-xs text-amber-600 font-bold mt-1">💡 Solo muestra tareas finalizadas con el botón "Fin"</p>
+</div>
+<div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+<label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
+<input type="date" id="filtroFecha" onchange="filtrarPorFecha()"
+class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+</div>
+</div>
+<div class="h-96 w-full">
+<canvas id="graficoTareas"></canvas>
+</div>
+<div class="flex justify-between items-center mt-4">
+<div class="flex justify-center gap-8">
+<div class="flex items-center gap-2">
+<div class="w-4 h-4 rounded-full bg-blue-500"></div>
+<span class="font-bold text-slate-700">Adrian García</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-4 h-4 rounded-full bg-red-500"></div>
+<span class="font-bold text-slate-700">Alberto Colmenero</span>
+</div>
+</div>
+<div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">
+Cargando...
+</div>
+</div>
+</div>
 
-        <!-- GRÁFICO 2: PRODUCTIVIDAD DIARIA -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <div>
-                    <h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
-                    <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / ((Salida - Entrada) × Nº Operarios)</p>
-                    <p class="text-xs text-amber-600 font-bold mt-1">💡 Haz clic en un punto para eliminar TODAS las tareas de ese día</p>
-                </div>
-                
-                <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
-                    <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" 
-                            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-                </div>
-            </div>
-            
-            <div class="h-96 w-full">
-                <canvas id="graficoProductividadDiaria"></canvas>
-            </div>
-            
-            <div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
-                <div class="flex justify-center gap-8">
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded-full bg-blue-500"></div>
-                        <span class="font-bold text-slate-700">Productividad</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
-                        <span class="font-bold text-slate-700">Media</span>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <div id="mediaProductividadDiaria" class="text-lg font-black text-amber-500">
-                        Media del mes: 0.00
-                    </div>
-                    <div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">
-                        Días con datos: 0
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- GRÁFICO 2: PRODUCTIVIDAD DIARIA -->
+<div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
+<div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+<div>
+<h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
+<p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / ((Salida - Entrada) × Nº Operarios)</p>
+<p class="text-xs text-amber-600 font-bold mt-1">💡 Haz clic en un punto para eliminar TODAS las tareas de ese día</p>
+</div>
+<div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+<label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
+<input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()"
+class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+</div>
+</div>
+<div class="h-96 w-full">
+<canvas id="graficoProductividadDiaria"></canvas>
+</div>
+<div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
+<div class="flex justify-center gap-8">
+<div class="flex items-center gap-2">
+<div class="w-4 h-4 rounded-full bg-blue-500"></div>
+<span class="font-bold text-slate-700">Productividad</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
+<span class="font-bold text-slate-700">Media</span>
+</div>
+</div>
+<div class="text-right">
+<div id="mediaProductividadDiaria" class="text-lg font-black text-amber-500">
+Media del mes: 0.00
+</div>
+<div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">
+Días con datos: 0
+</div>
+</div>
+</div>
+</div>
 
-        <!-- GRÁFICO 3: PRODUCTIVIDAD MENSUAL -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <div>
-                    <h2 class="text-2xl font-black uppercase italic text-slate-800">📈 Productividad Mensual</h2>
-                    <p class="text-xs text-slate-500 mt-1">Media de productividad de cada mes completo</p>
-                </div>
-                
-                <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                    <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
-                    <select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" 
-                            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-                        <option value="2024">2024</option>
-                        <option value="2025" selected>2025</option>
-                        <option value="2026">2026</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="h-96 w-full">
-                <canvas id="graficoProductividadMensual"></canvas>
-            </div>
-            
-            <div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
-                <div class="flex justify-center gap-6">
-                    <div class="flex items-center gap-2">
-                        <div class="w-4 h-4 rounded bg-blue-500"></div>
-                        <span class="font-bold text-slate-700 text-sm">Productividad</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
-                        <span class="font-bold text-slate-700 text-sm">Media</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-1 bg-gradient-to-r from-green-500 to-red-500"></div>
-                        <span class="font-bold text-slate-700 text-sm">Tendencia</span>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <div id="mediaProductividadAnual" class="text-lg font-black text-amber-500">
-                        Media del año: 0.00
-                    </div>
-                    <div id="mesesConDatos" class="text-xs font-bold text-slate-500">
-                        Meses con datos: 0
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- GRÁFICO 3: PRODUCTIVIDAD MENSUAL -->
+<div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
+<div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+<div>
+<h2 class="text-2xl font-black uppercase italic text-slate-800">📈 Productividad Mensual</h2>
+<p class="text-xs text-slate-500 mt-1">Media de productividad de cada mes (tiempo real)</p>
+</div>
+<div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+<label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
+<select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()"
+class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+<option value="2024">2024</option>
+<option value="2025" selected>2025</option>
+<option value="2026">2026</option>
+</select>
+</div>
+</div>
+<div class="h-96 w-full">
+<canvas id="graficoProductividadMensual"></canvas>
+</div>
+<div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
+<div class="flex justify-center gap-6">
+<div class="flex items-center gap-2">
+<div class="w-4 h-4 rounded bg-blue-500"></div>
+<span class="font-bold text-slate-700 text-sm">Productividad</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div>
+<span class="font-bold text-slate-700 text-sm">Media</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-1 bg-gradient-to-r from-green-500 to-red-500"></div>
+<span class="font-bold text-slate-700 text-sm">Tendencia</span>
+</div>
+</div>
+<div class="text-right">
+<div id="mediaProductividadAnual" class="text-lg font-black text-amber-500">
+Media del año: 0.00
+</div>
+<div id="mesesConDatos" class="text-xs font-bold text-slate-500">
+Meses con datos: 0
+</div>
+</div>
+</div>
+</div>
 
-        <!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-            <!-- TABLA MANTENIMIENTO -->
-            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
-                <div class="bg-blue-500 p-4 flex items-center justify-between">
-                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        🔧 Mantenimiento
-                    </h3>
-                    <button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">
-                        + Añadir tarea
-                    </button>
-                </div>
-                <div class="max-h-96 overflow-y-auto">
-                    <table class="w-full text-left">
-                        <thead class="bg-blue-100 text-blue-800 text-[10px] font-black uppercase sticky top-0">
-                            <tr>
-                                <th class="p-4 w-32">Fecha</th>
-                                <th class="p-4">Descripción</th>
-                                <th class="p-4 text-right w-40">Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
-                            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<!-- TABLAS DE MANTENIMIENTO E INCIDENCIAS -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+<!-- TABLA MANTENIMIENTO -->
+<div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-blue-200">
+<div class="bg-blue-500 p-4 flex items-center justify-between">
+<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
+🔧 Mantenimiento
+</h3>
+<button onclick="agregarMantenimiento()" class="bg-white text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow-sm transition-colors flex items-center gap-1">
++ Añadir tarea
+</button>
+</div>
+<div class="max-h-96 overflow-y-auto">
+<table class="w-full text-left">
+<thead class="bg-blue-100 text-blue-800 text-[10px] font-black uppercase sticky top-0">
+<tr>
+<th class="p-4 w-32">Fecha</th>
+<th class="p-4">Descripción</th>
+<th class="p-4 text-right w-40">Estado</th>
+</tr>
+</thead>
+<tbody id="cuerpoMantenimiento" class="divide-y divide-slate-100">
+<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
 
-            <!-- TABLA INCIDENCIAS -->
-            <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
-                <div class="bg-orange-500 p-4">
-                    <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
-                        ⚠️ Registro de Incidencias
-                    </h3>
-                </div>
-                <div class="max-h-96 overflow-y-auto">
-                    <table class="w-full text-left">
-                        <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
-                            <tr>
-                                <th class="p-4 w-32">Fecha</th>
-                                <th class="p-4">Motivo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-                            <tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+<!-- TABLA INCIDENCIAS -->
+<div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
+<div class="bg-orange-500 p-4">
+<h3 class="text-white font-black uppercase text-sm flex items-center gap-2">
+⚠️ Registro de Incidencias
+</h3>
+</div>
+<div class="max-h-96 overflow-y-auto">
+<table class="w-full text-left">
+<thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
+<tr>
+<th class="p-4 w-32">Fecha</th>
+<th class="p-4">Motivo</th>
+</tr>
+</thead>
+<tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
+<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
 </body>
 </html>
