@@ -70,6 +70,683 @@ let chartProductividadMensual = null;
 let todasLasTareas = {};
 let primeraVez = true;
 
+// ============================================
+// FUNCIONES DE COMPARTIR/EMBED
+// ============================================
+
+window.mostrarModalEmbed = function(tipoGrafico) {
+  const modal = document.getElementById('modalEmbed');
+  const titulo = document.getElementById('tituloEmbed');
+  const codigoTextarea = document.getElementById('codigoEmbed');
+  const previewDiv = document.getElementById('previewEmbed');
+  
+  let tituloTexto = '';
+  let codigoHTML = '';
+  
+  switch(tipoGrafico) {
+    case 'tareas':
+      tituloTexto = 'Tiempo por Tarea Individual';
+      codigoHTML = generarCodigoEmbedTareas();
+      break;
+    case 'productividad-diaria':
+      tituloTexto = 'Productividad Diaria';
+      codigoHTML = generarCodigoEmbedProductividadDiaria();
+      break;
+    case 'productividad-mensual':
+      tituloTexto = 'Productividad Mensual';
+      codigoHTML = generarCodigoEmbedProductividadMensual();
+      break;
+  }
+  
+  titulo.textContent = `📊 Compartir: ${tituloTexto}`;
+  codigoTextarea.value = codigoHTML;
+  
+  // Generar preview
+  previewDiv.innerHTML = `<iframe srcdoc="${codigoHTML.replace(/"/g, '&quot;')}" style="width:100%;height:400px;border:1px solid #e2e8f0;border-radius:8px;"></iframe>`;
+  
+  modal.classList.remove('hidden');
+};
+
+window.cerrarModalEmbed = function() {
+  document.getElementById('modalEmbed').classList.add('hidden');
+};
+
+window.copiarCodigoEmbed = function() {
+  const textarea = document.getElementById('codigoEmbed');
+  textarea.select();
+  document.execCommand('copy');
+  
+  const btn = document.getElementById('btnCopiarEmbed');
+  const originalText = btn.textContent;
+  btn.textContent = '✓ Copiado!';
+  btn.classList.add('bg-green-500');
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.classList.remove('bg-green-500');
+  }, 2000);
+};
+
+function generarCodigoEmbedTareas() {
+  const fechaInput = document.getElementById('filtroFecha').value;
+  const fechaParam = fechaInput ? `&fecha=${fechaInput}` : '';
+  
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tiempo por Tarea - Dosmart</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"><\/script>
+<style>
+body { margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+.container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+h2 { margin: 0; color: #1e293b; font-size: 1.25rem; font-weight: 800; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.chart-container { position: relative; height: 400px; }
+.info { display: flex; gap: 20px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+.info-item { display: flex; align-items: center; gap: 8px; }
+.info-color { width: 12px; height: 12px; border-radius: 50%; }
+.info-label { font-size: 12px; color: #475569; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h2>⏱️ Tiempo por Tarea Individual</h2>
+    <div class="status">
+      <span class="status-dot"></span>
+      <span>Actualizando en tiempo real</span>
+    </div>
+  </div>
+  <div class="chart-container">
+    <canvas id="grafico"></canvas>
+  </div>
+  <div class="info">
+    <div class="info-item">
+      <div class="info-color" style="background:#3b82f6"></div>
+      <span class="info-label">Adrian García</span>
+    </div>
+    <div class="info-item">
+      <div class="info-color" style="background:#ef4444"></div>
+      <span class="info-label">Alberto Colmenero</span>
+    </div>
+    <div class="info-item">
+      <div class="info-color" style="background:#fbbf24"></div>
+      <span class="info-label">Tiempo Medio</span>
+    </div>
+  </div>
+</div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",
+  authDomain: "dosmart-2f395.firebaseapp.com",
+  databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "dosmart-2f395",
+  storageBucket: "dosmart-2f395.appspot.com",
+  appId: "1:854942502621:web:5c1a7428f7492c3a382664"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const tareasRef = db.ref('historial_tareas');
+
+const urlParams = new URLSearchParams(window.location.search);
+const fechaFiltro = urlParams.get('fecha') || null;
+
+function convertirFechaHTML(fechaHTML) {
+  const partes = fechaHTML.split('-');
+  return partes[2] + '/' + partes[1] + '/' + partes[0];
+}
+
+function convertirHoraAMinutos(horaStr) {
+  if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
+  const partes = horaStr.split(':').map(Number);
+  return partes[0] * 60 + partes[1] + (partes[2] || 0) / 60;
+}
+
+let chartInstance = null;
+
+function actualizarGrafico(datos) {
+  const tareasAdrian = [];
+  const tareasAlberto = [];
+  
+  const tareasProduccion = Object.entries(datos || {})
+    .filter(([id, t]) => {
+      const esProduccion = t.tipo === 'produccion';
+      const tieneTiempo = t.total && !isNaN(parseInt(t.total)) && parseInt(t.total) > 0;
+      const cumpleFecha = !fechaFiltro || t.fecha === convertirFechaHTML(fechaFiltro);
+      return esProduccion && tieneTiempo && cumpleFecha;
+    })
+    .map(([id, t]) => ({
+      ...t,
+      tiempoNum: parseInt(t.total),
+      horaMinutos: convertirHoraAMinutos(t.inicio)
+    }))
+    .sort((a, b) => a.horaMinutos - b.horaMinutos);
+
+  tareasProduccion.forEach((t, index) => {
+    const punto = { x: index, y: t.tiempoNum, tarea: t.codigo, serie: t.numSerie, hora: t.inicio };
+    if (t.operario === 'Adrian García') tareasAdrian.push(punto);
+    else if (t.operario === 'Alberto Colmenero') tareasAlberto.push(punto);
+  });
+
+  const todosTiempos = [...tareasAdrian, ...tareasAlberto].map(t => t.y);
+  const tiempoMedio = todosTiempos.length > 0 ? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length : 0;
+  const maxX = Math.max(tareasAdrian.length, tareasAlberto.length) - 1;
+  const lineaMedia = maxX >= 0 ? [{ x: 0, y: tiempoMedio }, { x: maxX, y: tiempoMedio }] : [];
+
+  const ctx = document.getElementById('grafico').getContext('2d');
+  
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Adrian García', data: tareasAdrian, backgroundColor: '#3b82f6', borderColor: '#2563eb', borderWidth: 2, pointRadius: 6, pointHoverRadius: 10 },
+        { label: 'Alberto Colmenero', data: tareasAlberto, backgroundColor: '#ef4444', borderColor: '#dc2626', borderWidth: 2, pointRadius: 6, pointHoverRadius: 10 },
+        { label: 'Tiempo Medio', data: lineaMedia, type: 'line', borderColor: '#fbbf24', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => 'Tarea #' + (ctx[0].parsed.x + 1),
+            label: (ctx) => {
+              const p = ctx.raw;
+              return [p.tarea, 'Serie: ' + p.serie, 'Hora: ' + p.hora, 'Tiempo: ' + p.y + ' min'];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Número de tarea' }, ticks: { callback: v => v + 1 } },
+        y: { beginAtZero: true, title: { display: true, text: 'Tiempo (minutos)' } }
+      }
+    }
+  });
+}
+
+tareasRef.on('value', (snapshot) => {
+  actualizarGrafico(snapshot.val());
+});
+<\/script>
+</body>
+</html>`;
+}
+
+function generarCodigoEmbedProductividadDiaria() {
+  const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
+  const [anio, mes] = inputMes ? inputMes.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1];
+  
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Productividad Diaria - Dosmart</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"><\/script>
+<style>
+body { margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+.container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+h2 { margin: 0; color: #1e293b; font-size: 1.25rem; font-weight: 800; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.chart-container { position: relative; height: 400px; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+.metric { text-align: center; }
+.metric-value { font-size: 24px; font-weight: 800; color: #3b82f6; }
+.metric-label { font-size: 12px; color: #64748b; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h2>📊 Productividad Diaria</h2>
+    <div class="status">
+      <span class="status-dot"></span>
+      <span>Actualizando en tiempo real</span>
+    </div>
+  </div>
+  <div class="chart-container">
+    <canvas id="grafico"></canvas>
+  </div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-value" id="mediaMes">--</div>
+      <div class="metric-label">Media del Mes</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value" id="diasDatos">--</div>
+      <div class="metric-label">Días con Datos</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value" id="mejorDia">--</div>
+      <div class="metric-label">Mejor Día</div>
+    </div>
+  </div>
+</div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",
+  authDomain: "dosmart-2f395.firebaseapp.com",
+  databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "dosmart-2f395",
+  storageBucket: "dosmart-2f395.appspot.com",
+  appId: "1:854942502621:web:5c1a7428f7492c3a382664"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const tareasRef = db.ref('historial_tareas');
+
+const ANIO = ${anio};
+const MES = ${mes};
+
+function convertirHoraAMinutos(horaStr) {
+  if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
+  const partes = horaStr.split(':').map(Number);
+  return partes[0] * 60 + partes[1] + (partes[2] || 0) / 60;
+}
+
+function parsearFecha(fechaStr) {
+  if (!fechaStr || !fechaStr.includes('/')) return null;
+  const [dia, mes, anio] = fechaStr.split('/').map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+function sumarDiaAFecha(fechaStr, dias) {
+  const f = parsearFecha(fechaStr);
+  f.setDate(f.getDate() + dias);
+  return String(f.getDate()).padStart(2, '0') + '/' + String(f.getMonth() + 1).padStart(2, '0') + '/' + f.getFullYear();
+}
+
+let chartInstance = null;
+
+function calcularProductividad(datos) {
+  const diasDelMes = new Date(ANIO, MES, 0).getDate();
+  const datosProductividad = new Array(diasDelMes).fill(null);
+  const tareasPorDiaOperario = {};
+  const jornadasPorDiaOperario = {};
+
+  Object.values(datos || {}).forEach(t => {
+    if (t.tipo !== 'produccion' && t.tipo !== 'jornada') return;
+
+    let fechaBase = t.fecha;
+    
+    if (t.tipo === 'produccion' && t.fin && t.fin !== '--:--' && t.fin !== '---') {
+      const hInicio = convertirHoraAMinutos(t.inicio);
+      const hFin = convertirHoraAMinutos(t.fin);
+      
+      if (hFin < hInicio) {
+        const fechaFin = sumarDiaAFecha(fechaBase, 1);
+        const keyInicio = fechaBase + '-' + t.operario;
+        const keyFin = fechaFin + '-' + t.operario;
+        tareasPorDiaOperario[keyInicio] = (tareasPorDiaOperario[keyInicio] || 0) + 0.5;
+        tareasPorDiaOperario[keyFin] = (tareasPorDiaOperario[keyFin] || 0) + 0.5;
+        return;
+      }
+    }
+
+    const fechaObj = parsearFecha(fechaBase);
+    if (!fechaObj || fechaObj.getFullYear() !== ANIO || fechaObj.getMonth() !== MES - 1) return;
+
+    const key = fechaBase + '-' + t.operario;
+
+    if (t.tipo === 'produccion') {
+      tareasPorDiaOperario[key] = (tareasPorDiaOperario[key] || 0) + 1;
+    } else if (t.tipo === 'jornada') {
+      if (!jornadasPorDiaOperario[key]) jornadasPorDiaOperario[key] = { entradas: [], salidas: [] };
+      if (t.codigo && t.codigo.includes('ENTRADA')) {
+        jornadasPorDiaOperario[key].entradas.push({ hora: t.inicio, numOperarios: t.numOperarios || 1 });
+      } else if (t.codigo && t.codigo.includes('SALIDA')) {
+        jornadasPorDiaOperario[key].salidas = t.inicio;
+      }
+    }
+  });
+
+  for (let dia = 1; dia <= diasDelMes; dia++) {
+    const fechaStr = String(dia).padStart(2, '0') + '/' + String(MES).padStart(2, '0') + '/' + ANIO;
+    const productividadesDia = [];
+
+    ['Adrian García', 'Alberto Colmenero'].forEach(operario => {
+      const key = fechaStr + '-' + operario;
+      const countTareas = tareasPorDiaOperario[key] || 0;
+      const jornada = jornadasPorDiaOperario[key];
+
+      if (countTareas > 0 && jornada && jornada.entradas.length > 0 && jornada.salidas) {
+        const salidaMin = convertirHoraAMinutos(jornada.salidas);
+        let horas1Op = 0, horas2Op = 0;
+
+        jornada.entradas.forEach((entrada, index) => {
+          const entradaMin = convertirHoraAMinutos(entrada.hora);
+          const finPeriodoMin = index < jornada.entradas.length - 1 ? 
+            convertirHoraAMinutos(jornada.entradas[index + 1].hora) : salidaMin;
+          const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+          if (entrada.numOperarios === 1) horas1Op += horasPeriodo;
+          else if (entrada.numOperarios === 2) horas2Op += horasPeriodo;
+        });
+
+        const denominador = horas1Op + (horas2Op * 2);
+        if (denominador > 0) {
+          productividadesDia.push((countTareas * 7) / denominador);
+        }
+      }
+    });
+
+    if (productividadesDia.length > 0) {
+      datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
+    }
+  }
+  
+  return { datosProductividad, diasDelMes };
+}
+
+function actualizarGrafico(datos) {
+  const { datosProductividad, diasDelMes } = calcularProductividad(datos);
+  const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
+  const media = todosLosValores.length > 0 ? todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
+  const lineaMedia = new Array(diasDelMes).fill(media);
+  const labels = Array.from({ length: diasDelMes }, (_, i) => i + 1);
+  
+  // Actualizar métricas
+  document.getElementById('mediaMes').textContent = media.toFixed(2);
+  document.getElementById('diasDatos').textContent = todosLosValores.length;
+  const maxVal = Math.max(...todosLosValores.filter(v => v !== null));
+  const maxIndex = datosProductividad.indexOf(maxVal);
+  document.getElementById('mejorDia').textContent = maxVal > 0 ? (maxIndex + 1) : '--';
+
+  const ctx = document.getElementById('grafico').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Productividad', data: datosProductividad, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 3, pointRadius: 5, fill: true, tension: 0.3, spanGaps: true },
+        { label: 'Media', data: lineaMedia, borderColor: '#fbbf24', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => ctx.raw ? ctx.raw.toFixed(2) + ' tareas/hora' : 'Sin datos' } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Días del mes' } },
+        y: { beginAtZero: true, title: { display: true, text: 'Productividad' } }
+      }
+    }
+  });
+}
+
+tareasRef.on('value', (snapshot) => {
+  actualizarGrafico(snapshot.val());
+});
+<\/script>
+</body>
+</html>`;
+}
+
+function generarCodigoEmbedProductividadMensual() {
+  const anio = document.getElementById('selectAnioProductividadMensual').value || new Date().getFullYear();
+  
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Productividad Mensual - Dosmart</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"><\/script>
+<style>
+body { margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+.container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+h2 { margin: 0; color: #1e293b; font-size: 1.25rem; font-weight: 800; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.chart-container { position: relative; height: 400px; }
+.trend { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; }
+.trend-up { color: #10b981; }
+.trend-down { color: #ef4444; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h2>📈 Productividad Mensual ${anio}</h2>
+    <div class="status">
+      <span class="status-dot"></span>
+      <span>Actualizando en tiempo real</span>
+    </div>
+  </div>
+  <div class="chart-container">
+    <canvas id="grafico"></canvas>
+  </div>
+  <div class="trend" id="tendencia">
+    Calculando tendencia...
+  </div>
+</div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",
+  authDomain: "dosmart-2f395.firebaseapp.com",
+  databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "dosmart-2f395",
+  storageBucket: "dosmart-2f395.appspot.com",
+  appId: "1:854942502621:web:5c1a7428f7492c3a382664"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const tareasRef = db.ref('historial_tareas');
+
+const ANIO = ${anio};
+const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function convertirHoraAMinutos(horaStr) {
+  if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
+  const partes = horaStr.split(':').map(Number);
+  return partes[0] * 60 + partes[1] + (partes[2] || 0) / 60;
+}
+
+function parsearFecha(fechaStr) {
+  if (!fechaStr || !fechaStr.includes('/')) return null;
+  const [dia, mes, anio] = fechaStr.split('/').map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+function sumarDiaAFecha(fechaStr, dias) {
+  const f = parsearFecha(fechaStr);
+  f.setDate(f.getDate() + dias);
+  return String(f.getDate()).padStart(2, '0') + '/' + String(f.getMonth() + 1).padStart(2, '0') + '/' + f.getFullYear();
+}
+
+function calcularProductividadDiaria(datos, anio, mes) {
+  const diasDelMes = new Date(anio, mes, 0).getDate();
+  const datosProductividad = new Array(diasDelMes).fill(null);
+  const tareasPorDiaOperario = {};
+  const jornadasPorDiaOperario = {};
+
+  Object.values(datos || {}).forEach(t => {
+    if (t.tipo !== 'produccion' && t.tipo !== 'jornada') return;
+
+    let fechaBase = t.fecha;
+    
+    if (t.tipo === 'produccion' && t.fin && t.fin !== '--:--' && t.fin !== '---') {
+      const hInicio = convertirHoraAMinutos(t.inicio);
+      const hFin = convertirHoraAMinutos(t.fin);
+      
+      if (hFin < hInicio) {
+        const fechaFin = sumarDiaAFecha(fechaBase, 1);
+        const keyInicio = fechaBase + '-' + t.operario;
+        const keyFin = fechaFin + '-' + t.operario;
+        tareasPorDiaOperario[keyInicio] = (tareasPorDiaOperario[keyInicio] || 0) + 0.5;
+        tareasPorDiaOperario[keyFin] = (tareasPorDiaOperario[keyFin] || 0) + 0.5;
+        return;
+      }
+    }
+
+    const fechaObj = parsearFecha(fechaBase);
+    if (!fechaObj || fechaObj.getFullYear() !== anio || fechaObj.getMonth() !== mes - 1) return;
+
+    const key = fechaBase + '-' + t.operario;
+
+    if (t.tipo === 'produccion') {
+      tareasPorDiaOperario[key] = (tareasPorDiaOperario[key] || 0) + 1;
+    } else if (t.tipo === 'jornada') {
+      if (!jornadasPorDiaOperario[key]) jornadasPorDiaOperario[key] = { entradas: [], salidas: [] };
+      if (t.codigo && t.codigo.includes('ENTRADA')) {
+        jornadasPorDiaOperario[key].entradas.push({ hora: t.inicio, numOperarios: t.numOperarios || 1 });
+      } else if (t.codigo && t.codigo.includes('SALIDA')) {
+        jornadasPorDiaOperario[key].salidas = t.inicio;
+      }
+    }
+  });
+
+  for (let dia = 1; dia <= diasDelMes; dia++) {
+    const fechaStr = String(dia).padStart(2, '0') + '/' + String(mes).padStart(2, '0') + '/' + anio;
+    const productividadesDia = [];
+
+    ['Adrian García', 'Alberto Colmenero'].forEach(operario => {
+      const key = fechaStr + '-' + operario;
+      const countTareas = tareasPorDiaOperario[key] || 0;
+      const jornada = jornadasPorDiaOperario[key];
+
+      if (countTareas > 0 && jornada && jornada.entradas.length > 0 && jornada.salidas) {
+        const salidaMin = convertirHoraAMinutos(jornada.salidas);
+        let horas1Op = 0, horas2Op = 0;
+
+        jornada.entradas.forEach((entrada, index) => {
+          const entradaMin = convertirHoraAMinutos(entrada.hora);
+          const finPeriodoMin = index < jornada.entradas.length - 1 ? 
+            convertirHoraAMinutos(jornada.entradas[index + 1].hora) : salidaMin;
+          const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
+          if (entrada.numOperarios === 1) horas1Op += horasPeriodo;
+          else if (entrada.numOperarios === 2) horas2Op += horasPeriodo;
+        });
+
+        const denominador = horas1Op + (horas2Op * 2);
+        if (denominador > 0) {
+          productividadesDia.push((countTareas * 7) / denominador);
+        }
+      }
+    });
+
+    if (productividadesDia.length > 0) {
+      datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
+    }
+  }
+  
+  return { datosProductividad, diasDelMes };
+}
+
+function calcularTendencia(datos) {
+  const puntos = datos.map((y, x) => ({ x, y })).filter(p => p.y !== null && !isNaN(p.y));
+  if (puntos.length < 2) return { tendencia: [], pendiente: 0 };
+
+  const n = puntos.length;
+  const sumaX = puntos.reduce((sum, p) => sum + p.x, 0);
+  const sumaY = puntos.reduce((sum, p) => sum + p.y, 0);
+  const sumaXY = puntos.reduce((sum, p) => sum + p.x * p.y, 0);
+  const sumaX2 = puntos.reduce((sum, p) => sum + p.x * p.x, 0);
+
+  const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
+  const intercept = (sumaY - pendiente * sumaX) / n;
+
+  const tendencia = datos.map((_, x) => datos[x] === null ? null : pendiente * x + intercept);
+  return { tendencia, pendiente };
+}
+
+let chartInstance = null;
+
+function actualizarGrafico(datos) {
+  const meses = Array.from({ length: 12 }, (_, i) => i + 1);
+  const datosProductividad = new Array(12).fill(null);
+
+  meses.forEach(mes => {
+    const { datosProductividad: diasMes } = calcularProductividadDiaria(datos, ANIO, mes);
+    const valoresMes = diasMes.filter(v => v !== null && !isNaN(v));
+    if (valoresMes.length > 0) {
+      datosProductividad[mes - 1] = valoresMes.reduce((a, b) => a + b, 0) / valoresMes.length;
+    }
+  });
+
+  const todosLosValores = datosProductividad.filter(v => v !== null && !isNaN(v));
+  const media = todosLosValores.length > 0 ? todosLosValores.reduce((a, b) => a + b, 0) / todosLosValores.length : 0;
+  const { tendencia, pendiente } = calcularTendencia(datosProductividad);
+  const esTendenciaPositiva = pendiente > 0;
+  
+  // Actualizar indicador de tendencia
+  const trendDiv = document.getElementById('tendencia');
+  trendDiv.innerHTML = esTendenciaPositiva ? 
+    '<span class="trend-up">↗ Tendencia Positiva</span> <span>Media Anual: ' + media.toFixed(2) + '</span>' :
+    '<span class="trend-down">↘ Tendencia Negativa</span> <span>Media Anual: ' + media.toFixed(2) + '</span>';
+
+  const lineaMedia = new Array(12).fill(media);
+  const colorTendencia = esTendenciaPositiva ? '#10b981' : '#ef4444';
+
+  const ctx = document.getElementById('grafico').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Productividad', data: datosProductividad.map((val, idx) => val !== null ? { x: idx, y: val } : null).filter(p => p !== null), backgroundColor: '#3b82f6', borderColor: '#2563eb', pointRadius: 8, showLine: false },
+        { label: 'Media', data: lineaMedia.map((val, idx) => ({ x: idx, y: val })).filter(p => p.y > 0), type: 'line', borderColor: '#fbbf24', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, fill: false },
+        { label: 'Tendencia', data: tendencia.map((val, idx) => val !== null ? { x: idx, y: val } : null).filter(p => p !== null), type: 'line', borderColor: colorTendencia, borderWidth: 2, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { 
+          callbacks: { 
+            title: (ctx) => labels[ctx[0].parsed.x],
+            label: (ctx) => ctx.raw?.y ? ctx.raw.y.toFixed(2) + ' tareas/hora' : 'Sin datos' 
+          } 
+        }
+      },
+      scales: {
+        x: { type: 'linear', min: 0, max: 11, ticks: { stepSize: 1, callback: v => labels[v] || '' }, title: { display: true, text: 'Meses' } },
+        y: { beginAtZero: true, title: { display: true, text: 'Productividad Media' } }
+      }
+    }
+  });
+}
+
+tareasRef.on('value', (snapshot) => {
+  actualizarGrafico(snapshot.val());
+});
+<\/script>
+</body>
+</html>`;
+}
+
 function actualizarEstadoBotones() {
   const btnPausa = document.getElementById('btnPausa');
   const btnIncidencia = document.getElementById('btnIncidencia');
@@ -1716,6 +2393,32 @@ window.exportarExcel = async () => {
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
 
+<!-- Modal Embed -->
+<div id="modalEmbed" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 transform transition-all">
+    <div class="flex justify-between items-center mb-4">
+      <h3 id="tituloEmbed" class="text-xl font-black uppercase italic text-slate-800">📊 Compartir Gráfico</h3>
+      <button onclick="cerrarModalEmbed()" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <label class="text-xs font-bold text-slate-500 uppercase mb-2 block">Código HTML para incrustar:</label>
+        <textarea id="codigoEmbed" readonly class="w-full h-64 bg-slate-900 text-green-400 font-mono text-xs p-4 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"></textarea>
+        <button id="btnCopiarEmbed" onclick="copiarCodigoEmbed()" class="mt-3 w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold py-3 rounded-xl uppercase transition-colors">📋 Copiar Código</button>
+      </div>
+      
+      <div>
+        <label class="text-xs font-bold text-slate-500 uppercase mb-2 block">Vista previa:</label>
+        <div id="previewEmbed" class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+          <!-- El iframe se insertará aquí -->
+        </div>
+        <p class="text-xs text-slate-400 mt-2 italic">El gráfico se actualizará en tiempo real en cualquier página donde lo incrustes.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
     <h3 class="text-xl font-black uppercase italic text-slate-800 mb-4">🗑️ Eliminar del Historial</h3>
@@ -1837,15 +2540,21 @@ window.exportarExcel = async () => {
     <button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">⛔ Forzar Parada de Línea</button>
   </div>
 
+  <!-- GRÁFICO 1: Tiempo por Tarea -->
   <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
       <div>
         <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
         <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos</p>
       </div>
-      <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-        <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
-        <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+          <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
+          <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <button onclick="mostrarModalEmbed('tareas')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2" title="Compartir/Embed">
+          🔗 Compartir
+        </button>
       </div>
     </div>
     <div class="h-96 w-full">
@@ -1866,15 +2575,21 @@ window.exportarExcel = async () => {
     </div>
   </div>
 
+  <!-- GRÁFICO 2: Productividad Diaria -->
   <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
       <div>
         <h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
         <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Horas × Nº Operarios)</p>
       </div>
-      <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-        <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
-        <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+          <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
+          <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <button onclick="mostrarModalEmbed('productividad-diaria')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2" title="Compartir/Embed">
+          🔗 Compartir
+        </button>
       </div>
     </div>
     <div class="h-96 w-full">
@@ -1898,19 +2613,25 @@ window.exportarExcel = async () => {
     </div>
   </div>
 
+  <!-- GRÁFICO 3: Productividad Mensual -->
   <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
       <div>
         <h2 class="text-2xl font-black uppercase italic text-slate-800">📈 Productividad Mensual</h2>
         <p class="text-xs text-slate-500 mt-1">Media de productividad de cada mes</p>
       </div>
-      <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-        <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
-        <select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-          <option value="2024">2024</option>
-          <option value="2025" selected>2025</option>
-          <option value="2026">2026</option>
-        </select>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+          <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
+          <select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="2024">2024</option>
+            <option value="2025" selected>2025</option>
+            <option value="2026">2026</option>
+          </select>
+        </div>
+        <button onclick="mostrarModalEmbed('productividad-mensual')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2" title="Compartir/Embed">
+          🔗 Compartir
+        </button>
       </div>
     </div>
     <div class="h-96 w-full">
