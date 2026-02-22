@@ -47,11 +47,11 @@ const state = {
     entradaLineaHoy: null,
     salidaLineaHoy: null,
     mesSeleccionado: null,
-    fechaProdSeleccionada: null,
+    fechaProdSeleccionada: null, // Ahora sincronizada con filtroFechaTareas
     anioSeleccionado: null,
     inicializado: false,
     modoEdicionGrafico: false,
-    filtroFechaTareas: null,
+    filtroFechaTareas: null, // Filtro compartido para tabla y gráfico de tiempo por tarea
     firebaseConectado: false,
 };
 
@@ -66,6 +66,7 @@ window.mostrarEmbed = (tipo) => {
     switch(tipo) {
         case 'prod':
             titulo.textContent = 'Embed - Tiempo por Tarea';
+            const fechaActual = state.filtroFechaTareas || tsToFechaLocal(Date.now());
             embedCode = `<!-- Tiempo por Tarea - Restyling Production -->
 <div style="position: relative; height: 400px; width: 100%; max-width: 800px; font-family: system-ui, sans-serif;">
   <canvas id="embedProd"></canvas>
@@ -98,7 +99,7 @@ window.mostrarEmbed = (tipo) => {
         plugins: {
           title: {
             display: true,
-            text: 'Tiempo por Tarea - ${state.fechaProdSeleccionada || 'Hoy'}',
+            text: 'Tiempo por Tarea - ${fechaActual}',
             font: { size: 16, weight: 'bold' }
           }
         }
@@ -354,17 +355,27 @@ const tsToFechaLocal = (ms) => {
 
 const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
-const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
+// Función para actualizar el gráfico de tiempo por tarea
+const actualizarGraficoProd = async (fechaSeleccionada = null) => {
     const ctx = document.getElementById('graficoProd');
     const container = document.getElementById('graficoContainer');
     if (!ctx || !container) return;
     
+    const fecha = fechaSeleccionada || state.filtroFechaTareas || tsToFechaLocal(Date.now());
+    
+    // Actualizar título
     const tituloFecha = document.getElementById('tituloFechaProd');
-    if (tituloFecha && fechaSeleccionada) {
+    if (tituloFecha) {
         const hoy = tsToFechaLocal(Date.now());
-        tituloFecha.textContent = fechaSeleccionada === hoy ? 'Hoy' :
-            new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        tituloFecha.textContent = fecha === hoy ? 'Hoy' :
+            new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     }
+    
+    // Obtener datos de Firebase
+    const datosGuardados = await obtenerTiempoPorTarea(fecha);
+    const datosProd = Object.values(datosGuardados)
+        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
+        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
     
     if (!datosProd || datosProd.length === 0) {
         if (state.chart) state.chart.destroy();
@@ -500,15 +511,51 @@ const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
     });
 };
 
-window.seleccionarFechaProd = async (fecha) => {
-    state.fechaProdSeleccionada = fecha;
+// Función compartida para actualizar tabla y gráfico de tiempo por tarea
+window.aplicarFiltroFechaCompartido = async (fecha) => {
+    state.filtroFechaTareas = fecha;
+    state.fechaProdSeleccionada = fecha; // Sincronizar con gráfico de tiempo por tarea
+    
+    // Actualizar UI del filtro de tabla
+    const btnFiltro = document.getElementById('btnFiltroFechaTareas');
+    const tituloTabla = document.getElementById('tituloTablaTareas');
+    
+    if (fecha) {
+        const hoy = new Date().toISOString().split('T')[0];
+        const esHoy = fecha === hoy;
+        btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
+        btnFiltro.innerHTML = `📅 ${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+        tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
+    }
+    
+    // Actualizar tabla de tareas
+    await renderizarTablaTareas();
+    
+    // Actualizar gráfico de tiempo por tarea
+    await actualizarGraficoProd(fecha);
+    
+    // Guardar preferencia
     await guardarPreferencias('fechaProdSeleccionada', fecha);
-    const datosGuardados = await obtenerTiempoPorTarea(fecha);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
-    renderizarListaPuntos(fecha);
+};
+
+window.mostrarFiltroFechaTareas = () => {
+    const input = document.getElementById('inputFiltroFechaTareas');
+    const hoy = new Date().toISOString().split('T')[0];
+    input.value = state.filtroFechaTareas || hoy;
+    input.showPicker();
+};
+
+// Para el gráfico de tiempo por tarea - usa el mismo filtro
+window.mostrarSelectorFechaProd = () => {
+    const input = document.getElementById('inputFiltroFechaTareas');
+    const hoy = new Date().toISOString().split('T')[0];
+    input.value = state.filtroFechaTareas || hoy;
+    input.showPicker();
+};
+
+window.resetFiltroFechaTareas = () => {
+    const hoy = tsToFechaLocal(Date.now());
+    aplicarFiltroFechaCompartido(hoy);
 };
 
 const renderizarListaPuntos = async (fecha) => {
@@ -551,11 +598,7 @@ const renderizarListaPuntos = async (fecha) => {
 window.borrarPuntoTiempo = async (fecha, puntoId) => {
     const fechaKey = fechaToKey(fecha);
     await remove(ref(db, `tiempoPorTarea/${fechaKey}/${puntoId}`));
-    const datosGuardados = await obtenerTiempoPorTarea(fecha);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
+    await actualizarGraficoProd(fecha);
     renderizarListaPuntos(fecha);
 };
 
@@ -570,22 +613,13 @@ window.toggleModoEdicionGrafico = () => {
         btn.classList.replace('border-slate-200', 'border-red-300');
         btn.innerHTML = '❌ Salir edición';
         lista.classList.remove('hidden');
-        renderizarListaPuntos(state.fechaProdSeleccionada || tsToFechaLocal(Date.now()));
+        renderizarListaPuntos(state.filtroFechaTareas || tsToFechaLocal(Date.now()));
     } else {
         btn.classList.replace('bg-red-100', 'bg-slate-100');
         btn.classList.replace('text-red-600', 'text-slate-600');
         btn.classList.replace('border-red-300', 'border-slate-200');
         btn.innerHTML = '✏️ Editar puntos';
         lista.classList.add('hidden');
-    }
-};
-
-window.mostrarSelectorFechaProd = () => {
-    const fechaGuardada = state.fechaProdSeleccionada || new Date().toISOString().split('T')[0];
-    const input = document.getElementById('inputFechaProd');
-    if (input) {
-        input.value = fechaGuardada;
-        input.showPicker();
     }
 };
 
@@ -680,41 +714,6 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
             }
         }
     });
-};
-
-// Función para calcular tendencia lineal
-const calcularTendenciaLineal = (valores) => {
-    // Filtrar solo valores > 0 para el cálculo
-    const datosValidos = [];
-    const indicesValidos = [];
-    
-    valores.forEach((val, idx) => {
-        if (val > 0) {
-            datosValidos.push(val);
-            indicesValidos.push(idx);
-        }
-    });
-    
-    if (datosValidos.length < 2) {
-        return { pendiente: 0, valores: Array(valores.length).fill(0) };
-    }
-    
-    const n = datosValidos.length;
-    const sumX = indicesValidos.reduce((a, b) => a + b, 0);
-    const sumY = datosValidos.reduce((a, b) => a + b, 0);
-    const sumXY = indicesValidos.reduce((sum, x, i) => sum + x * datosValidos[i], 0);
-    const sumX2 = indicesValidos.reduce((sum, x) => sum + x * x, 0);
-    
-    const pendiente = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercepto = (sumY - pendiente * sumX) / n;
-    
-    // Generar valores de tendencia para todos los días (1-31)
-    const valoresTendencia = Array(31).fill(null).map((_, i) => {
-        const val = pendiente * i + intercepto;
-        return val > 0 ? val : 0;
-    });
-    
-    return { pendiente, valores: valoresTendencia };
 };
 
 const calcularTendencia = (valores) => {
@@ -837,176 +836,85 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
     });
 };
 
-// Funciones para mini calendario mensual
-window.mostrarMiniCalendarioMensual = () => {
-    const modal = document.getElementById('modalMiniCalendarioMensual');
+// Selector de MES y AÑO para gráfico de productividad diaria
+window.mostrarSelectorMesAnio = () => {
+    const modal = document.getElementById('modalSelectorMesAnio');
     const mesActual = state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
-    generarMiniCalendarioMensual(mesActual.year, mesActual.month);
+    
+    // Poblar selects
+    const selectMes = document.getElementById('selectMes');
+    const selectAnio = document.getElementById('selectAnio');
+    
+    selectMes.value = mesActual.month;
+    selectAnio.value = mesActual.year;
+    
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 };
 
-window.cerrarMiniCalendarioMensual = () => {
-    const modal = document.getElementById('modalMiniCalendarioMensual');
+window.cerrarSelectorMesAnio = () => {
+    const modal = document.getElementById('modalSelectorMesAnio');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 };
 
-const generarMiniCalendarioMensual = (year, month) => {
-    const container = document.getElementById('miniCalendarioMensualGrid');
-    const titulo = document.getElementById('tituloMiniCalendarioMensual');
+window.aplicarMesAnio = async () => {
+    const mes = parseInt(document.getElementById('selectMes').value);
+    const anio = parseInt(document.getElementById('selectAnio').value);
     
-    const fecha = new Date(year, month, 1);
-    const nombreMes = fecha.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-    titulo.textContent = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
-    
-    container.innerHTML = '';
-    
-    // Días de la semana
-    const diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-    diasSemana.forEach(dia => {
-        const diaHeader = document.createElement('div');
-        diaHeader.className = 'text-center text-[10px] font-black text-slate-400 py-1';
-        diaHeader.textContent = dia;
-        container.appendChild(diaHeader);
-    });
-    
-    // Primer día del mes
-    const primerDia = new Date(year, month, 1).getDay();
-    const ajuste = primerDia === 0 ? 6 : primerDia - 1; // Ajustar para que lunes sea 0
-    
-    // Días vacíos antes del primer día
-    for (let i = 0; i < ajuste; i++) {
-        const empty = document.createElement('div');
-        container.appendChild(empty);
-    }
-    
-    // Días del mes
-    const diasEnMes = new Date(year, month + 1, 0).getDate();
-    const hoy = new Date();
-    const esMesActual = hoy.getFullYear() === year && hoy.getMonth() === month;
-    
-    for (let dia = 1; dia <= diasEnMes; dia++) {
-        const btn = document.createElement('button');
-        const esHoy = esMesActual && hoy.getDate() === dia;
-        const esSeleccionado = state.mesSeleccionado && state.mesSeleccionado.year === year && 
-                               state.mesSeleccionado.month === month;
-        
-        btn.className = `w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-            esHoy 
-                ? 'bg-purple-600 text-white shadow-lg' 
-                : esSeleccionado
-                    ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                    : 'hover:bg-purple-50 text-slate-700'
-        }`;
-        btn.textContent = dia;
-        btn.onclick = () => seleccionarMesDesdeCalendario(year, month);
-        container.appendChild(btn);
-    }
-};
-
-window.cambiarMesCalendario = (direccion) => {
-    const mesActual = state.mesCalendarioTemp || state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
-    let nuevoMes = mesActual.month + direccion;
-    let nuevoAnio = mesActual.year;
-    if (nuevoMes > 11) { nuevoMes = 0; nuevoAnio++; }
-    if (nuevoMes < 0) { nuevoMes = 11; nuevoAnio--; }
-    state.mesCalendarioTemp = { year: nuevoAnio, month: nuevoMes };
-    generarMiniCalendarioMensual(nuevoAnio, nuevoMes);
-};
-
-window.seleccionarMesDesdeCalendario = async (year, month) => {
-    const mesSeleccionado = { year, month };
+    const mesSeleccionado = { year: anio, month: mes };
     state.mesSeleccionado = mesSeleccionado;
-    state.mesCalendarioTemp = null;
+    
     await guardarPreferencias('mesDiarioSeleccionado', mesSeleccionado);
     await actualizarGraficoDiario(mesSeleccionado);
     actualizarTextoMiniCalendario(mesSeleccionado);
-    cerrarMiniCalendarioMensual();
+    
+    cerrarSelectorMesAnio();
 };
 
-// Funciones para mini calendario anual
-window.mostrarMiniCalendarioAnual = () => {
-    const modal = document.getElementById('modalMiniCalendarioAnual');
+// Selector de AÑO para gráfico de productividad mensual
+window.mostrarSelectorAnio = () => {
+    const modal = document.getElementById('modalSelectorAnio');
     const anioActual = state.anioSeleccionado || new Date().getFullYear();
-    generarMiniCalendarioAnual(anioActual);
+    
+    // Generar grid de años
+    const grid = document.getElementById('gridAnios');
+    grid.innerHTML = '';
+    
+    const anioBase = anioActual - 4; // Mostrar 9 años centrados en el actual
+    
+    for (let i = 0; i < 9; i++) {
+        const anio = anioBase + i;
+        const btn = document.createElement('button');
+        btn.className = `h-12 rounded-xl text-sm font-black transition-all ${
+            anio === anioActual
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-slate-100 hover:bg-blue-50 text-slate-700'
+        }`;
+        btn.textContent = anio;
+        btn.onclick = () => seleccionarAnio(anio);
+        grid.appendChild(btn);
+    }
+    
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 };
 
-window.cerrarMiniCalendarioAnual = () => {
-    const modal = document.getElementById('modalMiniCalendarioAnual');
+window.cerrarSelectorAnio = () => {
+    const modal = document.getElementById('modalSelectorAnio');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 };
 
-const generarMiniCalendarioAnual = (year) => {
-    const container = document.getElementById('miniCalendarioAnualGrid');
-    const titulo = document.getElementById('tituloMiniCalendarioAnual');
+window.seleccionarAnio = async (anio) => {
+    state.anioSeleccionado = anio;
+    await guardarPreferencias('anioMensualSeleccionado', anio);
+    await actualizarGraficoMensual(anio);
     
-    titulo.textContent = year;
-    
-    container.innerHTML = '';
-    
-    const meses = [
-        { num: 0, nombre: 'Ene', abr: 'E' },
-        { num: 1, nombre: 'Feb', abr: 'F' },
-        { num: 2, nombre: 'Mar', abr: 'M' },
-        { num: 3, nombre: 'Abr', abr: 'A' },
-        { num: 4, nombre: 'May', abr: 'M' },
-        { num: 5, nombre: 'Jun', abr: 'J' },
-        { num: 6, nombre: 'Jul', abr: 'J' },
-        { num: 7, nombre: 'Ago', abr: 'A' },
-        { num: 8, nombre: 'Sep', abr: 'S' },
-        { num: 9, nombre: 'Oct', abr: 'O' },
-        { num: 10, nombre: 'Nov', abr: 'N' },
-        { num: 11, nombre: 'Dic', abr: 'D' }
-    ];
-    
-    const hoy = new Date();
-    const esAnioActual = hoy.getFullYear() === year;
-    
-    meses.forEach(mes => {
-        const btn = document.createElement('button');
-        const esMesActual = esAnioActual && hoy.getMonth() === mes.num;
-        const esSeleccionado = state.anioSeleccionado === year && 
-                               state.mesSeleccionado && 
-                               state.mesSeleccionado.month === mes.num &&
-                               state.mesSeleccionado.year === year;
-        
-        btn.className = `w-full h-16 rounded-xl text-sm font-black transition-all flex flex-col items-center justify-center gap-1 ${
-            esMesActual 
-                ? 'bg-blue-600 text-white shadow-lg' 
-                : esSeleccionado
-                    ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                    : 'bg-slate-50 hover:bg-blue-50 text-slate-700 border border-slate-200'
-        }`;
-        
-        btn.innerHTML = `
-            <span class="text-lg">${mes.abr}</span>
-            <span class="text-[9px] opacity-75">${mes.nombre}</span>
-        `;
-        
-        btn.onclick = () => seleccionarAnioDesdeCalendario(year);
-        container.appendChild(btn);
-    });
-};
-
-window.cambiarAnioCalendario = (direccion) => {
-    const anioActual = state.anioCalendarioTemp || state.anioSeleccionado || new Date().getFullYear();
-    const nuevoAnio = anioActual + direccion;
-    state.anioCalendarioTemp = nuevoAnio;
-    generarMiniCalendarioAnual(nuevoAnio);
-};
-
-window.seleccionarAnioDesdeCalendario = async (year) => {
-    state.anioSeleccionado = year;
-    state.anioCalendarioTemp = null;
-    await guardarPreferencias('anioMensualSeleccionado', year);
-    await actualizarGraficoMensual(year);
     const anioEl = document.getElementById('anioMensual');
-    if (anioEl) anioEl.textContent = year;
-    cerrarMiniCalendarioAnual();
+    if (anioEl) anioEl.textContent = anio;
+    
+    cerrarSelectorAnio();
 };
 
 const actualizarTextoMiniCalendario = (mes) => {
@@ -1034,8 +942,7 @@ setInterval(async () => {
     const diaActual = tsToFechaLocal(Date.now());
     if (diaActual !== ultimoDiaCargado) {
         ultimoDiaCargado = diaActual;
-        state.filtroFechaTareas = diaActual;
-        await aplicarFiltroFechaTareas(diaActual);
+        await aplicarFiltroFechaCompartido(diaActual);
         console.log('🔄 Filtro actualizado al nuevo día:', diaActual);
     }
 }, 60000);
@@ -1574,11 +1481,10 @@ window.finalizarTarea = async (id, inicioMS) => {
     
     if (tarea.codigo !== "SISTEMA") {
         await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
-        const datosGuardados = await obtenerTiempoPorTarea(fecha);
-        const datosProd = Object.values(datosGuardados)
-            .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-            .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
-        actualizarGraficoProd(datosProd, fecha);
+        // Actualizar gráfico si la fecha coincide con el filtro actual
+        if (fecha === state.filtroFechaTareas) {
+            await actualizarGraficoProd(fecha);
+        }
     }
     
     await update(ref(db, `tareas/${id}`), {
@@ -1623,43 +1529,6 @@ const inicializarDragDrop = () => {
             }
         });
     }
-};
-
-window.mostrarFiltroFechaTareas = () => {
-    const input = document.getElementById('inputFiltroFechaTareas');
-    const hoy = new Date().toISOString().split('T')[0];
-    input.value = state.filtroFechaTareas || hoy;
-    input.showPicker();
-};
-
-window.aplicarFiltroFechaTareas = async (fecha) => {
-    state.filtroFechaTareas = fecha;
-    const btnFiltro = document.getElementById('btnFiltroFechaTareas');
-    const tituloTabla = document.getElementById('tituloTablaTareas');
-    
-    if (fecha) {
-        const hoy = new Date().toISOString().split('T')[0];
-        const esHoy = fecha === hoy;
-        btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
-        btnFiltro.innerHTML = `📅 ${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-        tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
-    } else {
-        resetFiltroFechaTareas();
-    }
-    
-    await renderizarTablaTareas();
-};
-
-window.resetFiltroFechaTareas = () => {
-    state.filtroFechaTareas = null;
-    const btnFiltro = document.getElementById('btnFiltroFechaTareas');
-    const tituloTabla = document.getElementById('tituloTablaTareas');
-    
-    btnFiltro.classList.replace('bg-emerald-600', 'bg-slate-800');
-    btnFiltro.innerHTML = '📅 Filtrar fecha';
-    tituloTabla.textContent = 'Pedidos en proceso';
-    
-    renderizarTablaTareas();
 };
 
 const renderizarTablaTareas = async () => {
@@ -1785,6 +1654,10 @@ const renderizarTablaTareas = async () => {
 
 onValue(tareasRef, () => {
     renderizarTablaTareas();
+    // También actualizar gráfico de tiempo por tarea si hay datos nuevos
+    if (state.filtroFechaTareas) {
+        actualizarGraficoProd(state.filtroFechaTareas);
+    }
 });
 
 onValue(planRef, (snap) => {
@@ -1883,7 +1756,6 @@ onValue(estadoSesionRef, (snap) => {
 onValue(preferenciasRef, (snap) => {
     const preferencias = snap.val() || {};
     state.mesSeleccionado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
-    state.fechaProdSeleccionada = preferencias.fechaProdSeleccionada?.valor || new Date().toISOString().split('T')[0];
     state.anioSeleccionado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
     
     if (state.inicializado) {
@@ -1944,18 +1816,6 @@ onValue(incidenciasLogRef, (snap) => {
         `).join('');
 });
 
-onValue(tiempoPorTareaRef, (snap) => {
-    if (!state.inicializado) return;
-    const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
-    const fechaKey = fechaToKey(fecha);
-    const todosDatos = snap.val() || {};
-    const datosFecha = todosDatos[fechaKey] || {};
-    const datosProd = Object.values(datosFecha)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
-});
-
 window.addEventListener('load', async () => {
     actualizarEstadoLineaUI();
     
@@ -1963,8 +1823,9 @@ window.addEventListener('load', async () => {
     const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
     state.mesSeleccionado = mesGuardado;
     
-    // Forzar fecha de hoy para el gráfico de tiempo por tarea
+    // Inicializar filtro compartido con la fecha de hoy
     const hoy = tsToFechaLocal(Date.now());
+    state.filtroFechaTareas = hoy;
     state.fechaProdSeleccionada = hoy;
     
     const anioGuardado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
@@ -1973,20 +1834,13 @@ window.addEventListener('load', async () => {
     await actualizarGraficoDiario(mesGuardado);
     await actualizarGraficoMensual(anioGuardado);
     
-    // Cargar datos de hoy para el gráfico de tiempo por tarea
-    const datosGuardados = await obtenerTiempoPorTarea(hoy);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, hoy);
+    // Cargar datos iniciales para tabla y gráfico de tiempo por tarea
+    await aplicarFiltroFechaCompartido(hoy);
     
     actualizarTextoMiniCalendario(mesGuardado);
     
     const anioEl = document.getElementById('anioMensual');
     if (anioEl) anioEl.textContent = anioGuardado;
-    
-    state.filtroFechaTareas = hoy;
-    await aplicarFiltroFechaTareas(hoy);
     
     state.inicializado = true;
 });
@@ -2005,28 +1859,15 @@ window.addEventListener('load', async () => {
     animation: pulse-soft 2s infinite;
 }
 
-/* Estilos para mini calendarios */
-.mini-calendario-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+/* Estilos para selectores */
+.selector-mes-anio {
+    background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+    border: 2px solid #c084fc;
 }
 
-.mini-calendario-meses {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-}
-
-.calendario-btn-nav {
-    transition: all 0.2s ease;
-}
-.calendario-btn-nav:hover {
-    transform: scale(1.1);
-    background-color: rgba(0,0,0,0.05);
-}
-.calendario-btn-nav:active {
-    transform: scale(0.95);
+.selector-anio {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border: 2px solid #60a5fa;
 }
 
 /* Mejora para botón añadir mantenimiento */
@@ -2055,49 +1896,59 @@ window.addEventListener('load', async () => {
     </a>
 </div>
 
-<!-- Modal Mini Calendario Mensual -->
-<div id="modalMiniCalendarioMensual" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+<!-- Modal Selector Mes y Año (Productividad Diaria) -->
+<div id="modalSelectorMesAnio" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 border-purple-200">
-        <div class="flex items-center justify-between mb-4">
-            <button onclick="cambiarMesCalendario(-1)" class="calendario-btn-nav p-2 rounded-lg text-purple-600 hover:bg-purple-50">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                </svg>
-            </button>
-            <h3 id="tituloMiniCalendarioMensual" class="text-lg font-black text-purple-900 capitalize">Febrero 2026</h3>
-            <button onclick="cambiarMesCalendario(1)" class="calendario-btn-nav p-2 rounded-lg text-purple-600 hover:bg-purple-50">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
-            </button>
+        <h3 class="text-lg font-black uppercase text-purple-900 mb-6 text-center">Seleccionar Mes y Año</h3>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">Mes</label>
+                <select id="selectMes" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:border-purple-500 focus:outline-none">
+                    <option value="0">Enero</option>
+                    <option value="1">Febrero</option>
+                    <option value="2">Marzo</option>
+                    <option value="3">Abril</option>
+                    <option value="4">Mayo</option>
+                    <option value="5">Junio</option>
+                    <option value="6">Julio</option>
+                    <option value="7">Agosto</option>
+                    <option value="8">Septiembre</option>
+                    <option value="9">Octubre</option>
+                    <option value="10">Noviembre</option>
+                    <option value="11">Diciembre</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">Año</label>
+                <select id="selectAnio" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:border-purple-500 focus:outline-none">
+                    <option value="2024">2024</option>
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                    <option value="2027">2027</option>
+                    <option value="2028">2028</option>
+                </select>
+            </div>
         </div>
-        <div id="miniCalendarioMensualGrid" class="mini-calendario-grid">
-            <!-- Se genera dinámicamente -->
+        
+        <div class="flex gap-3 mt-6">
+            <button onclick="cerrarSelectorMesAnio()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cancelar</button>
+            <button onclick="aplicarMesAnio()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-black text-xs uppercase py-3 rounded-xl">Aplicar</button>
         </div>
-        <button onclick="cerrarMiniCalendarioMensual()" class="w-full mt-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cerrar</button>
     </div>
 </div>
 
-<!-- Modal Mini Calendario Anual -->
-<div id="modalMiniCalendarioAnual" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-blue-200">
-        <div class="flex items-center justify-between mb-4">
-            <button onclick="cambiarAnioCalendario(-1)" class="calendario-btn-nav p-2 rounded-lg text-blue-600 hover:bg-blue-50">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                </svg>
-            </button>
-            <h3 id="tituloMiniCalendarioAnual" class="text-lg font-black text-blue-900">2026</h3>
-            <button onclick="cambiarAnioCalendario(1)" class="calendario-btn-nav p-2 rounded-lg text-blue-600 hover:bg-blue-50">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
-            </button>
-        </div>
-        <div id="miniCalendarioAnualGrid" class="mini-calendario-meses">
+<!-- Modal Selector Año (Productividad Mensual) -->
+<div id="modalSelectorAnio" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 border-blue-200">
+        <h3 class="text-lg font-black uppercase text-blue-900 mb-6 text-center">Seleccionar Año</h3>
+        
+        <div id="gridAnios" class="grid grid-cols-3 gap-3">
             <!-- Se genera dinámicamente -->
         </div>
-        <button onclick="cerrarMiniCalendarioAnual()" class="w-full mt-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cerrar</button>
+        
+        <button onclick="cerrarSelectorAnio()" class="w-full mt-6 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cancelar</button>
     </div>
 </div>
 
@@ -2195,13 +2046,14 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Pedidos en Proceso -->
+    <!-- Pedidos en Proceso - CON FILTRO COMPARTIDO -->
     <div>
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div class="flex items-center gap-3">
                 <h2 id="tituloTablaTareas" class="text-base font-black uppercase tracking-widest text-emerald-600">✅ Pedidos en proceso</h2>
+                <!-- Filtro compartido: afecta a tabla y gráfico de tiempo por tarea -->
                 <button id="btnFiltroFechaTareas" onclick="mostrarFiltroFechaTareas()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase">📅 Filtrar fecha</button>
-                <input type="date" id="inputFiltroFechaTareas" class="hidden" onchange="aplicarFiltroFechaTareas(this.value)">
+                <input type="date" id="inputFiltroFechaTareas" class="hidden" onchange="aplicarFiltroFechaCompartido(this.value)">
             </div>
             <div class="flex items-center gap-2">
                 <div id="estadoLineaIndicador" class="text-[11px] font-black uppercase"></div>
@@ -2226,13 +2078,18 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Gráfico Tiempo por Tarea -->
+    <!-- Gráfico Tiempo por Tarea - COMPARTE FILTRO CON TABLA -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">⏱️ Tiempo por Tarea</h3>
-                <button onclick="mostrarSelectorFechaProd()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-black text-xs border-2 border-indigo-300">📅 <span id="tituloFechaProd">Hoy</span></button>
-                <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)"/>
+                <!-- Usa el mismo filtro que la tabla, solo muestra la fecha activa -->
+                <div class="bg-indigo-100 border-2 border-indigo-300 rounded-xl px-4 py-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <span id="tituloFechaProd" class="text-sm font-black text-indigo-900">Hoy</span>
+                </div>
             </div>
             <div class="flex items-center gap-4 text-[10px] font-bold">
                 <div class="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-200">
@@ -2249,25 +2106,23 @@ window.addEventListener('load', async () => {
         <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
     </div>
     
-    <!-- Gráfico Productividad Diaria con Mini Calendario -->
+    <!-- Gráfico Productividad Diaria - Selector de MES y AÑO -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-purple-600">📈 Productividad Diaria</h3>
-                <!-- Mini Calendario Interactivo -->
-                <button onclick="mostrarMiniCalendarioMensual()" class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group">
-                    <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-[12px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
-                            <span class="text-[10px] font-bold text-purple-400" id="anioMesDiario">2026</span>
-                        </div>
-                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
+                <!-- Selector de Mes y Año -->
+                <button onclick="mostrarSelectorMesAnio()" class="selector-mes-anio rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[12px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
+                        <span class="text-[10px] font-bold text-purple-500" id="anioMesDiario">2026</span>
                     </div>
+                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                 </button>
             </div>
             <div class="flex items-center gap-4 text-[10px] font-bold">
@@ -2283,22 +2138,20 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Gráfico Productividad Mensual con Mini Calendario Anual -->
+    <!-- Gráfico Productividad Mensual - Selector de AÑO -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-blue-600">📊 Productividad Mensual</h3>
-                <!-- Mini Calendario Anual Interactivo -->
-                <button onclick="mostrarMiniCalendarioAnual()" class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group">
-                    <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                        <span class="text-[14px] font-black text-blue-900" id="anioMensual">2026</span>
-                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </div>
+                <!-- Selector de Año -->
+                <button onclick="mostrarSelectorAnio()" class="selector-anio rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <span class="text-[14px] font-black text-blue-900" id="anioMensual">2026</span>
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                 </button>
             </div>
             <div class="flex items-center gap-4 text-[10px] font-bold">
