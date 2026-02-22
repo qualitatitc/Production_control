@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -838,26 +837,176 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
     });
 };
 
-window.cambiarAnio = async (direccion) => {
-    const nuevoAnio = state.anioSeleccionado + direccion;
-    state.anioSeleccionado = nuevoAnio;
-    await guardarPreferencias('anioMensualSeleccionado', nuevoAnio);
-    await actualizarGraficoMensual(nuevoAnio);
-    const anioEl = document.getElementById('anioMensual');
-    if (anioEl) anioEl.textContent = nuevoAnio;
+// Funciones para mini calendario mensual
+window.mostrarMiniCalendarioMensual = () => {
+    const modal = document.getElementById('modalMiniCalendarioMensual');
+    const mesActual = state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
+    generarMiniCalendarioMensual(mesActual.year, mesActual.month);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 };
 
-window.cambiarMes = async (direccion) => {
-    const mesActual = state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
+window.cerrarMiniCalendarioMensual = () => {
+    const modal = document.getElementById('modalMiniCalendarioMensual');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+const generarMiniCalendarioMensual = (year, month) => {
+    const container = document.getElementById('miniCalendarioMensualGrid');
+    const titulo = document.getElementById('tituloMiniCalendarioMensual');
+    
+    const fecha = new Date(year, month, 1);
+    const nombreMes = fecha.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+    titulo.textContent = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
+    
+    container.innerHTML = '';
+    
+    // Días de la semana
+    const diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    diasSemana.forEach(dia => {
+        const diaHeader = document.createElement('div');
+        diaHeader.className = 'text-center text-[10px] font-black text-slate-400 py-1';
+        diaHeader.textContent = dia;
+        container.appendChild(diaHeader);
+    });
+    
+    // Primer día del mes
+    const primerDia = new Date(year, month, 1).getDay();
+    const ajuste = primerDia === 0 ? 6 : primerDia - 1; // Ajustar para que lunes sea 0
+    
+    // Días vacíos antes del primer día
+    for (let i = 0; i < ajuste; i++) {
+        const empty = document.createElement('div');
+        container.appendChild(empty);
+    }
+    
+    // Días del mes
+    const diasEnMes = new Date(year, month + 1, 0).getDate();
+    const hoy = new Date();
+    const esMesActual = hoy.getFullYear() === year && hoy.getMonth() === month;
+    
+    for (let dia = 1; dia <= diasEnMes; dia++) {
+        const btn = document.createElement('button');
+        const esHoy = esMesActual && hoy.getDate() === dia;
+        const esSeleccionado = state.mesSeleccionado && state.mesSeleccionado.year === year && 
+                               state.mesSeleccionado.month === month;
+        
+        btn.className = `w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+            esHoy 
+                ? 'bg-purple-600 text-white shadow-lg' 
+                : esSeleccionado
+                    ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
+                    : 'hover:bg-purple-50 text-slate-700'
+        }`;
+        btn.textContent = dia;
+        btn.onclick = () => seleccionarMesDesdeCalendario(year, month);
+        container.appendChild(btn);
+    }
+};
+
+window.cambiarMesCalendario = (direccion) => {
+    const mesActual = state.mesCalendarioTemp || state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
     let nuevoMes = mesActual.month + direccion;
     let nuevoAnio = mesActual.year;
     if (nuevoMes > 11) { nuevoMes = 0; nuevoAnio++; }
     if (nuevoMes < 0) { nuevoMes = 11; nuevoAnio--; }
-    const mesSeleccionado = { year: nuevoAnio, month: nuevoMes };
+    state.mesCalendarioTemp = { year: nuevoAnio, month: nuevoMes };
+    generarMiniCalendarioMensual(nuevoAnio, nuevoMes);
+};
+
+window.seleccionarMesDesdeCalendario = async (year, month) => {
+    const mesSeleccionado = { year, month };
     state.mesSeleccionado = mesSeleccionado;
+    state.mesCalendarioTemp = null;
     await guardarPreferencias('mesDiarioSeleccionado', mesSeleccionado);
     await actualizarGraficoDiario(mesSeleccionado);
     actualizarTextoMiniCalendario(mesSeleccionado);
+    cerrarMiniCalendarioMensual();
+};
+
+// Funciones para mini calendario anual
+window.mostrarMiniCalendarioAnual = () => {
+    const modal = document.getElementById('modalMiniCalendarioAnual');
+    const anioActual = state.anioSeleccionado || new Date().getFullYear();
+    generarMiniCalendarioAnual(anioActual);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.cerrarMiniCalendarioAnual = () => {
+    const modal = document.getElementById('modalMiniCalendarioAnual');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+const generarMiniCalendarioAnual = (year) => {
+    const container = document.getElementById('miniCalendarioAnualGrid');
+    const titulo = document.getElementById('tituloMiniCalendarioAnual');
+    
+    titulo.textContent = year;
+    
+    container.innerHTML = '';
+    
+    const meses = [
+        { num: 0, nombre: 'Ene', abr: 'E' },
+        { num: 1, nombre: 'Feb', abr: 'F' },
+        { num: 2, nombre: 'Mar', abr: 'M' },
+        { num: 3, nombre: 'Abr', abr: 'A' },
+        { num: 4, nombre: 'May', abr: 'M' },
+        { num: 5, nombre: 'Jun', abr: 'J' },
+        { num: 6, nombre: 'Jul', abr: 'J' },
+        { num: 7, nombre: 'Ago', abr: 'A' },
+        { num: 8, nombre: 'Sep', abr: 'S' },
+        { num: 9, nombre: 'Oct', abr: 'O' },
+        { num: 10, nombre: 'Nov', abr: 'N' },
+        { num: 11, nombre: 'Dic', abr: 'D' }
+    ];
+    
+    const hoy = new Date();
+    const esAnioActual = hoy.getFullYear() === year;
+    
+    meses.forEach(mes => {
+        const btn = document.createElement('button');
+        const esMesActual = esAnioActual && hoy.getMonth() === mes.num;
+        const esSeleccionado = state.anioSeleccionado === year && 
+                               state.mesSeleccionado && 
+                               state.mesSeleccionado.month === mes.num &&
+                               state.mesSeleccionado.year === year;
+        
+        btn.className = `w-full h-16 rounded-xl text-sm font-black transition-all flex flex-col items-center justify-center gap-1 ${
+            esMesActual 
+                ? 'bg-blue-600 text-white shadow-lg' 
+                : esSeleccionado
+                    ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                    : 'bg-slate-50 hover:bg-blue-50 text-slate-700 border border-slate-200'
+        }`;
+        
+        btn.innerHTML = `
+            <span class="text-lg">${mes.abr}</span>
+            <span class="text-[9px] opacity-75">${mes.nombre}</span>
+        `;
+        
+        btn.onclick = () => seleccionarAnioDesdeCalendario(year);
+        container.appendChild(btn);
+    });
+};
+
+window.cambiarAnioCalendario = (direccion) => {
+    const anioActual = state.anioCalendarioTemp || state.anioSeleccionado || new Date().getFullYear();
+    const nuevoAnio = anioActual + direccion;
+    state.anioCalendarioTemp = nuevoAnio;
+    generarMiniCalendarioAnual(nuevoAnio);
+};
+
+window.seleccionarAnioDesdeCalendario = async (year) => {
+    state.anioSeleccionado = year;
+    state.anioCalendarioTemp = null;
+    await guardarPreferencias('anioMensualSeleccionado', year);
+    await actualizarGraficoMensual(year);
+    const anioEl = document.getElementById('anioMensual');
+    if (anioEl) anioEl.textContent = year;
+    cerrarMiniCalendarioAnual();
 };
 
 const actualizarTextoMiniCalendario = (mes) => {
@@ -1856,21 +2005,28 @@ window.addEventListener('load', async () => {
     animation: pulse-soft 2s infinite;
 }
 
-/* Mejoras visuales para flechas de navegación */
-.nav-arrow {
+/* Estilos para mini calendarios */
+.mini-calendario-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.mini-calendario-meses {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.calendario-btn-nav {
     transition: all 0.2s ease;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    border: 2px solid rgba(255,255,255,0.3);
-    backdrop-filter: blur(4px);
 }
-.nav-arrow:hover {
-    transform: scale(1.15);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-    border-color: rgba(255,255,255,0.6);
+.calendario-btn-nav:hover {
+    transform: scale(1.1);
+    background-color: rgba(0,0,0,0.05);
 }
-.nav-arrow:active {
+.calendario-btn-nav:active {
     transform: scale(0.95);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 /* Mejora para botón añadir mantenimiento */
@@ -1885,20 +2041,6 @@ window.addEventListener('load', async () => {
 .btn-add-maintenance:active {
     transform: translateY(0);
 }
-
-/* Nuevos estilos para flechas mejoradas */
-.nav-arrow-purpura {
-    background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
-}
-.nav-arrow-purpura:hover {
-    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-}
-.nav-arrow-azul {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-}
-.nav-arrow-azul:hover {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-}
 </style>
 </head>
 <body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
@@ -1911,6 +2053,52 @@ window.addEventListener('load', async () => {
         </svg>
         Volver a inicio
     </a>
+</div>
+
+<!-- Modal Mini Calendario Mensual -->
+<div id="modalMiniCalendarioMensual" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 border-purple-200">
+        <div class="flex items-center justify-between mb-4">
+            <button onclick="cambiarMesCalendario(-1)" class="calendario-btn-nav p-2 rounded-lg text-purple-600 hover:bg-purple-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <h3 id="tituloMiniCalendarioMensual" class="text-lg font-black text-purple-900 capitalize">Febrero 2026</h3>
+            <button onclick="cambiarMesCalendario(1)" class="calendario-btn-nav p-2 rounded-lg text-purple-600 hover:bg-purple-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="miniCalendarioMensualGrid" class="mini-calendario-grid">
+            <!-- Se genera dinámicamente -->
+        </div>
+        <button onclick="cerrarMiniCalendarioMensual()" class="w-full mt-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cerrar</button>
+    </div>
+</div>
+
+<!-- Modal Mini Calendario Anual -->
+<div id="modalMiniCalendarioAnual" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-blue-200">
+        <div class="flex items-center justify-between mb-4">
+            <button onclick="cambiarAnioCalendario(-1)" class="calendario-btn-nav p-2 rounded-lg text-blue-600 hover:bg-blue-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <h3 id="tituloMiniCalendarioAnual" class="text-lg font-black text-blue-900">2026</h3>
+            <button onclick="cambiarAnioCalendario(1)" class="calendario-btn-nav p-2 rounded-lg text-blue-600 hover:bg-blue-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="miniCalendarioAnualGrid" class="mini-calendario-meses">
+            <!-- Se genera dinámicamente -->
+        </div>
+        <button onclick="cerrarMiniCalendarioAnual()" class="w-full mt-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cerrar</button>
+    </div>
 </div>
 
 <!-- Modal Operarios -->
@@ -2061,21 +2249,26 @@ window.addEventListener('load', async () => {
         <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
     </div>
     
-    <!-- Gráfico Productividad Diaria -->
+    <!-- Gráfico Productividad Diaria con Mini Calendario -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-purple-600">📈 Productividad Diaria</h3>
-                <div class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-3 py-2 shadow-inner">
-                    <div class="flex items-center gap-3">
-                        <button onclick="cambiarMes(-1)" class="nav-arrow nav-arrow-purpura text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">‹</button>
-                        <div class="flex items-center gap-1.5 bg-white rounded-lg px-4 py-2 min-w-[120px] justify-center shadow-sm">
+                <!-- Mini Calendario Interactivo -->
+                <button onclick="mostrarMiniCalendarioMensual()" class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <div class="flex items-center gap-1.5">
                             <span class="text-[12px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
                             <span class="text-[10px] font-bold text-purple-400" id="anioMesDiario">2026</span>
                         </div>
-                        <button onclick="cambiarMes(1)" class="nav-arrow nav-arrow-purpura text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">›</button>
+                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </div>
-                </div>
+                </button>
             </div>
             <div class="flex items-center gap-4 text-[10px] font-bold">
                 <div class="flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200">
@@ -2090,18 +2283,23 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Gráfico Productividad Mensual -->
+    <!-- Gráfico Productividad Mensual con Mini Calendario Anual -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-blue-600">📊 Productividad Mensual</h3>
-                <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-3 py-2 shadow-inner">
-                    <div class="flex items-center gap-3">
-                        <button onclick="cambiarAnio(-1)" class="nav-arrow nav-arrow-azul text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">‹</button>
-                        <span class="text-[14px] font-black text-blue-900 bg-white rounded-lg px-4 py-2 min-w-[80px] text-center shadow-sm" id="anioMensual">2026</span>
-                        <button onclick="cambiarAnio(1)" class="nav-arrow nav-arrow-azul text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">›</button>
+                <!-- Mini Calendario Anual Interactivo -->
+                <button onclick="mostrarMiniCalendarioAnual()" class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-4 py-2 shadow-inner hover:shadow-md transition-all group">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <span class="text-[14px] font-black text-blue-900" id="anioMensual">2026</span>
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </div>
-                </div>
+                </button>
             </div>
             <div class="flex items-center gap-4 text-[10px] font-bold">
                 <div class="flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200" id="tendenciaPositiva" style="display:none;">
