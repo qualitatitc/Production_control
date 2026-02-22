@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -53,6 +54,184 @@ const state = {
     modoEdicionGrafico: false,
     filtroFechaTareas: null,
     firebaseConectado: false,
+};
+
+// Funciones para embed
+window.mostrarEmbed = (tipo) => {
+    const modal = document.getElementById('modalEmbed');
+    const titulo = document.getElementById('tituloModalEmbed');
+    const codigo = document.getElementById('codigoEmbed');
+    
+    let embedCode = '';
+    
+    switch(tipo) {
+        case 'prod':
+            titulo.textContent = 'Embed - Tiempo por Tarea';
+            embedCode = `<!-- Tiempo por Tarea - Restyling Production -->
+<div style="position: relative; height: 400px; width: 100%; max-width: 800px; font-family: system-ui, sans-serif;">
+  <canvas id="embedProd"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>
+  <script>
+    const ctx = document.getElementById('embedProd').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [1, 2, 3, 4, 5],
+        datasets: [{
+          label: 'Tiempo (min)',
+          data: [20, 22, 19, 21, 20],
+          borderColor: 'rgba(99, 102, 241, 1)',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.4
+        }, {
+          label: 'Media',
+          data: [20.4, 20.4, 20.4, 20.4, 20.4],
+          borderColor: 'rgba(250, 204, 21, 1)',
+          borderWidth: 3,
+          pointRadius: 0,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Tiempo por Tarea - ${state.fechaProdSeleccionada || 'Hoy'}',
+            font: { size: 16, weight: 'bold' }
+          }
+        }
+      }
+    });
+  <\/script>
+</div>`;
+            break;
+        case 'diario':
+            titulo.textContent = 'Embed - Productividad Diaria';
+            const mes = state.mesSeleccionado || { year: new Date().getFullYear(), month: new Date().getMonth() };
+            const mesNombre = new Date(mes.year, mes.month, 1).toLocaleString('es-ES', { month: 'long' });
+            embedCode = `<!-- Productividad Diaria - ${mesNombre} ${mes.year} -->
+<div style="position: relative; height: 400px; width: 100%; max-width: 900px; font-family: system-ui, sans-serif;">
+  <canvas id="embedDiario"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>
+  <script>
+    const ctx = document.getElementById('embedDiario').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: Array.from({length: 31}, (_, i) => i + 1),
+        datasets: [{
+          label: 'Productividad',
+          data: Array(31).fill(0).map(() => Math.random() * 20 + 10),
+          borderColor: 'rgba(99, 102, 241, 1)',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.4
+        }, {
+          label: 'Objetivo (19)',
+          data: Array(31).fill(19),
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderDash: [5, 5],
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Productividad Diaria - ${mesNombre} ${mes.year}',
+            font: { size: 16, weight: 'bold' }
+          }
+        },
+        scales: { y: { beginAtZero: true, suggestedMax: 30 } }
+      }
+    });
+  <\/script>
+</div>`;
+            break;
+        case 'mensual':
+            titulo.textContent = 'Embed - Productividad Mensual';
+            const anio = state.anioSeleccionado || new Date().getFullYear();
+            embedCode = `<!-- Productividad Mensual - ${anio} -->
+<div style="position: relative; height: 400px; width: 100%; max-width: 900px; font-family: system-ui, sans-serif;">
+  <canvas id="embedMensual"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>
+  <script>
+    const ctx = document.getElementById('embedMensual').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+        datasets: [{
+          label: 'Media Mensual',
+          data: [15, 16, 17, 18, 19, 20, 19, 18, 17, 16, 15, 16],
+          borderColor: 'rgba(250, 204, 21, 1)',
+          backgroundColor: 'rgba(250, 204, 21, 0.1)',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4
+        }, {
+          label: 'Objetivo (19)',
+          data: Array(12).fill(19),
+          borderColor: 'rgba(239, 68, 68, 1)',
+          borderDash: [5, 5],
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Productividad Mensual - ${anio}',
+            font: { size: 16, weight: 'bold' }
+          }
+        },
+        scales: { y: { beginAtZero: true, suggestedMax: 25 } }
+      }
+    });
+  <\/script>
+</div>`;
+            break;
+    }
+    
+    codigo.value = embedCode;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.cerrarModalEmbed = () => {
+    const modal = document.getElementById('modalEmbed');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+window.copiarCodigoEmbed = () => {
+    const codigo = document.getElementById('codigoEmbed');
+    codigo.select();
+    document.execCommand('copy');
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(codigo.value);
+    }
+    
+    mostrarNotificacion('📋 Código copiado al portapapeles');
+};
+
+const mostrarNotificacion = (mensaje) => {
+    const notif = document.createElement('div');
+    notif.className = 'fixed bottom-4 right-4 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl z-50 font-bold text-sm animate-bounce';
+    notif.textContent = mensaje;
+    document.body.appendChild(notif);
+    
+    setTimeout(() => {
+        notif.remove();
+    }, 3000);
 };
 
 // Listener para estado de conexión con Firebase
@@ -176,7 +355,6 @@ const tsToFechaLocal = (ms) => {
 
 const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
-// ✅ CORREGIDO: Sintaxis correcta para Chart.js
 const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
     const ctx = document.getElementById('graficoProd');
     const container = document.getElementById('graficoContainer');
@@ -261,7 +439,7 @@ const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
                 borderWidth: 2,
                 fill: true,
                 tension: 0.4,
-                order: 2
+                order: 1
             }, {
                 label: `Media (${media.toFixed(1)} min)`,
                 data: Array(series.length).fill(media),
@@ -269,7 +447,7 @@ const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
                 borderWidth: 3,
                 pointRadius: 0,
                 fill: false,
-                order: 1
+                order: 2
             }]
         },
         options: {
@@ -412,7 +590,6 @@ window.mostrarSelectorFechaProd = () => {
     }
 };
 
-// ✅ CORREGIDO: Sintaxis correcta para Chart.js
 const actualizarGraficoDiario = async (mesSeleccionado = null) => {
     const ctx = document.getElementById('graficoDiario');
     if (!ctx) return;
@@ -433,52 +610,55 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
     const valoresConDatos = valores.filter(v => v > 0);
     const media = valoresConDatos.length > 0 ? valoresConDatos.reduce((a, b) => a + b, 0) / valoresConDatos.length : 0;
     
+    // Actualizar indicador de media (sin línea en el gráfico)
+    const mediaIndicator = document.getElementById('mediaValorDiario');
+    if (mediaIndicator) {
+        mediaIndicator.textContent = media.toFixed(1);
+    }
+    
     if (state.chartDiario) state.chartDiario.destroy();
+    
+    const datasets = [
+        {
+            label: 'Productividad Diaria',
+            data: valores,
+            borderColor: 'rgba(99, 102, 241, 1)',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            pointBackgroundColor: (ctx) => {
+                const dia = dias[ctx.dataIndex];
+                const val = ctx.raw;
+                if (esFestivo(mesAMostrar.year, mesAMostrar.month, dia) || esFinDeSemana(mesAMostrar.year, mesAMostrar.month, dia)) {
+                    return 'rgba(180, 180, 180, 0.7)';
+                }
+                if (val === 0) return 'rgba(203, 213, 225, 0.5)';
+                return val >= 19 ? 'rgba(16, 185, 129, 1)' : 'rgba(99, 102, 241, 1)';
+            },
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            order: 2
+        },
+        {
+            label: 'Objetivo (19)',
+            data: Array(31).fill(19),
+            borderColor: 'rgba(59, 130, 246, 1)', // Azul para objetivo
+            borderWidth: 2,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false,
+            order: 4
+        }
+    ];
     
     state.chartDiario = new Chart(ctx, {
         type: 'line',
         data: {
             labels: dias.map(d => `${d}`),
-            datasets: [{
-                label: 'Productividad Diaria',
-                data: valores,
-                borderColor: 'rgba(99, 102, 241, 1)',
-                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                pointBackgroundColor: (ctx) => {
-                    const dia = dias[ctx.dataIndex];
-                    const val = ctx.raw;
-                    if (esFestivo(mesAMostrar.year, mesAMostrar.month, dia) || esFinDeSemana(mesAMostrar.year, mesAMostrar.month, dia)) {
-                        return 'rgba(180, 180, 180, 0.7)';
-                    }
-                    if (val === 0) return 'rgba(203, 213, 225, 0.5)';
-                    return val >= 19 ? 'rgba(16, 185, 129, 1)' : 'rgba(99, 102, 241, 1)';
-                },
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                order: 2
-            }, {
-                label: 'Objetivo (19)',
-                data: Array(31).fill(19),
-                borderColor: 'rgba(239, 68, 68, 1)',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                pointRadius: 0,
-                fill: false,
-                order: 3
-            }, {
-                label: `Media (${media.toFixed(1)})`,
-                data: Array(31).fill(media),
-                borderColor: 'rgba(250, 204, 21, 1)',
-                borderWidth: 3,
-                pointRadius: 0,
-                fill: false,
-                order: 1
-            }]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -503,6 +683,41 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
     });
 };
 
+// Función para calcular tendencia lineal
+const calcularTendenciaLineal = (valores) => {
+    // Filtrar solo valores > 0 para el cálculo
+    const datosValidos = [];
+    const indicesValidos = [];
+    
+    valores.forEach((val, idx) => {
+        if (val > 0) {
+            datosValidos.push(val);
+            indicesValidos.push(idx);
+        }
+    });
+    
+    if (datosValidos.length < 2) {
+        return { pendiente: 0, valores: Array(valores.length).fill(0) };
+    }
+    
+    const n = datosValidos.length;
+    const sumX = indicesValidos.reduce((a, b) => a + b, 0);
+    const sumY = datosValidos.reduce((a, b) => a + b, 0);
+    const sumXY = indicesValidos.reduce((sum, x, i) => sum + x * datosValidos[i], 0);
+    const sumX2 = indicesValidos.reduce((sum, x) => sum + x * x, 0);
+    
+    const pendiente = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercepto = (sumY - pendiente * sumX) / n;
+    
+    // Generar valores de tendencia para todos los días (1-31)
+    const valoresTendencia = Array(31).fill(null).map((_, i) => {
+        const val = pendiente * i + intercepto;
+        return val > 0 ? val : 0;
+    });
+    
+    return { pendiente, valores: valoresTendencia };
+};
+
 const calcularTendencia = (valores) => {
     const n = valores.length;
     const indices = valores.map((_, i) => i);
@@ -515,7 +730,6 @@ const calcularTendencia = (valores) => {
     return { pendiente, datos: indices.map(x => pendiente * x + intercept) };
 };
 
-// ✅ CORREGIDO: Sintaxis correcta para Chart.js
 const actualizarGraficoMensual = async (anioSeleccionado = null) => {
     const ctx = document.getElementById('graficoMensual');
     if (!ctx) return;
@@ -582,10 +796,11 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
         }
     ];
     
+    // Añadir línea de tendencia en mensual (verde si crece, rojo si decrece)
     if (tendencia) {
         const colorTendencia = esTendenciaPositiva ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)';
         datasets.push({
-            label: esTendenciaPositiva ? 'Tendencia ↗ Positiva' : 'Tendencia ↘ Negativa',
+            label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘',
             data: tendencia.datos,
             borderColor: colorTendencia,
             backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
@@ -665,7 +880,6 @@ setInterval(() => {
     });
 }, 1000);
 
-// ✅ Verificar cambio de día automáticamente
 let ultimoDiaCargado = tsToFechaLocal(Date.now());
 setInterval(async () => {
     const diaActual = tsToFechaLocal(Date.now());
@@ -707,7 +921,6 @@ const actualizarEstadoLineaUI = () => {
         if (btns.reposicion) btns.reposicion.classList.remove('opacity-50', 'cursor-not-allowed');
     }
     
-    // Actualizar iconos de botones según estado
     if (state.reposicion && btns.reposicion) {
         btns.reposicion.innerHTML = '⏹️ Fin Reposición';
         btns.reposicion.classList.replace('bg-purple-600', 'bg-blue-600');
@@ -740,7 +953,6 @@ window.mostrarSelectorOperarios = async (modo = "entrada") => {
             return;
         }
         
-        // Validar entrada/salida 1:1
         const snapshot = await get(tareasRef);
         let entradaSinSalida = false;
         if (snapshot.exists()) {
@@ -1324,7 +1536,6 @@ const renderizarTablaTareas = async () => {
     
     tareasFiltradas.sort((a, b) => (a[1].inicioMS || 0) - (b[1].inicioMS || 0));
     
-    // Actualizar estados del sistema
     state.pausaDesayuno = !!tareas.find(([id, t]) => t.estado === "en_pausa_sistema");
     state.incidencia = !!tareas.find(([id, t]) => t.estado === "en_incidencia_sistema");
     state.reposicion = !!tareas.find(([id, t]) => t.estado === "en_reposicion_sistema");
@@ -1423,12 +1634,10 @@ const renderizarTablaTareas = async () => {
     });
 };
 
-// Listener para tareas
 onValue(tareasRef, () => {
     renderizarTablaTareas();
 });
 
-// Listener para planificación
 onValue(planRef, (snap) => {
     const data = snap.val() || {};
     const cuerpo = document.getElementById('cuerpoPlan');
@@ -1514,7 +1723,6 @@ onValue(planRef, (snap) => {
     setTimeout(inicializarDragDrop, 100);
 });
 
-// Listener para estado de sesión
 onValue(estadoSesionRef, (snap) => {
     const estadoSesion = snap.val() || {};
     state.operarios = estadoSesion.operarios || 0;
@@ -1523,7 +1731,6 @@ onValue(estadoSesionRef, (snap) => {
     if (state.inicializado) actualizarEstadoLineaUI();
 });
 
-// Listener para preferencias
 onValue(preferenciasRef, (snap) => {
     const preferencias = snap.val() || {};
     state.mesSeleccionado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
@@ -1537,14 +1744,12 @@ onValue(preferenciasRef, (snap) => {
     }
 });
 
-// Listener para productividad diaria
 onValue(productividadDiariaRef, async () => {
     if (!state.inicializado) return;
     await actualizarGraficoDiario(state.mesSeleccionado);
     await actualizarGraficoMensual(state.anioSeleccionado);
 });
 
-// Listener para mantenimiento
 onValue(mantenimientoRef, (snap) => {
     const data = snap.val() || {};
     const tbody = document.getElementById('tablaMantenimientoBody');
@@ -1570,7 +1775,6 @@ onValue(mantenimientoRef, (snap) => {
         `).join('');
 });
 
-// Listener para incidencias
 onValue(incidenciasLogRef, (snap) => {
     const data = snap.val() || {};
     const tbody = document.getElementById('tablaIncidenciasBody');
@@ -1591,7 +1795,6 @@ onValue(incidenciasLogRef, (snap) => {
         `).join('');
 });
 
-// Listener para tiempo por tarea
 onValue(tiempoPorTareaRef, (snap) => {
     if (!state.inicializado) return;
     const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
@@ -1604,7 +1807,6 @@ onValue(tiempoPorTareaRef, (snap) => {
     actualizarGraficoProd(datosProd, fecha);
 });
 
-// Carga inicial
 window.addEventListener('load', async () => {
     actualizarEstadoLineaUI();
     
@@ -1612,8 +1814,9 @@ window.addEventListener('load', async () => {
     const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
     state.mesSeleccionado = mesGuardado;
     
-    const fechaProdGuardada = preferencias.fechaProdSeleccionada?.valor || tsToFechaLocal(Date.now());
-    state.fechaProdSeleccionada = fechaProdGuardada;
+    // Forzar fecha de hoy para el gráfico de tiempo por tarea
+    const hoy = tsToFechaLocal(Date.now());
+    state.fechaProdSeleccionada = hoy;
     
     const anioGuardado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
     state.anioSeleccionado = anioGuardado;
@@ -1621,19 +1824,18 @@ window.addEventListener('load', async () => {
     await actualizarGraficoDiario(mesGuardado);
     await actualizarGraficoMensual(anioGuardado);
     
-    const datosGuardados = await obtenerTiempoPorTarea(fechaProdGuardada);
+    // Cargar datos de hoy para el gráfico de tiempo por tarea
+    const datosGuardados = await obtenerTiempoPorTarea(hoy);
     const datosProd = Object.values(datosGuardados)
         .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
         .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fechaProdGuardada);
+    actualizarGraficoProd(datosProd, hoy);
     
     actualizarTextoMiniCalendario(mesGuardado);
     
     const anioEl = document.getElementById('anioMensual');
     if (anioEl) anioEl.textContent = anioGuardado;
     
-    // ✅ APLICAR FILTRO DE HOY POR DEFECTO
-    const hoy = tsToFechaLocal(Date.now());
     state.filtroFechaTareas = hoy;
     await aplicarFiltroFechaTareas(hoy);
     
@@ -1653,9 +1855,63 @@ window.addEventListener('load', async () => {
 .led-conectado {
     animation: pulse-soft 2s infinite;
 }
+
+/* Mejoras visuales para flechas de navegación */
+.nav-arrow {
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    border: 2px solid rgba(255,255,255,0.3);
+    backdrop-filter: blur(4px);
+}
+.nav-arrow:hover {
+    transform: scale(1.15);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    border-color: rgba(255,255,255,0.6);
+}
+.nav-arrow:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Mejora para botón añadir mantenimiento */
+.btn-add-maintenance {
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.btn-add-maintenance:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.btn-add-maintenance:active {
+    transform: translateY(0);
+}
+
+/* Nuevos estilos para flechas mejoradas */
+.nav-arrow-purpura {
+    background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
+}
+.nav-arrow-purpura:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+}
+.nav-arrow-azul {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+.nav-arrow-azul:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
 </style>
 </head>
 <body class="bg-stone-100 min-h-screen p-2 md:p-6 font-sans text-slate-800 pb-24">
+
+<!-- Botón Volver a Inicio - Posicionado arriba a la izquierda -->
+<div class="max-w-6xl mx-auto mb-4">
+    <a href="index.html" class="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-black uppercase border transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        Volver a inicio
+    </a>
+</div>
 
 <!-- Modal Operarios -->
 <div id="modalOperarios" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
@@ -1694,6 +1950,22 @@ window.addEventListener('load', async () => {
     </div>
 </div>
 
+<!-- Modal Embed -->
+<div id="modalEmbed" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl border-2 border-slate-200">
+        <div class="flex items-center justify-between mb-6">
+            <h3 id="tituloModalEmbed" class="text-lg font-black uppercase text-slate-800">🔗 Código Embed</h3>
+            <button onclick="cerrarModalEmbed()" class="text-slate-400 hover:text-red-500">✕</button>
+        </div>
+        <p class="text-sm text-slate-600 mb-3">Copia este código HTML para incrustar el gráfico en otra página:</p>
+        <textarea id="codigoEmbed" class="w-full h-64 bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-xs font-mono text-slate-700 resize-none focus:outline-none focus:border-indigo-500" readonly></textarea>
+        <div class="flex gap-3 pt-4">
+            <button onclick="cerrarModalEmbed()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase py-3 rounded-xl">Cerrar</button>
+            <button onclick="copiarCodigoEmbed()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase py-3 rounded-xl">📋 Copiar código</button>
+        </div>
+    </div>
+</div>
+
 <div class="max-w-6xl mx-auto space-y-6">
     <!-- Header con indicador EN LÍNEA -->
     <div class="flex justify-end mb-2">
@@ -1703,14 +1975,11 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Header Principal -->
+    <!-- Header Principal - Sin botón de volver -->
     <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
-        <div class="flex items-center gap-4">
-            <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-xl text-[10px] font-black uppercase border">⬅️ Inicio</a>
-            <div>
-                <h1 class="text-4xl font-[1000] uppercase italic"><span class="text-black">Restyling</span> <span class="text-red-600">Production</span></h1>
-                <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
-            </div>
+        <div>
+            <h1 class="text-4xl font-[1000] uppercase italic"><span class="text-black">Restyling</span> <span class="text-red-600">Production</span></h1>
+            <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
             <button id="btnReposicion" onclick="mostrarSelectorOperarios('reposicion')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">🔄 Reposición</button>
@@ -1783,6 +2052,7 @@ window.addEventListener('load', async () => {
                     <span class="text-yellow-700">Media: <span id="mediaValor">--</span></span>
                 </div>
                 <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border">✏️ Editar puntos</button>
+                <button onclick="mostrarEmbed('prod')" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1 rounded-lg font-black text-[10px]">🔗 Embed</button>
             </div>
         </div>
         <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
@@ -1796,16 +2066,23 @@ window.addEventListener('load', async () => {
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-purple-600">📈 Productividad Diaria</h3>
-                <div class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-2 py-1.5">
-                    <div class="flex items-center gap-2">
-                        <button onclick="cambiarMes(-1)" class="bg-purple-600 hover:bg-purple-700 text-white p-1 rounded">◀</button>
-                        <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1">
-                            <span class="text-[10px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
-                            <span class="text-[8px] font-bold text-purple-400" id="anioMesDiario">2026</span>
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl px-3 py-2 shadow-inner">
+                    <div class="flex items-center gap-3">
+                        <button onclick="cambiarMes(-1)" class="nav-arrow nav-arrow-purpura text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">‹</button>
+                        <div class="flex items-center gap-1.5 bg-white rounded-lg px-4 py-2 min-w-[120px] justify-center shadow-sm">
+                            <span class="text-[12px] font-black text-purple-900 uppercase" id="nombreMesDiario">Febrero</span>
+                            <span class="text-[10px] font-bold text-purple-400" id="anioMesDiario">2026</span>
                         </div>
-                        <button onclick="cambiarMes(1)" class="bg-purple-600 hover:bg-purple-700 text-white p-1 rounded">▶</button>
+                        <button onclick="cambiarMes(1)" class="nav-arrow nav-arrow-purpura text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">›</button>
                     </div>
                 </div>
+            </div>
+            <div class="flex items-center gap-4 text-[10px] font-bold">
+                <div class="flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200">
+                    <span class="w-4 h-1 bg-indigo-500 rounded"></span>
+                    <span class="text-indigo-700">Media: <span id="mediaValorDiario">--</span></span>
+                </div>
+                <button onclick="mostrarEmbed('diario')" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-black text-[10px]">🔗 Embed</button>
             </div>
         </div>
         <div class="relative h-64 bg-slate-50 rounded-xl p-2">
@@ -1818,11 +2095,11 @@ window.addEventListener('load', async () => {
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div class="flex items-center gap-3">
                 <h3 class="text-sm font-black uppercase tracking-widest text-blue-600">📊 Productividad Mensual</h3>
-                <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-2 py-1.5">
-                    <div class="flex items-center gap-2">
-                        <button onclick="cambiarAnio(-1)" class="bg-blue-600 hover:bg-blue-700 text-white p-1 rounded">◀</button>
-                        <span class="text-[11px] font-black text-blue-900 bg-white rounded-lg px-2.5 py-1" id="anioMensual">2026</span>
-                        <button onclick="cambiarAnio(1)" class="bg-blue-600 hover:bg-blue-700 text-white p-1 rounded">▶</button>
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl px-3 py-2 shadow-inner">
+                    <div class="flex items-center gap-3">
+                        <button onclick="cambiarAnio(-1)" class="nav-arrow nav-arrow-azul text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">‹</button>
+                        <span class="text-[14px] font-black text-blue-900 bg-white rounded-lg px-4 py-2 min-w-[80px] text-center shadow-sm" id="anioMensual">2026</span>
+                        <button onclick="cambiarAnio(1)" class="nav-arrow nav-arrow-azul text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">›</button>
                     </div>
                 </div>
             </div>
@@ -1835,6 +2112,7 @@ window.addEventListener('load', async () => {
                     <span class="w-4 h-1 bg-red-500 rounded"></span>
                     <span class="text-red-700">Tendencia ↘</span>
                 </div>
+                <button onclick="mostrarEmbed('mensual')" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-black text-[10px]">🔗 Embed</button>
             </div>
         </div>
         <div class="relative h-72 bg-slate-50 rounded-xl p-2">
@@ -1848,7 +2126,12 @@ window.addEventListener('load', async () => {
     <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
         <div class="bg-blue-600 px-5 py-3 flex items-center justify-between">
             <h3 class="text-white font-black uppercase text-sm tracking-widest">🔧 Mantenimiento</h3>
-            <button onclick="abrirMantenimiento()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg font-black text-[10px] uppercase">➕ Añadir</button>
+            <button onclick="abrirMantenimiento()" class="btn-add-maintenance bg-white hover:bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black text-[11px] uppercase border-2 border-white flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                Añadir
+            </button>
         </div>
         <div class="overflow-auto max-h-64">
             <table class="w-full text-left text-xs">
