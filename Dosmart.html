@@ -728,7 +728,7 @@ window.finalizarTarea = async function(id) {
   try {
     const ahora = Date.now();
 
-    // Obtener datos de Firebase con fallback a cache local
+    // Obtener datos con fallback a cache local
     const snap = await get(ref(db, `tareas/${id}`));
     let t = snap.val() || tareasActivasTemp[id] || null;
     if (!t) { alert('❌ No se encontró la tarea'); return; }
@@ -738,12 +738,16 @@ window.finalizarTarea = async function(id) {
     const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
     const horaFin = new Date().toLocaleTimeString('es-ES');
 
-    await update(ref(db, `tareas/${id}`), { fin: horaFin, total: tiempoTotal, estado: "finalizado" });
-    await push(tareasHistorialRef, {
+    // ✅ Guardar en historial con el MISMO ID que en tareasRef para evitar duplicados
+    await update(ref(db, `historial_tareas/${id}`), {
       operario: t.operario, numSerie: t.numSerie, codigo: t.codigo,
       fecha: t.fecha, inicio: t.inicio, inicioMS: t.inicioMS,
       fin: horaFin, total: tiempoTotal, tipo: "produccion", timestamp: Date.now()
     });
+
+    // ✅ Borrar de tareasRef (activas) para que desaparezca de tareasActivasTemp
+    await remove(ref(db, `tareas/${id}`));
+
   } catch (err) {
     alert('❌ Error al finalizar: ' + err.message);
   }
@@ -752,19 +756,13 @@ window.finalizarTarea = async function(id) {
 // ============================================
 // ✅ FIX 1: borrarTarea — borra del nodo correcto
 // ============================================
-window.borrarTarea = async function(id) {
-  if (!id) { alert('❌ ID de tarea no válido'); return; }
+window.borrarTarea = async function(id, nodo) {
+  if (!id || !nodo) { alert('❌ ID o nodo no válido'); return; }
   if (!confirm('¿Borrar tarea de la tabla?')) return;
   try {
-    if (todasLasTareas && todasLasTareas[id]) {
-      // Está en el historial
-      await remove(ref(db, `historial_tareas/${id}`));
-    } else {
-      // Está en tareas activas
-      await remove(ref(db, `tareas/${id}`));
-    }
+    await remove(ref(db, `${nodo}/${id}`));
   } catch (error) {
-    alert('Error al borrar la tarea: ' + error.message);
+    alert('Error al borrar: ' + error.message);
   }
 };
 
@@ -945,15 +943,16 @@ function actualizarTablaTareas() {
   
   const todasLasTareasCombinadas = {};
   
-  // Primero añadir historial
+  // Primero añadir historial con nodo Firebase directo
   Object.entries(todasLasTareas || {}).forEach(([id, t]) => {
-    todasLasTareasCombinadas[id] = { ...t, id };
+    todasLasTareasCombinadas[id] = { ...t, id, _nodo: 'historial_tareas' };
   });
   
-  // Luego añadir activas SOLO si no están ya en historial
+  // Luego añadir activas SOLO si no están ya en historial,
+  // NO están finalizadas, y NO están en pausa_salida_linea (estado interno)
   Object.entries(tareasActivasTemp || {}).forEach(([id, t]) => {
-    if (!idsHistorial.has(id)) {
-      todasLasTareasCombinadas[id] = { ...t, id };
+    if (!idsHistorial.has(id) && t.estado !== 'finalizado' && t.estado !== 'pausa_salida_linea') {
+      todasLasTareasCombinadas[id] = { ...t, id, _nodo: 'tareas' };
     }
   });
 
@@ -1035,7 +1034,7 @@ function actualizarTablaTareas() {
         <td class="p-4 font-black text-center">${tiempoMostrado}</td>
         <td class="p-4 text-right flex justify-end gap-2">
           ${activo ? `<button onclick="finalizarTarea('${t.id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>` : (estaEnPausa ? '⏸️' : '✓')}
-          <button onclick="borrarTarea('${t.id}')" class="text-slate-300 hover:text-red-500 ml-2" title="Borrar tarea">🗑️</button>
+          <button onclick="borrarTarea('${t.id}', '${t._nodo}')" class="text-slate-300 hover:text-red-500 ml-2" title="Borrar tarea">🗑️</button>
         </td>
       </tr>`;
   });
