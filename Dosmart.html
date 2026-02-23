@@ -673,19 +673,34 @@ setInterval(() => {
 }, 1000);
 
 window.finalizarTarea = async function(id) {
+  if (!id || id === 'undefined' || id === 'null') { 
+    alert('❌ Error: ID no válido. Recarga la página.'); 
+    return; 
+  }
   if (!confirm('¿Finalizar tarea?')) return;
-  const snap = await get(ref(db, `tareas/${id}`));
-  const t = snap.val();
-  let totalMS = (t.acumuladoMS || 0);
-  if (t.estado === "activo") totalMS += (Date.now() - t.inicioMS);
-  const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
-  const horaFin = new Date().toLocaleTimeString('es-ES');
-  await update(ref(db, `tareas/${id}`), { fin: horaFin, total: tiempoTotal, estado: "finalizado" });
-  await push(tareasHistorialRef, {
-    operario: t.operario, numSerie: t.numSerie, codigo: t.codigo,
-    fecha: t.fecha, inicio: t.inicio, inicioMS: t.inicioMS,
-    fin: horaFin, total: tiempoTotal, tipo: "produccion", timestamp: Date.now()
-  });
+
+  try {
+    const ahora = Date.now();
+
+    // Obtener datos de Firebase con fallback a cache local
+    const snap = await get(ref(db, `tareas/${id}`));
+    let t = snap.val() || tareasActivasTemp[id] || null;
+    if (!t) { alert('❌ No se encontró la tarea'); return; }
+
+    let totalMS = (t.acumuladoMS || 0);
+    if (t.estado === "activo") totalMS += (ahora - t.inicioMS);
+    const tiempoTotal = Math.max(1, Math.round(totalMS / 60000));
+    const horaFin = new Date().toLocaleTimeString('es-ES');
+
+    await update(ref(db, `tareas/${id}`), { fin: horaFin, total: tiempoTotal, estado: "finalizado" });
+    await push(tareasHistorialRef, {
+      operario: t.operario, numSerie: t.numSerie, codigo: t.codigo,
+      fecha: t.fecha, inicio: t.inicio, inicioMS: t.inicioMS,
+      fin: horaFin, total: tiempoTotal, tipo: "produccion", timestamp: Date.now()
+    });
+  } catch (err) {
+    alert('❌ Error al finalizar: ' + err.message);
+  }
 };
 
 // ============================================
