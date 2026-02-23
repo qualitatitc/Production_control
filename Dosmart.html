@@ -159,7 +159,7 @@ const firebaseConfig = { apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw", auth
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 let chartInstance = null;
-function convertirHoraAMinutos(h) { if (!h || h==='--:--'||h==='---') return 0; const p=h.split(':').map(Number); return p[0]*60+p[1]+(p[2]||0)/60; }
+function convertirHoraAMinutos(h) { if (!h || h==='--:--'||h==='---') return 0; if (typeof h === 'number') return h / 60000; const s = String(h); if (!s.includes(':')) return 0; const p=s.split(':').map(Number); return p[0]*60+p[1]+(p[2]||0)/60; }
 function actualizarGrafico(datos) {
   const tareasAdrian=[], tareasAlberto=[];
   const tp = Object.entries(datos||{}).filter(([id,t])=>t.tipo==='produccion'&&t.total&&!isNaN(parseInt(t.total))&&parseInt(t.total)>0).map(([id,t])=>({...t,tiempoNum:parseInt(t.total),horaMinutos:convertirHoraAMinutos(t.inicio)})).sort((a,b)=>a.horaMinutos-b.horaMinutos);
@@ -298,14 +298,20 @@ function convertirFechaHTML(fechaHTML) {
 
 function convertirHoraAMinutos(horaStr) {
   if (!horaStr || horaStr === '--:--' || horaStr === '---') return 0;
-  const [horas, minutos, segundos] = horaStr.split(':').map(Number);
+  if (typeof horaStr === 'number') return horaStr / 60000;
+  const s = String(horaStr);
+  if (!s.includes(':')) return 0;
+  const [horas, minutos, segundos] = s.split(':').map(Number);
   if (isNaN(horas) || isNaN(minutos)) return 0;
   return horas * 60 + minutos + (segundos || 0) / 60;
 }
 
 function parsearFecha(fechaStr) {
-  if (!fechaStr || !fechaStr.includes('/')) return null;
-  const [dia, mes, anio] = fechaStr.split('/').map(Number);
+  if (!fechaStr) return null;
+  const s = String(fechaStr);
+  if (!s.includes('/')) return null;
+  const [dia, mes, anio] = s.split('/').map(Number);
+  if (isNaN(dia) || isNaN(mes) || isNaN(anio)) return null;
   return new Date(anio, mes - 1, dia);
 }
 
@@ -757,10 +763,13 @@ window.finalizarTarea = async function(id) {
 // ✅ FIX 1: borrarTarea — borra del nodo correcto
 // ============================================
 window.borrarTarea = async function(id, nodo) {
-  if (!id || !nodo) { alert('❌ ID o nodo no válido'); return; }
+  if (!id) { alert('❌ ID no válido'); return; }
   if (!confirm('¿Borrar tarea de la tabla?')) return;
   try {
-    await remove(ref(db, `${nodo}/${id}`));
+    await Promise.allSettled([
+      remove(ref(db, `historial_tareas/${id}`)),
+      remove(ref(db, `tareas/${id}`))
+    ]);
   } catch (error) {
     alert('Error al borrar: ' + error.message);
   }
@@ -1176,6 +1185,22 @@ onValue(estadoLineaRef, s => {
   else { lineaIniciada = false; operarioLineaActiva = null; numOperariosActivos = 1; }
   actualizarEstadoBotones();
 });
+
+
+// ✅ Limpieza automática: eliminar de tareasRef las tareas con estado "finalizado"
+// Son residuos del sistema anterior que causan duplicados en la tabla
+async function limpiarTareasFinalizadas() {
+  const snap = await get(tareasRef);
+  const tareas = snap.val() || {};
+  for (const [id, t] of Object.entries(tareas)) {
+    if (t.estado === 'finalizado' || t.tipo === 'jornada') {
+      await remove(ref(db, `tareas/${id}`));
+    }
+  }
+}
+
+// Limpiar tareas finalizadas legacy al arrancar
+limpiarTareasFinalizadas();
 
 get(estadoLineaRef).then(snapshot => {
   if (!snapshot.exists()) {
