@@ -644,9 +644,18 @@ window.eliminarPuntoGrafico = async function(firebaseId) {
 };
 
 window.filtrarPorFecha = function() {
-  const fechaInput = document.getElementById('filtroFecha').value;
-  if (fechaInput) actualizarGraficoPuntos(convertirFechaHTML(fechaInput));
-  else { document.getElementById('filtroFecha').value = obtenerFechaHoy(); actualizarGraficoPuntos(obtenerFecha()); }
+  let fechaInput = document.getElementById('filtroFecha').value;
+  if (!fechaInput) {
+    fechaInput = obtenerFechaHoy();
+    document.getElementById('filtroFecha').value = fechaInput;
+  }
+  const fechaDD = convertirFechaHTML(fechaInput);
+  // ✅ Sincronizar filtro de la tabla con el del gráfico
+  const filtroTabla = document.getElementById('filtroFechaTabla');
+  if (filtroTabla) filtroTabla.value = fechaInput;
+  filtroFechaTablaActual = fechaDD;
+  actualizarGraficoPuntos(fechaDD);
+  actualizarTablaTareas();
 };
 
 setInterval(() => {
@@ -896,7 +905,7 @@ function actualizarTablaTareas() {
   // ✅ FIX: ordenar por inicioMS (más reciente primero), con fallback a timestamp
   const tareasArray = Object.entries(todasLasTareasCombinadas)
     .map(([id, t]) => ({ ...t, id }))
-    .sort((a, b) => (b.inicioMS || b.timestamp || 0) - (a.inicioMS || a.timestamp || 0));
+    .sort((a, b) => (a.inicioMS || a.timestamp || 0) - (b.inicioMS || b.timestamp || 0));
 
   let tareasMostradas = 0;
 
@@ -1136,9 +1145,17 @@ window.handleKeyPress = (e, nextId) => {
 
 window.filtrarTablaPorFecha = function() {
   const fechaInput = document.getElementById('filtroFechaTabla').value;
-  if (!fechaInput) filtroFechaTablaActual = null;
-  else { const [anio, mes, dia] = fechaInput.split('-'); filtroFechaTablaActual = `${dia}/${mes}/${anio}`; }
+  if (!fechaInput) {
+    filtroFechaTablaActual = null;
+  } else {
+    const [anio, mes, dia] = fechaInput.split('-');
+    filtroFechaTablaActual = `${dia}/${mes}/${anio}`;
+  }
+  // ✅ Sincronizar filtro del gráfico con el de la tabla
+  const filtroFecha = document.getElementById('filtroFecha');
+  if (filtroFecha) filtroFecha.value = fechaInput || '';
   actualizarTablaTareas();
+  actualizarGraficoPuntos(filtroFechaTablaActual);
 };
 
 window.exportarExcel = async () => {
