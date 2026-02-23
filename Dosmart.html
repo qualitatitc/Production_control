@@ -495,13 +495,18 @@ function actualizarGraficoProductividadDiaria() {
     options: {
       responsive: true, maintainAspectRatio: false,
       onClick: async (e) => {
-        const points = chartProductividad.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+        // Usar 'index' con intersect:false para detectar el punto más cercano en X
+        const points = chartProductividad.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
         if (points.length) {
-          const firstPoint = points[0];
-          if (firstPoint.datasetIndex === 1) return;
-          const dia = firstPoint.index + 1;
+          // Buscar el punto del dataset de productividad (no la media)
+          const prodPoint = points.find(p => p.datasetIndex === 0);
+          if (!prodPoint) return;
+          const dia = prodPoint.index + 1;
           const [anioSel, mesSel] = document.getElementById('filtroMesProductividadDiaria').value.split('-').map(Number);
           const fechaBuscar = `${String(dia).padStart(2, '0')}/${String(mesSel).padStart(2, '0')}/${anioSel}`;
+          // Solo mostrar modal si ese día tiene datos de productividad
+          const valorDia = chartProductividad.data.datasets[0].data[prodPoint.index];
+          if (valorDia === null || valorDia === undefined || isNaN(valorDia)) return;
           mostrarModalEliminarDiaTodos(dia, mesSel, anioSel, fechaBuscar);
         }
       },
@@ -609,28 +614,69 @@ window.mostrarModalEliminarDiaTodos = function(dia, mes, anio, fecha) {
   const info = document.getElementById('infoTareaEliminar');
   const btnEliminar = document.getElementById('btnConfirmarEliminar');
   const nombreMes = new Date(anio, mes - 1).toLocaleDateString('es-ES', { month: 'long' });
-  let contadorTareas = 0;
-  if (todasLasTareas) Object.values(todasLasTareas).forEach(t => { if (t.tipo === 'produccion' && t.fecha === fecha) contadorTareas++; });
+
+  // Calcular la fecha del día anterior (para tareas que cruzan medianoche)
+  const fechaObj = parsearFecha(fecha);
+  fechaObj.setDate(fechaObj.getDate() - 1);
+  const fechaAnterior = `${String(fechaObj.getDate()).padStart(2, '0')}/${String(fechaObj.getMonth() + 1).padStart(2, '0')}/${fechaObj.getFullYear()}`;
+
+  let contadorDirectas = 0;
+  let contadorMedianoche = 0;
+  if (todasLasTareas) {
+    Object.values(todasLasTareas).forEach(t => {
+      if (t.tipo !== 'produccion') return;
+      if (t.fecha === fecha) {
+        contadorDirectas++;
+      } else if (t.fecha === fechaAnterior && t.fin && t.fin !== '--:--' && t.fin !== '---') {
+        // Tarea del día anterior que cruza medianoche hacia este día
+        const hInicio = convertirHoraAMinutos(t.inicio);
+        const hFin = convertirHoraAMinutos(t.fin);
+        if (hFin < hInicio) contadorMedianoche++;
+      }
+    });
+  }
+
+  const totalTareas = contadorDirectas + contadorMedianoche;
+  const notaMedianoche = contadorMedianoche > 0
+    ? `<p class="text-blue-600 text-xs mt-1">ℹ️ ${contadorMedianoche} tarea(s) del día anterior que cruzan medianoche</p>`
+    : '';
+
   info.innerHTML = `
     <div class="space-y-2">
       <p><span class="font-bold text-slate-600">Fecha:</span> ${dia} de ${nombreMes} ${anio}</p>
-      <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${contadorTareas} tareas de producción</span></p>
-      <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará todas las tareas de producción de este día</p>
+      <p><span class="font-bold text-slate-600">Tareas a borrar:</span> <span class="text-red-600 font-bold">${totalTareas} tarea(s) de producción</span></p>
+      ${notaMedianoche}
+      <p class="text-amber-600 text-xs mt-4">⚠️ Esto eliminará las tareas que generan este punto en el gráfico</p>
     </div>`;
-  btnEliminar.onclick = () => eliminarTareasDiaTodos(fecha);
+  btnEliminar.onclick = () => eliminarTareasDiaTodos(fecha, fechaAnterior);
   modal.classList.remove('hidden');
 };
 
-window.eliminarTareasDiaTodos = async function(fecha) {
-  if (!confirm(`¿Estás seguro de eliminar TODAS las tareas del ${fecha}?`)) { cerrarModalEliminar(); return; }
+window.eliminarTareasDiaTodos = async function(fecha, fechaAnterior) {
+  if (!confirm(`¿Estás seguro de eliminar las tareas que generan el punto del ${fecha}?`)) { cerrarModalEliminar(); return; }
   try {
     const snapshot = await get(tareasHistorialRef);
     const tareas = snapshot.val() || {};
     let eliminadas = 0;
     for (const [id, tarea] of Object.entries(tareas)) {
-      if (tarea.tipo === 'produccion' && tarea.fecha === fecha) { await remove(ref(db, `historial_tareas/${id}`)); eliminadas++; }
+      if (tarea.tipo !== 'produccion') continue;
+      // Tareas directas del día
+      if (tarea.fecha === fecha) {
+        await remove(ref(db, `historial_tareas/${id}`));
+        eliminadas++;
+        continue;
+      }
+      // Tareas del día anterior que cruzan medianoche hacia este día
+      if (fechaAnterior && tarea.fecha === fechaAnterior && tarea.fin && tarea.fin !== '--:--' && tarea.fin !== '---') {
+        const hInicio = convertirHoraAMinutos(tarea.inicio);
+        const hFin = convertirHoraAMinutos(tarea.fin);
+        if (hFin < hInicio) {
+          await remove(ref(db, `historial_tareas/${id}`));
+          eliminadas++;
+        }
+      }
     }
-    alert(`✓ Se eliminaron ${eliminadas} tareas del historial`);
+    alert(`✓ Se eliminaron ${eliminadas} tarea(s) del historial`);
     cerrarModalEliminar();
   } catch (error) { alert('Error al eliminar: ' + error.message); }
 };
@@ -1267,8 +1313,8 @@ window.exportarExcel = async () => {
 
   <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
     <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-      <div class="flex items-center gap-4">
-        <a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-2">← Volver</a>
+      <div class="flex flex-col gap-2">
+        <a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-1 w-fit">← Volver</a>
         <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dosmart <span class="text-amber-500">Production</span></h1>
       </div>
       <div class="flex flex-wrap justify-center gap-3">
