@@ -1703,21 +1703,28 @@ const poblarFiltroMeses = (items) => {
     // Con input[type=month] no hace falta poblar opciones
 };
 
-window.filtrarIncidenciasPorMes = () => {
-    const mes = document.getElementById('filtroMesIncidencias')?.value || ''; // formato YYYY-MM
-    const filtrados = mes
-        ? _incidenciasCache.filter(([, t]) => t.fecha && t.fecha.startsWith(mes))
-        : _incidenciasCache;
+const MESES_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+// Estado del filtro de incidencias
+const _filtroInc = { mes: new Date().getMonth(), anio: new Date().getFullYear() };
+
+const actualizarFiltroIncidencias = () => {
+    const label = document.getElementById('textoFiltroIncidencias');
+    if (label) label.textContent = `${MESES_ES[_filtroInc.mes]} ${_filtroInc.anio}`;
+    const prefijo = `${_filtroInc.anio}-${String(_filtroInc.mes + 1).padStart(2, '0')}`;
+    const filtrados = _incidenciasCache.filter(([, t]) => t.fecha && t.fecha.startsWith(prefijo));
     renderIncidencias(filtrados);
 };
 
-// Inicializar filtro de incidencias con el mes corriente
+window.cambiarMesIncidencias = (dir) => {
+    _filtroInc.mes += dir;
+    if (_filtroInc.mes > 11) { _filtroInc.mes = 0; _filtroInc.anio++; }
+    if (_filtroInc.mes < 0)  { _filtroInc.mes = 11; _filtroInc.anio--; }
+    actualizarFiltroIncidencias();
+};
+
 const initFiltroIncidencias = () => {
-    const input = document.getElementById('filtroMesIncidencias');
-    if (!input || input.value) return;
-    const hoy = new Date();
-    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-    input.value = `${hoy.getFullYear()}-${mes}`;
+    actualizarFiltroIncidencias();
 };
 
 // Listener para incidencias
@@ -2005,7 +2012,11 @@ window.addEventListener('load', async () => {
     <div class="bg-white rounded-3xl shadow-lg border overflow-hidden">
         <div class="bg-red-600 px-5 py-3 flex items-center justify-between">
             <h3 class="text-white font-black uppercase text-sm tracking-widest">⚠️ Registro de Incidencias</h3>
-            <input type="month" id="filtroMesIncidencias" onchange="filtrarIncidenciasPorMes()" class="bg-white/20 text-white border border-white/30 rounded-lg px-2 py-1 text-[10px] font-black focus:outline-none cursor-pointer [color-scheme:dark]">
+            <div class="flex items-center gap-1">
+                <button onclick="cambiarMesIncidencias(-1)" class="bg-transparent border-0 outline-none text-white font-black text-base leading-none px-1 cursor-pointer focus:outline-none">◀</button>
+                <span class="text-white font-black text-[10px] uppercase tracking-wider min-w-[100px] text-center" id="textoFiltroIncidencias">FEBRERO 2026</span>
+                <button onclick="cambiarMesIncidencias(1)" class="bg-transparent border-0 outline-none text-white font-black text-base leading-none px-1 cursor-pointer focus:outline-none">▶</button>
+            </div>
         </div>
         <div class="overflow-auto max-h-72">
             <table class="w-full text-left text-xs">
