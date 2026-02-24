@@ -1117,23 +1117,60 @@ window.procesarArchivo = function(e) {
             }
             
             let count = 0;
+            let resumen = [];
             json.forEach(item => {
                 const cleanItem = {};
                 Object.keys(item).forEach(key => {
                     cleanItem[key.trim().toLowerCase()] = String(item[key]).trim();
                 });
                 
-                push(planRef, {
-                    pedido: cleanItem["pedido"] || cleanItem["orden"] || "S/P",
-                    cliente: cleanItem["cliente"] || cleanItem["client"] || "Sin cliente",
-                    codigo: cleanItem["código"] || cleanItem["codigo"] || "--",
-                    serie: cleanItem["serie"] || cleanItem["nº serie"] || "--",
-                    notas: cleanItem["notas"] || cleanItem["observaciones"] || "",
-                    orden: Date.now() + count++
-                });
+                // Saltar filas vacías (sin pedido ni código)
+                const pedido = cleanItem["pedido"] || cleanItem["orden"] || "";
+                const codigo = cleanItem["código"] || cleanItem["codigo"] || "";
+                if (!pedido && !codigo) return;
+                
+                const cliente = cleanItem["cliente"] || cleanItem["client"] || "Sin cliente";
+                const notas = cleanItem["notas"] || cleanItem["observaciones"] || "";
+                const serieBase = cleanItem["serie"] || cleanItem["nº serie"] || "";
+                // Acepta: unidades, unidaes (typo), cantidad, uds, qty
+                const cantidad = parseInt(cleanItem["unidaes"] || cleanItem["unidades"] || cleanItem["cantidad"] || cleanItem["uds"] || cleanItem["qty"] || "1") || 1;
+                
+                // Separar prefijo (letras) de la parte numérica del nº de serie
+                // Ej: "D456872" → prefijo="D", numero=456872, padding=6
+                // Ej: "RS-00152" → prefijo="RS-", numero=152, padding=5
+                const matchSerie = serieBase.match(/^(.*?)(\d+)$/);
+                let prefijo = "";
+                let numeroBase = 0;
+                let padding = 0;
+                
+                if (matchSerie) {
+                    prefijo = matchSerie[1];
+                    const parteNumerica = matchSerie[2];
+                    numeroBase = parseInt(parteNumerica);
+                    padding = parteNumerica.length;
+                }
+                
+                for (let i = 0; i < cantidad; i++) {
+                    let serieGenerada;
+                    if (matchSerie) {
+                        serieGenerada = prefijo + String(numeroBase + i).padStart(padding, '0');
+                    } else {
+                        serieGenerada = i === 0 ? (serieBase || "--") : `${serieBase || "--"}-${i + 1}`;
+                    }
+                    
+                    push(planRef, {
+                        pedido: pedido || "S/P",
+                        cliente,
+                        codigo: codigo || "--",
+                        serie: serieGenerada,
+                        notas,
+                        orden: Date.now() + count++
+                    });
+                }
+                resumen.push(`Pedido ${pedido || "S/P"}: ${cantidad} uds (${serieBase} → ${prefijo}${String(numeroBase + cantidad - 1).padStart(padding, '0')})`);
             });
             
-            alert(`✅ ${count} series cargadas`);
+            alert(`✅ ${count} series cargadas\n\n${resumen.join('\n')}`);
         } catch (error) {
             alert("❌ Error: " + error.message);
         }
