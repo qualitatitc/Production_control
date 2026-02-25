@@ -66,6 +66,8 @@ let filtroFechaTablaActual = null;
 let inicioPausaMS = 0;
 let inicioIncidenciaMS = 0;
 let inicioReposicionMS = 0;
+let desayunosActivos = {}; // { "Adrian García": {inicioMS, horaTexto, fecha}, "Aitor Bautista": ... }
+let tareasPausadasPorDesayuno = false; // true solo si los 2 operarios están desayunando
 let chartInstance = null;
 let chartProductividad = null;
 let chartProductividadMensual = null;
@@ -603,14 +605,24 @@ window.filtrarPorFecha = function() {
 
 setInterval(() => {
   const ahora = Date.now();
-  if (!estaPausadoGlobal && !hayIncidenciaGlobal && !hayReposicionGlobal) {
+  // Solo actualizar contadores vivos si NO hay pausa global de tareas (ambos desayunando)
+  if (!tareasPausadasPorDesayuno && !hayIncidenciaGlobal && !hayReposicionGlobal) {
     document.querySelectorAll('.contador-vivo').forEach(el => {
       const inicioMS = parseInt(el.dataset.inicio);
       const acumuladoPrevio = parseInt(el.dataset.acumulado || 0);
       el.innerText = formatTime((ahora - inicioMS) + acumuladoPrevio);
     });
   }
-  if (estaPausadoGlobal) { const c = document.getElementById('tiempoDesayuno'); if(c) c.innerText = formatTime(ahora - inicioPausaMS); }
+  if (estaPausadoGlobal) {
+    const c = document.getElementById('tiempoDesayuno');
+    if (c) {
+      const nombres = Object.entries(desayunosActivos).map(([nombre, info]) => {
+        const t = formatTime(ahora - info.inicioMS);
+        return `${nombre.split(' ')[0]}: ${t}`;
+      });
+      c.innerHTML = nombres.join(' &nbsp;|&nbsp; ');
+    }
+  }
   if (hayIncidenciaGlobal) { const c = document.getElementById('tiempoIncidencia'); if(c) c.innerText = formatTime(ahora - inicioIncidenciaMS); }
   if (hayReposicionGlobal) { const c = document.getElementById('tiempoReposicion'); if(c) c.innerText = formatTime(ahora - inicioReposicionMS); }
 }, 1000);
@@ -720,23 +732,173 @@ window.toggleIncidencia = async function() {
 
 window.togglePausa = async function() {
   if (!lineaIniciada && !estaPausadoGlobal) { alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno'); return; }
-  const ahora = Date.now();
-  const snapTareas = await get(tareasRef);
-  const tareas = snapTareas.val() || {};
-  const updates = {};
-  if (!estaPausadoGlobal) {
-    update(pausaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
-    Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausado_desayuno"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
-  } else {
-    const snapP = await get(pausaRef);
-    const infoP = snapP.val();
-    const horaFin = new Date().toLocaleTimeString('es-ES');
-    const duracion = Math.round((ahora - infoP.inicioMS) / 60000) || 1;
-    await push(tareasHistorialRef, { operario: infoP.operario || "SISTEMA", numSerie: "---", codigo: "☕ DESAYUNO", fecha: infoP.fecha, inicio: infoP.horaTexto, inicioMS: infoP.inicioMS, fin: horaFin, total: duracion, tipo: "descanso", timestamp: Date.now() });
-    Object.keys(tareas).forEach(id => { if (tareas[id].estado === "pausado_desayuno") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; } });
-    update(pausaRef, { activa: false, inicioMS: 0 });
+  
+  // Si hay desayunos activos, mostrar modal de vuelta
+  if (Object.keys(desayunosActivos).length > 0) {
+    mostrarModalVolverDesayuno();
+    return;
   }
-  if (Object.keys(updates).length > 0) update(ref(db), updates);
+  
+  // Si no hay desayunos activos, mostrar modal para seleccionar quién va
+  document.getElementById('modalDesayuno').classList.remove('hidden');
+  // Reset checkboxes
+  document.getElementById('chkAdrian').checked = false;
+  document.getElementById('chkAitor').checked = false;
+};
+
+window.cerrarModalDesayuno = function() {
+  document.getElementById('modalDesayuno').classList.add('hidden');
+};
+
+window.confirmarDesayuno = async function() {
+  const adrian = document.getElementById('chkAdrian').checked;
+  const aitor = document.getElementById('chkAitor').checked;
+  
+  if (!adrian && !aitor) { alert('⚠️ Selecciona al menos un operario'); return; }
+  
+  cerrarModalDesayuno();
+  
+  const ahora = Date.now();
+  const horaTexto = new Date().toLocaleTimeString('es-ES');
+  const fecha = obtenerFecha();
+  const operariosSeleccionados = [];
+  
+  if (adrian) operariosSeleccionados.push('Adrian García');
+  if (aitor) operariosSeleccionados.push('Aitor Bautista');
+  
+  const ambosVan = operariosSeleccionados.length === 2;
+  
+  // Guardar estado de desayuno en Firebase
+  const estadoDesayuno = {};
+  operariosSeleccionados.forEach(op => {
+    estadoDesayuno[op.replace(/\s/g, '_')] = { inicioMS: ahora, horaTexto, fecha, operario: op };
+  });
+  estadoDesayuno.tareasPausadas = ambosVan;
+  estadoDesayuno.activa = true;
+  
+  await update(pausaRef, estadoDesayuno);
+  
+  // Si van los dos, pausar las tareas activas
+  if (ambosVan) {
+    const snapTareas = await get(tareasRef);
+    const tareas = snapTareas.val() || {};
+    const updates = {};
+    Object.keys(tareas).forEach(id => {
+      if (tareas[id].estado === "activo") {
+        updates[`tareas/${id}/estado`] = "pausado_desayuno";
+        updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS);
+      }
+    });
+    if (Object.keys(updates).length > 0) await update(ref(db), updates);
+  }
+};
+
+function mostrarModalVolverDesayuno() {
+  const modal = document.getElementById('modalVolverDesayuno');
+  const contenido = document.getElementById('contenidoVolverDesayuno');
+  const ahora = Date.now();
+  
+  let html = '';
+  Object.entries(desayunosActivos).forEach(([nombre, info]) => {
+    const tiempoMS = ahora - info.inicioMS;
+    const min = Math.floor(tiempoMS / 60000);
+    const seg = Math.floor((tiempoMS % 60000) / 1000);
+    const colorOp = nombre === 'Adrian García' ? 'blue' : 'red';
+    html += `
+      <div class="flex items-center justify-between bg-${colorOp}-50 border-2 border-${colorOp}-200 p-4 rounded-xl">
+        <div>
+          <p class="font-black text-${colorOp}-700 text-lg">${nombre}</p>
+          <p class="text-sm text-slate-500">Desde las ${info.horaTexto} — <span class="font-bold text-orange-600">${min}m ${seg}s</span></p>
+        </div>
+        <button onclick="volverDeDesayuno('${nombre}')" class="bg-green-500 hover:bg-green-600 text-white px-5 py-3 rounded-xl font-black text-sm uppercase shadow-lg transition-all transform hover:scale-105">
+          ✅ Ha vuelto
+        </button>
+      </div>`;
+  });
+  
+  contenido.innerHTML = html;
+  modal.classList.remove('hidden');
+}
+
+window.cerrarModalVolverDesayuno = function() {
+  document.getElementById('modalVolverDesayuno').classList.add('hidden');
+};
+
+window.volverDeDesayuno = async function(nombre) {
+  const ahora = Date.now();
+  const horaFin = new Date().toLocaleTimeString('es-ES');
+  const info = desayunosActivos[nombre];
+  
+  if (!info) { alert('❌ No se encontró info de desayuno para ' + nombre); return; }
+  
+  const duracion = Math.round((ahora - info.inicioMS) / 60000) || 1;
+  
+  // Registrar en historial con nombre del operario
+  await push(tareasHistorialRef, {
+    operario: nombre,
+    numSerie: "---",
+    codigo: `☕ DESAYUNO (${nombre.split(' ')[0]})`,
+    fecha: info.fecha,
+    inicio: info.horaTexto,
+    inicioMS: info.inicioMS,
+    fin: horaFin,
+    total: duracion,
+    tipo: "descanso",
+    timestamp: Date.now()
+  });
+  
+  // Eliminar este operario del estado de pausa en Firebase
+  const keyFirebase = nombre.replace(/\s/g, '_');
+  await update(pausaRef, { [keyFirebase]: null });
+  
+  // Comprobar si quedan más desayunos activos
+  const snapPausa = await get(pausaRef);
+  const estadoPausa = snapPausa.val() || {};
+  
+  const operariosRestantes = [];
+  if (estadoPausa['Adrian_García'] && estadoPausa['Adrian_García'].inicioMS) operariosRestantes.push('Adrian García');
+  if (estadoPausa['Aitor_Bautista'] && estadoPausa['Aitor_Bautista'].inicioMS) operariosRestantes.push('Aitor Bautista');
+  
+  if (operariosRestantes.length === 0) {
+    // Ya no queda nadie desayunando — reactivar tareas si estaban pausadas
+    if (estadoPausa.tareasPausadas) {
+      const snapTareas = await get(tareasRef);
+      const tareas = snapTareas.val() || {};
+      const updates = {};
+      Object.keys(tareas).forEach(id => {
+        if (tareas[id].estado === "pausado_desayuno") {
+          updates[`tareas/${id}/estado`] = "activo";
+          updates[`tareas/${id}/inicioMS`] = ahora;
+        }
+      });
+      if (Object.keys(updates).length > 0) await update(ref(db), updates);
+    }
+    await update(pausaRef, { activa: false, tareasPausadas: false });
+  } else if (operariosRestantes.length === 1 && estadoPausa.tareasPausadas) {
+    // Queda 1 operario desayunando pero las tareas estaban pausadas → reactivar tareas
+    // porque ahora hay un operario disponible para trabajar
+    const snapTareas = await get(tareasRef);
+    const tareas = snapTareas.val() || {};
+    const updates = {};
+    Object.keys(tareas).forEach(id => {
+      if (tareas[id].estado === "pausado_desayuno") {
+        updates[`tareas/${id}/estado`] = "activo";
+        updates[`tareas/${id}/inicioMS`] = ahora;
+      }
+    });
+    if (Object.keys(updates).length > 0) await update(ref(db), updates);
+    await update(pausaRef, { tareasPausadas: false });
+  }
+  
+  cerrarModalVolverDesayuno();
+  
+  // Si aún quedan operarios desayunando, reabrir el modal actualizado
+  if (operariosRestantes.length > 0) {
+    // Refrescar datos y reabrir
+    setTimeout(() => {
+      if (Object.keys(desayunosActivos).length > 0) mostrarModalVolverDesayuno();
+    }, 300);
+  }
 };
 
 window.registrarJornada = async (tipo) => {
@@ -1056,10 +1218,43 @@ onValue(incidenciaRef, s => {
 
 onValue(pausaRef, s => {
   const d = s.val();
-  estaPausadoGlobal = d?.activa;
-  inicioPausaMS = d?.inicioMS;
-  document.getElementById('btnPausa').innerHTML = estaPausadoGlobal ? "☕ VOLVER" : "🥐 DESAYUNO";
-  document.getElementById('cajaDesayuno').classList.toggle('hidden', !estaPausadoGlobal);
+  desayunosActivos = {};
+  tareasPausadasPorDesayuno = false;
+  
+  if (d && d.activa) {
+    if (d['Adrian_García'] && d['Adrian_García'].inicioMS) {
+      desayunosActivos['Adrian García'] = d['Adrian_García'];
+    }
+    if (d['Aitor_Bautista'] && d['Aitor_Bautista'].inicioMS) {
+      desayunosActivos['Aitor Bautista'] = d['Aitor_Bautista'];
+    }
+    tareasPausadasPorDesayuno = d.tareasPausadas || false;
+  }
+  
+  const numDesayunando = Object.keys(desayunosActivos).length;
+  estaPausadoGlobal = numDesayunando > 0;
+  
+  // Para el timer usamos el inicio más antiguo
+  if (numDesayunando > 0) {
+    inicioPausaMS = Math.min(...Object.values(desayunosActivos).map(i => i.inicioMS));
+  }
+  
+  const btnPausa = document.getElementById('btnPausa');
+  const cajaDesayuno = document.getElementById('cajaDesayuno');
+  
+  if (numDesayunando > 0) {
+    const nombres = Object.keys(desayunosActivos).map(n => n.split(' ')[0]).join(' + ');
+    btnPausa.innerHTML = `☕ VOLVER (${nombres})`;
+    cajaDesayuno.classList.remove('hidden');
+    // Mostrar quiénes están desayunando en la caja
+    const infoDesayuno = document.getElementById('tiempoDesayuno');
+    if (infoDesayuno) {
+      infoDesayuno.dataset.multi = numDesayunando > 1 ? 'true' : 'false';
+    }
+  } else {
+    btnPausa.innerHTML = "🥐 DESAYUNO";
+    cajaDesayuno.classList.add('hidden');
+  }
 });
 
 onValue(reposicionRef, s => {
@@ -1195,8 +1390,56 @@ window.exportarExcel = async () => {
   </div>
 </div>
 
+<!-- Modal Seleccionar Operarios para Desayuno -->
+<div id="modalDesayuno" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
+    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">☕ Desayuno</h3>
+    <p class="text-slate-600 text-center mb-8">¿Quién se va a desayunar?</p>
+    <div class="space-y-4 mb-8">
+      <label class="flex items-center gap-4 bg-blue-50 border-2 border-blue-200 p-5 rounded-2xl cursor-pointer hover:bg-blue-100 transition-all group">
+        <input type="checkbox" id="chkAdrian" class="w-6 h-6 rounded-lg text-blue-600 focus:ring-blue-400 accent-blue-600 cursor-pointer">
+        <div class="flex items-center gap-3 flex-1">
+          <div class="text-4xl">👤</div>
+          <div>
+            <p class="font-black text-blue-700 text-lg">Adrian García</p>
+            <p class="text-xs text-blue-400 font-bold uppercase">Operario 1</p>
+          </div>
+        </div>
+      </label>
+      <label class="flex items-center gap-4 bg-red-50 border-2 border-red-200 p-5 rounded-2xl cursor-pointer hover:bg-red-100 transition-all group">
+        <input type="checkbox" id="chkAitor" class="w-6 h-6 rounded-lg text-red-600 focus:ring-red-400 accent-red-600 cursor-pointer">
+        <div class="flex items-center gap-3 flex-1">
+          <div class="text-4xl">👤</div>
+          <div>
+            <p class="font-black text-red-700 text-lg">Aitor Bautista</p>
+            <p class="text-xs text-red-400 font-bold uppercase">Operario 2</p>
+          </div>
+        </div>
+      </label>
+    </div>
+    <p class="text-xs text-slate-400 text-center mb-6 bg-amber-50 p-3 rounded-xl border border-amber-200">
+      <span class="font-bold text-amber-600">ℹ️ Nota:</span> Si se van los dos, las tareas activas se pausarán. Si solo va uno, las tareas continúan activas.
+    </p>
+    <div class="flex gap-3">
+      <button onclick="cerrarModalDesayuno()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
+      <button onclick="confirmarDesayuno()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-black uppercase transition-colors shadow-lg">☕ Confirmar Desayuno</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Volver de Desayuno -->
+<div id="modalVolverDesayuno" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
+    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">☕ Vuelta del Desayuno</h3>
+    <p class="text-slate-600 text-center mb-6">Marca quién ha vuelto de desayunar</p>
+    <div id="contenidoVolverDesayuno" class="space-y-4 mb-6"></div>
+    <button onclick="cerrarModalVolverDesayuno()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cerrar</button>
+  </div>
+</div>
+
 <div class="max-w-7xl mx-auto">
-  <div class="flex justify-end mb-4">
+  <div class="flex justify-between items-center mb-4">
+    <a href="index.html" class="bg-white hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-1 shadow-sm">← Volver</a>
     <div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
       <div class="relative">
         <div id="firebaseLed" class="w-3 h-3 rounded-full bg-gray-400"></div>
@@ -1208,13 +1451,10 @@ window.exportarExcel = async () => {
 
   <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
     <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-      <div class="flex flex-col gap-2">
-        <a href="index.html" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-1 w-fit">← Volver</a>
-        <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dostec AC <span class="text-amber-500">Production</span></h1>
-      </div>
+      <h1 class="text-4xl font-black uppercase italic tracking-tighter">Dostec AC <span class="text-amber-500">Production</span></h1>
       <div class="flex flex-wrap justify-center gap-3">
         <div id="cajaIncidencia" class="hidden bg-red-100 p-2 rounded-xl text-right"><span id="tiempoIncidencia" class="font-mono font-bold text-red-700"></span></div>
-        <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700"></span></div>
+        <div id="cajaDesayuno" class="hidden bg-orange-100 p-2 px-4 rounded-xl text-right"><span id="tiempoDesayuno" class="font-mono font-bold text-orange-700 text-xs"></span></div>
         <div id="cajaReposicion" class="hidden bg-yellow-100 p-2 rounded-xl text-right"><span id="tiempoReposicion" class="font-mono font-bold text-yellow-700"></span></div>
         <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-bold text-xs"></button>
         <button id="btnReposicion" onclick="toggleReposicion()" class="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-yellow-500 transition-colors"></button>
