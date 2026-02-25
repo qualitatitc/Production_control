@@ -73,120 +73,9 @@ let todasLasTareas = {};
 let tareasActivasTemp = {};
 let primeraVez = true;
 
-// ============================================
-// FUNCIONES DE COMPARTIR/EMBED
-// ============================================
 
-window.mostrarModalEmbed = function(tipoGrafico) {
-  const modal = document.getElementById('modalEmbed');
-  const titulo = document.getElementById('tituloEmbed');
-  const codigoTextarea = document.getElementById('codigoEmbed');
-  const previewDiv = document.getElementById('previewEmbed');
-  
-  let tituloTexto = '';
-  let codigoHTML = '';
-  
-  switch(tipoGrafico) {
-    case 'tareas':
-      tituloTexto = 'Tiempo por Tarea Individual';
-      codigoHTML = generarCodigoEmbedTareas();
-      break;
-    case 'productividad-diaria':
-      tituloTexto = 'Productividad Diaria';
-      codigoHTML = generarCodigoEmbedProductividadDiaria();
-      break;
-    case 'productividad-mensual':
-      tituloTexto = 'Productividad Mensual';
-      codigoHTML = generarCodigoEmbedProductividadMensual();
-      break;
-  }
-  
-  titulo.textContent = `📊 Compartir: ${tituloTexto}`;
-  codigoTextarea.value = codigoHTML;
-  previewDiv.innerHTML = `<iframe srcdoc="${codigoHTML.replace(/"/g, '&quot;')}" style="width:100%;height:400px;border:1px solid #e2e8f0;border-radius:8px;"></iframe>`;
-  modal.classList.remove('hidden');
-};
 
-window.cerrarModalEmbed = function() {
-  document.getElementById('modalEmbed').classList.add('hidden');
-};
 
-window.copiarCodigoEmbed = function() {
-  const textarea = document.getElementById('codigoEmbed');
-  textarea.select();
-  document.execCommand('copy');
-  const btn = document.getElementById('btnCopiarEmbed');
-  const originalText = btn.textContent;
-  btn.textContent = '✓ Copiado!';
-  btn.classList.add('bg-green-500');
-  setTimeout(() => {
-    btn.textContent = originalText;
-    btn.classList.remove('bg-green-500');
-  }, 2000);
-};
-
-function generarCodigoEmbedTareas() {
-  const fechaInput = document.getElementById('filtroFecha').value;
-  const fechaParam = fechaInput ? `&fecha=${fechaInput}` : '';
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tiempo por Tarea - Dosmart</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"><\/script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"><\/script>
-<style>
-body { margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
-.container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-h2 { margin: 0; color: #1e293b; font-size: 1.25rem; font-weight: 800; }
-.status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-.chart-container { position: relative; height: 400px; }
-</style>
-</head>
-<body>
-<div class="container">
-  <div class="header">
-    <h2>⏱️ Tiempo por Tarea Individual</h2>
-    <div class="status"><span class="status-dot"></span><span>Tiempo real</span></div>
-  </div>
-  <div class="chart-container"><canvas id="grafico"></canvas></div>
-</div>
-<script>
-const firebaseConfig = { apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw", authDomain: "dosmart-2f395.firebaseapp.com", databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/", projectId: "dosmart-2f395", storageBucket: "dosmart-2f395.appspot.com", appId: "1:854942502621:web:5c1a7428f7492c3a382664" };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-let chartInstance = null;
-function convertirHoraAMinutos(h) { if (!h || h==='--:--'||h==='---') return 0; if (typeof h === 'number') return h / 60000; const s = String(h); if (!s.includes(':')) return 0; const p=s.split(':').map(Number); return p[0]*60+p[1]+(p[2]||0)/60; }
-function actualizarGrafico(datos) {
-  const tareasAdrian=[], tareasAlberto=[];
-  const tp = Object.entries(datos||{}).filter(([id,t])=>t.tipo==='produccion'&&t.total&&!isNaN(parseInt(t.total))&&parseInt(t.total)>0).map(([id,t])=>({...t,tiempoNum:parseInt(t.total),horaMinutos:convertirHoraAMinutos(t.inicio)})).sort((a,b)=>a.horaMinutos-b.horaMinutos);
-  tp.forEach((t,i)=>{const p={x:i,y:t.tiempoNum,tarea:t.codigo,serie:t.numSerie,hora:t.inicio}; if(t.operario==='Adrian García')tareasAdrian.push(p); else if(t.operario==='Aitor Bautista')tareasAlberto.push(p);});
-  const todos=[...tareasAdrian,...tareasAlberto].map(t=>t.y); const media=todos.length>0?todos.reduce((a,b)=>a+b,0)/todos.length:0;
-  const maxX=Math.max(tareasAdrian.length,tareasAlberto.length)-1; const lineaMedia=maxX>=0?[{x:0,y:media},{x:maxX,y:media}]:[];
-  const ctx=document.getElementById('grafico').getContext('2d'); if(chartInstance)chartInstance.destroy();
-  chartInstance=new Chart(ctx,{type:'scatter',data:{datasets:[{label:'Adrian García',data:tareasAdrian,backgroundColor:'#3b82f6',borderColor:'#2563eb',borderWidth:2,pointRadius:6},{label:'Aitor Bautista',data:tareasAlberto,backgroundColor:'#ef4444',borderColor:'#dc2626',borderWidth:2,pointRadius:6},{label:'Tiempo Medio',data:lineaMedia,type:'line',borderColor:'#fbbf24',borderWidth:2,borderDash:[5,5],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Nº tarea'},ticks:{callback:v=>v+1}},y:{beginAtZero:true,title:{display:true,text:'Minutos'}}}}});
-}
-db.ref('historial_tareas').on('value',(s)=>actualizarGrafico(s.val()));
-<\/script>
-</body>
-</html>`;
-}
-
-function generarCodigoEmbedProductividadDiaria() {
-  const inputMes = document.getElementById('filtroMesProductividadDiaria').value;
-  const [anio, mes] = inputMes ? inputMes.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1];
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Productividad Diaria - Dosmart</title><script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"><\/script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js"><\/script><style>body{margin:0;padding:20px;font-family:system-ui,sans-serif;background:#f8fafc;}.container{max-width:1200px;margin:0 auto;background:white;border-radius:16px;padding:20px;}.chart-container{position:relative;height:400px;}</style></head><body><div class="container"><h2>📊 Productividad Diaria</h2><div class="chart-container"><canvas id="grafico"></canvas></div></div><script>const firebaseConfig={apiKey:"AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw",authDomain:"dosmart-2f395.firebaseapp.com",databaseURL:"https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app/",projectId:"dosmart-2f395",storageBucket:"dosmart-2f395.appspot.com",appId:"1:854942502621:web:5c1a7428f7492c3a382664"};firebase.initializeApp(firebaseConfig);db=firebase.database();let chart=null;db.ref('historial_tareas').on('value',(s)=>{if(chart)chart.destroy();const ctx=document.getElementById('grafico').getContext('2d');chart=new Chart(ctx,{type:'line',data:{labels:[],datasets:[]},options:{responsive:true,maintainAspectRatio:false}});});<\/script></body></html>`;
-}
-
-function generarCodigoEmbedProductividadMensual() {
-  const anio = document.getElementById('selectAnioProductividadMensual').value || new Date().getFullYear();
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Productividad Mensual - Dosmart</title><script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script><style>body{margin:0;padding:20px;font-family:system-ui,sans-serif;background:#f8fafc;}.container{max-width:1200px;margin:0 auto;background:white;border-radius:16px;padding:20px;}.chart-container{position:relative;height:400px;}</style></head><body><div class="container"><h2>📈 Productividad Mensual ${anio}</h2><div class="chart-container"><canvas id="grafico"></canvas></div></div></body></html>`;
-}
 
 function actualizarEstadoBotones() {
   const btnPausa = document.getElementById('btnPausa');
@@ -1277,27 +1166,7 @@ window.exportarExcel = async () => {
 </head>
 <body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-900">
 
-<!-- Modal Embed -->
-<div id="modalEmbed" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 transform transition-all">
-    <div class="flex justify-between items-center mb-4">
-      <h3 id="tituloEmbed" class="text-xl font-black uppercase italic text-slate-800">📊 Compartir Gráfico</h3>
-      <button onclick="cerrarModalEmbed()" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div>
-        <label class="text-xs font-bold text-slate-500 uppercase mb-2 block">Código HTML para incrustar:</label>
-        <textarea id="codigoEmbed" readonly class="w-full h-64 bg-slate-900 text-green-400 font-mono text-xs p-4 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"></textarea>
-        <button id="btnCopiarEmbed" onclick="copiarCodigoEmbed()" class="mt-3 w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold py-3 rounded-xl uppercase transition-colors">📋 Copiar Código</button>
-      </div>
-      <div>
-        <label class="text-xs font-bold text-slate-500 uppercase mb-2 block">Vista previa:</label>
-        <div id="previewEmbed" class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden"></div>
-        <p class="text-xs text-slate-400 mt-2 italic">El gráfico se actualizará en tiempo real en cualquier página donde lo incrustes.</p>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 <div id="modalEliminar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
@@ -1424,7 +1293,7 @@ window.exportarExcel = async () => {
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
           <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
-        <button onclick="mostrarModalEmbed('tareas')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2">🔗 Compartir</button>
+
       </div>
     </div>
     <div class="h-96 w-full"><canvas id="graficoTareas"></canvas></div>
@@ -1449,7 +1318,7 @@ window.exportarExcel = async () => {
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
           <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
-        <button onclick="mostrarModalEmbed('productividad-diaria')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2">🔗 Compartir</button>
+
       </div>
     </div>
     <div class="h-96 w-full"><canvas id="graficoProductividadDiaria"></canvas></div>
@@ -1481,7 +1350,7 @@ window.exportarExcel = async () => {
             <option value="2026">2026</option>
           </select>
         </div>
-        <button onclick="mostrarModalEmbed('productividad-mensual')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase shadow-sm transition-colors flex items-center gap-2">🔗 Compartir</button>
+
       </div>
     </div>
     <div class="h-96 w-full"><canvas id="graficoProductividadMensual"></canvas></div>
