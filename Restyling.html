@@ -538,7 +538,7 @@ window.seleccionarFechaProd = async (fecha) => {
         const esHoy = fecha === hoy;
         btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
         btnFiltro.innerHTML = `📅 ${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-        tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
+        tituloTabla.textContent = 'Pedidos en proceso';
     }
     await renderizarTablaTareas();
 };
@@ -1564,7 +1564,7 @@ window.aplicarFiltroFechaTareas = async (fecha) => {
         const esHoy = fecha === hoy;
         btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
         btnFiltro.innerHTML = `📅 ${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-        tituloTabla.innerHTML = `Pedidos en proceso <span class="text-emerald-600">(${esHoy ? 'Hoy' : fecha})</span>`;
+        tituloTabla.textContent = 'Pedidos en proceso';
     } else {
         resetFiltroFechaTareas();
     }
@@ -1621,15 +1621,27 @@ const renderizarTablaTareas = async () => {
     
     actualizarEstadoLineaUI();
     
-    if (tareasFiltradas.length === 0 && state.filtroFechaTareas) {
-        cuerpo.innerHTML = `
-            <tr>
-                <td colspan="7" class="p-8 text-center text-slate-400">
-                    <p class="font-bold text-sm">No hay tareas para ${state.filtroFechaTareas}</p>
-                    <button onclick="resetFiltroFechaTareas()" class="text-emerald-600 hover:text-emerald-700 font-black text-xs uppercase mt-2">Ver todas</button>
-                </td>
-            </tr>
-        `;
+    if (tareasFiltradas.length === 0) {
+        if (state.filtroFechaTareas) {
+            cuerpo.innerHTML = `
+                <tr>
+                    <td colspan="7" class="p-8 text-center text-slate-400">
+                        <p class="font-bold text-sm">No hay tareas para ${state.filtroFechaTareas}</p>
+                        <button onclick="resetFiltroFechaTareas()" class="text-emerald-600 hover:text-emerald-700 font-black text-xs uppercase mt-2">Ver todas</button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            cuerpo.innerHTML = `
+                <tr>
+                    <td colspan="7" class="p-10 text-center">
+                        <p class="text-2xl mb-2">✅</p>
+                        <p class="font-black text-sm text-slate-500 uppercase tracking-wide">Sin pedidos en proceso</p>
+                        <p class="text-xs text-slate-300 mt-1">A la espera de nuevos pedidos</p>
+                    </td>
+                </tr>
+            `;
+        }
         return;
     }
     
@@ -1686,7 +1698,7 @@ const renderizarTablaTareas = async () => {
         
         let accionHtml = '';
         if (esActivo) {
-            accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase">Finalizar</button>`;
+            accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="flex items-center gap-1.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-full border border-red-200 hover:border-red-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Finalizar"><span class="text-xs">■</span> Fin</button>`;
         } else if (esPausado) {
             accionHtml = '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>';
         } else if (esHito) {
@@ -1786,8 +1798,8 @@ onValue(planRef, (snap) => {
                     <td class="p-2 text-right" colspan="2">
                         <div class="flex items-center justify-end gap-3">
                             <button onclick="iniciarDesdePlan('${item.id}', '${item.serie}', '${item.codigo}', '${item.notas}', '${pedido}', '${item.cliente}')"
-                                class="bg-red-600 hover:bg-slate-900 text-white px-4 py-1.5 rounded-lg font-black text-[10px] uppercase">
-                                ▶️ Iniciar
+                                class="group flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white px-3 py-1.5 rounded-full border border-emerald-200 hover:border-emerald-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Iniciar">
+                                <span class="text-xs">▶</span> Iniciar
                             </button>
                             <button onclick="borrarSeriePendiente('${item.id}', event)" class="text-stone-300 hover:text-red-500">🗑️</button>
                         </div>
