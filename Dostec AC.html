@@ -62,6 +62,7 @@ let hayReposicionGlobal = false;
 let lineaIniciada = false;
 let numOperariosActivos = 1;
 let operarioLineaActiva = null;
+let operariosEnLinea = [];
 let filtroFechaTablaActual = null;
 let inicioPausaMS = 0;
 let inicioIncidenciaMS = 0;
@@ -120,13 +121,9 @@ function actualizarEstadoBotones() {
 }
 
 window.forzarParadaLinea = async function() {
-  const operario = document.getElementById('selectOperario').value;
-  if (lineaIniciada && operarioLineaActiva && operario !== operarioLineaActiva) {
-    alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede forzar la parada.`);
-    return;
-  }
   if (!confirm('⛔ ¿Forzar parada de línea?\nSe registrará una SALIDA ahora mismo.')) return;
 
+  const operario = operariosEnLinea.length > 0 ? operariosEnLinea.join(' + ') : 'SISTEMA';
   const horaActual = new Date().toLocaleTimeString('es-ES');
   const fechaActual = obtenerFecha();
   const ahora = Date.now();
@@ -145,7 +142,6 @@ window.forzarParadaLinea = async function() {
 
   if (Object.keys(updates).length > 0) await update(ref(db), updates);
 
-  // ✅ Solo guardamos en historial (una sola entrada en la tabla)
   await push(tareasHistorialRef, {
     operario, numSerie: "---", codigo: "⛔ SALIDA FORZADA",
     fecha: fechaActual, inicio: horaActual, inicioMS: ahora,
@@ -155,7 +151,9 @@ window.forzarParadaLinea = async function() {
   lineaIniciada = false;
   numOperariosActivos = 1;
   operarioLineaActiva = null;
-  await update(estadoLineaRef, { activa: false, operario: null, numOperarios: 0 });
+  operariosEnLinea = [];
+  actualizarDisplayOperario();
+  await update(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
   actualizarEstadoBotones();
 };
 
@@ -167,7 +165,7 @@ const obtenerFecha = () => {
   return `${dia}/${mes}/${anio}`;
 };
 
-const obtenerOperarioActual = () => document.getElementById('selectOperario').value;
+const obtenerOperarioActual = () => operariosEnLinea.length > 0 ? operariosEnLinea.join(' + ') : 'Sin operario';
 
 function obtenerFechaHoy() {
   const hoy = new Date();
@@ -739,9 +737,14 @@ window.togglePausa = async function() {
     return;
   }
   
-  // Si no hay desayunos activos, mostrar modal para seleccionar quién va
+  // Si solo hay 1 operario en línea, ir directo sin preguntar
+  if (operariosEnLinea.length <= 1) {
+    await iniciarDesayunoDirecto(operariosEnLinea.length === 1 ? [operariosEnLinea[0]] : [obtenerOperarioActual()]);
+    return;
+  }
+  
+  // Si hay 2 operarios, mostrar modal para seleccionar quién va
   document.getElementById('modalDesayuno').classList.remove('hidden');
-  // Reset checkboxes
   document.getElementById('chkAdrian').checked = false;
   document.getElementById('chkAitor').checked = false;
 };
@@ -758,15 +761,19 @@ window.confirmarDesayuno = async function() {
   
   cerrarModalDesayuno();
   
+  const seleccionados = [];
+  if (adrian) seleccionados.push('Adrian García');
+  if (aitor) seleccionados.push('Aitor Bautista');
+  
+  await iniciarDesayunoDirecto(seleccionados);
+};
+
+async function iniciarDesayunoDirecto(operariosSeleccionados) {
   const ahora = Date.now();
   const horaTexto = new Date().toLocaleTimeString('es-ES');
   const fecha = obtenerFecha();
-  const operariosSeleccionados = [];
   
-  if (adrian) operariosSeleccionados.push('Adrian García');
-  if (aitor) operariosSeleccionados.push('Aitor Bautista');
-  
-  const ambosVan = operariosSeleccionados.length === 2;
+  const ambosVan = operariosSeleccionados.length >= 2 || operariosEnLinea.length <= 1;
   
   // Guardar estado de desayuno en Firebase
   const estadoDesayuno = {};
@@ -902,24 +909,37 @@ window.volverDeDesayuno = async function(nombre) {
 };
 
 window.registrarJornada = async (tipo) => {
-  const operario = document.getElementById('selectOperario').value;
   const esEntrada = tipo === 'INICIO';
   if (esEntrada && lineaIniciada) { alert('⚠️ ERROR: La línea ya está activa. No puedes registrar otra ENTRADA sin antes registrar una SALIDA.'); return; }
   if (!esEntrada && !lineaIniciada) { alert('⚠️ ERROR: La línea ya está parada. No puedes registrar SALIDA sin una ENTRADA previa.'); return; }
-  if (!esEntrada && operarioLineaActiva && operario !== operarioLineaActiva) { alert(`⚠️ La línea fue iniciada por ${operarioLineaActiva}.\nSolo ese operario puede registrar la salida.`); return; }
-  if (esEntrada) document.getElementById('modalOperarios').classList.remove('hidden');
-  else await ejecutarRegistroJornada('FIN', 0);
+  if (esEntrada) {
+    document.getElementById('chkEntradaAdrian').checked = false;
+    document.getElementById('chkEntradaAitor').checked = false;
+    document.getElementById('modalOperarios').classList.remove('hidden');
+  } else {
+    await ejecutarRegistroJornada('FIN', 0, []);
+  }
+};
+
+window.confirmarEntradaConNombres = async function() {
+  const adrian = document.getElementById('chkEntradaAdrian').checked;
+  const aitor = document.getElementById('chkEntradaAitor').checked;
+  if (!adrian && !aitor) { alert('⚠️ Selecciona al menos un operario'); return; }
+  const seleccionados = [];
+  if (adrian) seleccionados.push('Adrian García');
+  if (aitor) seleccionados.push('Aitor Bautista');
+  cerrarModalOperarios();
+  await ejecutarRegistroJornada('INICIO', seleccionados.length, seleccionados);
 };
 
 window.confirmarEntradaOperarios = async function(numOperarios) {
   cerrarModalOperarios();
-  await ejecutarRegistroJornada('INICIO', numOperarios);
+  await ejecutarRegistroJornada('INICIO', numOperarios, []);
 };
 
 window.cerrarModalOperarios = function() { document.getElementById('modalOperarios').classList.add('hidden'); };
 
-async function ejecutarRegistroJornada(tipo, numOperarios) {
-  const operario = document.getElementById('selectOperario').value;
+async function ejecutarRegistroJornada(tipo, numOperarios, nombresOperarios) {
   const horaActual = new Date().toLocaleTimeString('es-ES');
   const fechaActual = obtenerFecha();
   const esEntrada = tipo === 'INICIO';
@@ -927,9 +947,11 @@ async function ejecutarRegistroJornada(tipo, numOperarios) {
 
   if (esEntrada) {
     numOperariosActivos = numOperarios;
+    operariosEnLinea = nombresOperarios || [];
+    operarioLineaActiva = operariosEnLinea.join(' + ');
     lineaIniciada = true;
-    operarioLineaActiva = operario;
-    await update(estadoLineaRef, { activa: true, operario, numOperarios, horaInicio: horaActual, fecha: fechaActual });
+    actualizarDisplayOperario();
+    await update(estadoLineaRef, { activa: true, operario: operarioLineaActiva, operarios: operariosEnLinea, numOperarios, horaInicio: horaActual, fecha: fechaActual });
     const snapTareas = await get(tareasRef);
     const tareas = snapTareas.val() || {};
     const updates = {};
@@ -944,24 +966,45 @@ async function ejecutarRegistroJornada(tipo, numOperarios) {
     lineaIniciada = false;
     numOperariosActivos = 1;
     operarioLineaActiva = null;
-    await update(estadoLineaRef, { activa: false, operario: null, numOperarios: 0 });
+    operariosEnLinea = [];
+    actualizarDisplayOperario();
+    await update(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
   }
 
   actualizarEstadoBotones();
 
-  // ✅ Solo un push al historial — evita duplicado en la tabla
+  const operarioRegistro = esEntrada ? operariosEnLinea.join(' + ') : operarioLineaActiva || 'SISTEMA';
+  const nombresCortos = esEntrada ? operariosEnLinea.map(n => n.split(' ')[0]).join(' + ') : '';
+
   await push(tareasHistorialRef, {
-    operario, numSerie: "---",
-    codigo: esEntrada ? `🟢 ENTRADA (${numOperariosActivos} op.)` : "🔴 SALIDA",
+    operario: operarioRegistro, numSerie: "---",
+    codigo: esEntrada ? `🟢 ENTRADA (${nombresCortos})` : "🔴 SALIDA",
     fecha: fechaActual, inicio: horaActual, inicioMS: ahora,
     fin: "---", total: 0, tipo: "jornada",
     numOperarios: esEntrada ? numOperariosActivos : 0, timestamp: Date.now()
   });
 }
 
+function actualizarDisplayOperario() {
+  const display = document.getElementById('displayOperario');
+  if (!display) return;
+  if (operariosEnLinea.length === 0) {
+    display.textContent = 'Sin operarios';
+    display.classList.remove('text-emerald-700', 'bg-emerald-50');
+    display.classList.add('text-slate-400', 'bg-slate-50');
+  } else if (operariosEnLinea.length === 1) {
+    const color = operariosEnLinea[0] === 'Adrian García' ? 'blue' : 'red';
+    display.textContent = operariosEnLinea[0];
+    display.className = `p-4 rounded-xl font-bold border-none outline-none bg-${color}-50 text-${color}-700`;
+  } else {
+    display.textContent = operariosEnLinea.join(' + ');
+    display.className = 'p-4 rounded-xl font-bold border-none outline-none bg-emerald-50 text-emerald-700';
+  }
+}
+
 window.iniciarTarea = async function() {
   if (!lineaIniciada) { alert('⚠️ Debes registrar la ENTRADA antes de iniciar tareas'); return; }
-  const operario = document.getElementById('selectOperario').value;
+  const operario = operariosEnLinea.join(' + ');
   const serie = document.getElementById('numSerie').value.trim().toUpperCase();
   const cod = document.getElementById('codigo').value.trim().toUpperCase();
   if (!serie) { alert('⚠️ Introduce el Nº de Serie'); document.getElementById('numSerie').focus(); return; }
@@ -1267,8 +1310,22 @@ onValue(reposicionRef, s => {
 
 onValue(estadoLineaRef, s => {
   const d = s.val();
-  if (d) { lineaIniciada = d.activa || false; operarioLineaActiva = d.operario || null; numOperariosActivos = d.numOperarios || 1; }
-  else { lineaIniciada = false; operarioLineaActiva = null; numOperariosActivos = 1; }
+  if (d) {
+    lineaIniciada = d.activa || false;
+    operarioLineaActiva = d.operario || null;
+    numOperariosActivos = d.numOperarios || 1;
+    operariosEnLinea = d.operarios || [];
+    // Fallback: si no hay array operarios pero sí hay operario string, reconstruir
+    if (operariosEnLinea.length === 0 && operarioLineaActiva) {
+      operariosEnLinea = operarioLineaActiva.split(' + ').map(s => s.trim()).filter(Boolean);
+    }
+  } else {
+    lineaIniciada = false;
+    operarioLineaActiva = null;
+    numOperariosActivos = 1;
+    operariosEnLinea = [];
+  }
+  actualizarDisplayOperario();
   actualizarEstadoBotones();
 });
 
@@ -1301,9 +1358,9 @@ get(estadoLineaRef).then(snapshot => {
           }
         });
         if (hayEntradaSinSalida && ultimaEntrada) {
-          const match = ultimaEntrada.codigo.match(/\((\d+) op\.\)/);
-          const numOp = match ? parseInt(match[1]) : 1;
-          update(estadoLineaRef, { activa: true, operario: ultimaEntrada.operario, numOperarios: numOp, horaInicio: ultimaEntrada.inicio, fecha: ultimaEntrada.fecha });
+          const ops = ultimaEntrada.operario ? ultimaEntrada.operario.split(' + ').map(s => s.trim()).filter(Boolean) : [];
+          const numOp = ops.length || 1;
+          update(estadoLineaRef, { activa: true, operario: ultimaEntrada.operario, operarios: ops, numOperarios: numOp, horaInicio: ultimaEntrada.inicio, fecha: ultimaEntrada.fecha });
         }
       }
     });
@@ -1376,17 +1433,34 @@ window.exportarExcel = async () => {
 
 <div id="modalOperarios" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
-    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">👥 Registro de Entrada</h3>
-    <p class="text-slate-600 text-center mb-8">¿Cuántos operarios van a trabajar?</p>
-    <div class="grid grid-cols-2 gap-6">
-      <button onclick="confirmarEntradaOperarios(1)" class="group relative bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
-        <div class="flex flex-col items-center gap-4"><div class="text-6xl">👤</div><div class="text-3xl font-black">1</div><div class="text-sm font-bold uppercase tracking-wider">Operario</div></div>
-      </button>
-      <button onclick="confirmarEntradaOperarios(2)" class="group relative bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
-        <div class="flex flex-col items-center gap-4"><div class="text-6xl">👥</div><div class="text-3xl font-black">2</div><div class="text-sm font-bold uppercase tracking-wider">Operarios</div></div>
-      </button>
+    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">☀️ Registro de Entrada</h3>
+    <p class="text-slate-600 text-center mb-8">¿Quién va a trabajar hoy?</p>
+    <div class="space-y-4 mb-8">
+      <label class="flex items-center gap-4 bg-blue-50 border-2 border-blue-200 p-5 rounded-2xl cursor-pointer hover:bg-blue-100 transition-all">
+        <input type="checkbox" id="chkEntradaAdrian" class="w-6 h-6 rounded-lg text-blue-600 focus:ring-blue-400 accent-blue-600 cursor-pointer">
+        <div class="flex items-center gap-3 flex-1">
+          <div class="text-4xl">👤</div>
+          <div>
+            <p class="font-black text-blue-700 text-lg">Adrian García</p>
+            <p class="text-xs text-blue-400 font-bold uppercase">Operario 1</p>
+          </div>
+        </div>
+      </label>
+      <label class="flex items-center gap-4 bg-red-50 border-2 border-red-200 p-5 rounded-2xl cursor-pointer hover:bg-red-100 transition-all">
+        <input type="checkbox" id="chkEntradaAitor" class="w-6 h-6 rounded-lg text-red-600 focus:ring-red-400 accent-red-600 cursor-pointer">
+        <div class="flex items-center gap-3 flex-1">
+          <div class="text-4xl">👤</div>
+          <div>
+            <p class="font-black text-red-700 text-lg">Aitor Bautista</p>
+            <p class="text-xs text-red-400 font-bold uppercase">Operario 2</p>
+          </div>
+        </div>
+      </label>
     </div>
-    <button onclick="cerrarModalOperarios()" class="w-full mt-6 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
+    <div class="flex gap-3">
+      <button onclick="cerrarModalOperarios()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
+      <button onclick="confirmarEntradaConNombres()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-black uppercase transition-colors shadow-lg">☀️ Confirmar Entrada</button>
+    </div>
   </div>
 </div>
 
@@ -1471,11 +1545,8 @@ window.exportarExcel = async () => {
 
   <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="flex flex-col">
-      <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
-      <select id="selectOperario" class="bg-slate-50 p-4 rounded-xl font-bold border-none outline-none focus:ring-2 focus:ring-amber-400">
-        <option selected>Adrian García</option>
-        <option>Aitor Bautista</option>
-      </select>
+      <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario(s) en Línea</label>
+      <div id="displayOperario" class="p-4 rounded-xl font-bold border-none outline-none bg-slate-50 text-slate-400">Sin operarios</div>
     </div>
     <div class="flex flex-col">
       <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Nº Serie</label>
