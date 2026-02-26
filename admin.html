@@ -21,102 +21,103 @@
   .row-dostec50  { border-left: 4px solid #f97316; }
   .row-restyling { border-left: 4px solid #8b5cf6; }
   .row-unknown   { border-left: 4px solid #94a3b8; }
+  .day-tab { transition: all 0.15s ease; cursor: pointer; }
+  .day-tab.active { background: #1e293b !important; color: white !important; border-color: #1e293b !important; }
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
 
-<!-- Header -->
 <header class="bg-slate-900 text-white py-6 shadow-xl">
   <div class="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
     <div>
       <h1 class="text-2xl font-black tracking-tighter uppercase">ITC Production <span class="text-yellow-400">Systems</span> <span class="text-slate-400 text-lg font-light">— Admin Central</span></h1>
-      <p class="text-slate-400 text-xs mt-1 uppercase tracking-widest font-semibold">Distribución centralizada de pedidos</p>
+      <p class="text-slate-400 text-xs mt-1 uppercase tracking-widest font-semibold">Planificación y distribución centralizada de pedidos</p>
     </div>
     <a href="index.html" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase border border-slate-600 transition-colors">← Volver al Panel</a>
   </div>
 </header>
 
-<!-- Estado conexiones -->
 <div class="container mx-auto px-6 py-6">
+
+  <!-- Conexiones -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <!-- Agitador -->
     <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
-      <div class="flex items-center gap-2 mb-1">
-        <div id="led-agitador" class="w-3 h-3 rounded-full bg-slate-300"></div>
-        <span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span>
-      </div>
+      <div class="flex items-center gap-2 mb-1"><div id="led-agitador" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
       <p class="text-base font-black text-emerald-600">Agitador</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pedidos pendientes</p>
     </div>
-    <!-- Dostec 40 -->
     <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
-      <div class="flex items-center gap-2 mb-1">
-        <div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div>
-        <span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span>
-      </div>
+      <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
       <p class="text-base font-black text-red-600">Dostec 40</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pedidos pendientes</p>
     </div>
-    <!-- Dostec 50 -->
     <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
-      <div class="flex items-center gap-2 mb-1">
-        <div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div>
-        <span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span>
-      </div>
+      <div class="flex items-center gap-2 mb-1"><div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span></div>
       <p class="text-base font-black text-orange-500">Dostec 50</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pedidos pendientes</p>
     </div>
-    <!-- Restyling -->
     <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
-      <div class="flex items-center gap-2 mb-1">
-        <div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div>
-        <span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span>
-      </div>
+      <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
       <p class="text-base font-black text-violet-600">Restyling</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pedidos pendientes</p>
     </div>
   </div>
 
-  <!-- Zona de carga Excel -->
+  <!-- Drop Zone -->
   <div class="bg-white rounded-3xl border-2 border-dashed border-slate-300 p-10 text-center drop-zone mb-8 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-all"
-       id="dropZone"
-       onclick="document.getElementById('fileInput').click()"
-       ondragover="onDragOver(event)"
-       ondragleave="onDragLeave(event)"
-       ondrop="onDrop(event)">
+       id="dropZone" onclick="document.getElementById('fileInput').click()"
+       ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
     <div class="text-5xl mb-4">📊</div>
-    <h2 class="text-xl font-black text-slate-700 uppercase tracking-tight">Cargar Excel Maestro</h2>
+    <h2 class="text-xl font-black text-slate-700 uppercase tracking-tight">Cargar Excel de Planificación</h2>
     <p class="text-slate-400 text-sm mt-2">Arrastra el archivo aquí o haz clic para seleccionar</p>
-    <p class="text-slate-300 text-xs mt-1">El Excel debe tener columna <strong class="text-slate-500">Sistema</strong> con valores: Agitador, Dostec40, Dostec50, Restyling</p>
+    <div class="mt-4 flex flex-wrap justify-center gap-2 text-xs">
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Pedido</span>
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Codigo</span>
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Serie</span>
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Unidades</span>
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Cliente</span>
+      <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full font-bold">Notas</span>
+      <span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-black border border-yellow-300">Sistema</span>
+      <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-black border border-blue-300">📅 Fecha</span>
+    </div>
     <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls" onchange="procesarExcel(event)">
   </div>
 
-  <!-- Preview tabla -->
+  <!-- Preview -->
   <div id="seccionPreview" class="hidden">
-    <!-- Resumen por módulo -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="resumenModulos"></div>
-
-    <!-- Alerta errores -->
     <div id="alertaErrores" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-sm text-amber-800 font-bold"></div>
 
-    <!-- Tabla preview -->
+    <!-- Resumen módulos -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="resumenModulos"></div>
+
+    <!-- Tabs por día -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
+      <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest mb-4">📅 Filtrar por día de montaje</h3>
+      <div id="tabsDias" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <!-- Tabla -->
     <div class="bg-white rounded-3xl shadow-sm border overflow-hidden mb-6">
-      <div class="bg-slate-900 px-6 py-4 flex items-center justify-between">
-        <h3 class="text-white font-black uppercase text-sm tracking-widest">Vista previa — <span id="totalFilas" class="text-yellow-400">0</span> registros</h3>
-        <div class="flex gap-2">
+      <div class="bg-slate-900 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <h3 class="text-white font-black uppercase text-sm tracking-widest">
+          <span id="totalFilasVisible" class="text-yellow-400">0</span> series
+          <span class="text-slate-400 font-normal normal-case text-xs ml-2" id="subtituloFiltro"></span>
+        </h3>
+        <div class="flex gap-2 flex-wrap">
           <button onclick="limpiarPreview()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase">✕ Cancelar</button>
-          <button onclick="enviarTodo()" id="btnEnviar" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-xl text-xs font-black uppercase shadow-lg">🚀 Enviar a todos los módulos</button>
+          <button onclick="enviarDiaActual()" id="btnEnviarDia" class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow hidden">📅 Enviar día</button>
+          <button onclick="enviarTodo()" id="btnEnviarTodo" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow-lg">🚀 Enviar todo</button>
         </div>
       </div>
-      <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
+      <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
         <table class="w-full text-left text-xs">
           <thead class="bg-slate-100 text-slate-600 text-[11px] font-black uppercase sticky top-0">
             <tr>
               <th class="p-3">Módulo</th>
+              <th class="p-3">📅 Fecha montaje</th>
               <th class="p-3">Pedido</th>
               <th class="p-3">Código</th>
               <th class="p-3">Serie</th>
-              <th class="p-3">Uds</th>
               <th class="p-3">Cliente</th>
               <th class="p-3">Notas</th>
               <th class="p-3 text-center">Estado</th>
@@ -128,378 +129,297 @@
     </div>
   </div>
 
-  <!-- Log de envío -->
+  <!-- Log -->
   <div id="seccionLog" class="hidden">
     <div class="bg-slate-900 rounded-3xl p-6">
       <h3 class="text-white font-black uppercase text-sm tracking-widest mb-4">📡 Log de envío</h3>
-      <div id="logContenido" class="space-y-1 max-h-64 overflow-y-auto font-mono text-xs"></div>
+      <div id="logContenido" class="space-y-1 max-h-72 overflow-y-auto font-mono text-xs"></div>
       <div id="resultadoFinal" class="hidden mt-4 bg-emerald-500 text-white rounded-2xl p-4 text-center font-black text-base"></div>
     </div>
   </div>
+
 </div>
 
 <script type="module">
-import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-// ══════════════════════════════════════
-//  CONFIGURACIONES FIREBASE POR MÓDULO
-// ══════════════════════════════════════
 const MODULOS = {
   agitador: {
-    label: "Agitador",
-    color: "emerald",
-    aliases: ["agitador"],
-    config: {
-      apiKey: "AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE",
-      authDomain: "agitador-e6584.firebaseapp.com",
-      databaseURL: "https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "agitador-e6584",
-      storageBucket: "agitador-e6584.firebasestorage.app",
-      messagingSenderId: "295479175763",
-      appId: "1:295479175763:web:4d22a9b7a05744fe78b4a6"
-    }
+    label:"Agitador", color:"emerald", aliases:["agitador"],
+    config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }
   },
   dostec40: {
-    label: "Dostec 40",
-    color: "red",
-    aliases: ["dostec40", "dostec 40", "d40"],
-    config: {
-      apiKey: "AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo",
-      authDomain: "tempprod-2ecad.firebaseapp.com",
-      databaseURL: "https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "tempprod-2ecad",
-      storageBucket: "tempprod-2ecad.firebasestorage.app",
-      messagingSenderId: "791527902001",
-      appId: "1:791527902001:web:75d104fba52a0dbfc33e10"
-    }
+    label:"Dostec 40", color:"red", aliases:["dostec40","dostec 40","d40"],
+    config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }
   },
   dostec50: {
-    label: "Dostec 50",
-    color: "orange",
-    aliases: ["dostec50", "dostec 50", "d50"],
-    config: {
-      apiKey: "AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8",
-      authDomain: "dostec-50.firebaseapp.com",
-      databaseURL: "https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "dostec-50",
-      storageBucket: "dostec-50.firebasestorage.app",
-      messagingSenderId: "581863827285",
-      appId: "1:581863827285:web:b360b2f59cb95b6055b1dc"
-    }
+    label:"Dostec 50", color:"orange", aliases:["dostec50","dostec 50","d50"],
+    config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }
   },
   restyling: {
-    label: "Restyling",
-    color: "violet",
-    aliases: ["restyling"],
-    config: {
-      apiKey: "AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg",
-      authDomain: "d40restyling.firebaseapp.com",
-      databaseURL: "https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "d40restyling",
-      storageBucket: "d40restyling.appspot.com",
-      appId: "1:1085425091704:web:4ce5ab8af47546035b998d"
-    }
+    label:"Restyling", color:"violet", aliases:["restyling"],
+    config:{ apiKey:"AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain:"d40restyling.firebaseapp.com", databaseURL:"https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId:"d40restyling", storageBucket:"d40restyling.appspot.com", appId:"1:1085425091704:web:4ce5ab8af47546035b998d" }
   }
 };
 
-// ══════════════════════════════════════
-//  INICIALIZAR APPS FIREBASE
-// ══════════════════════════════════════
-const apps = {}, dbs = {};
-
+const apps={}, dbs={};
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
     apps[key] = initializeApp(mod.config, key);
     dbs[key]  = getDatabase(apps[key]);
-    
-    // Escuchar conexión
-    const connRef = ref(dbs[key], '.info/connected');
-    onValue(connRef, (snap) => {
-      const conectado = snap.val() === true;
-      const led  = document.getElementById(`led-${key}`);
-      const txt  = document.getElementById(`txt-${key}`);
-      if (!led || !txt) return;
-      if (conectado) {
-        led.className = 'w-3 h-3 rounded-full bg-emerald-500 led-on';
-        txt.textContent = 'EN LÍNEA';
-        txt.className = 'text-[10px] font-black uppercase text-emerald-600';
-      } else {
-        led.className = 'w-3 h-3 rounded-full bg-red-400 animate-pulse';
-        txt.textContent = 'SIN CONEXIÓN';
-        txt.className = 'text-[10px] font-black uppercase text-red-500';
-      }
+    onValue(ref(dbs[key],'.info/connected'), snap => {
+      const on = snap.val()===true;
+      const led=document.getElementById(`led-${key}`), txt=document.getElementById(`txt-${key}`);
+      if(!led||!txt) return;
+      led.className = on?'w-3 h-3 rounded-full bg-emerald-500 led-on':'w-3 h-3 rounded-full bg-red-400 animate-pulse';
+      txt.textContent = on?'EN LÍNEA':'SIN CONEXIÓN';
+      txt.className   = on?'text-[10px] font-black uppercase text-emerald-600':'text-[10px] font-black uppercase text-red-500';
     });
-
-    // Escuchar conteo planificación
-    const planRef = ref(dbs[key], 'planificacion');
-    onValue(planRef, (snap) => {
-      const count  = snap.exists() ? Object.keys(snap.val()).length : 0;
-      const el = document.getElementById(`count-${key}`);
-      if (el) el.textContent = `${count} pedidos pendientes`;
+    onValue(ref(dbs[key],'planificacion'), snap => {
+      const count = snap.exists()?Object.keys(snap.val()).length:0;
+      const el=document.getElementById(`count-${key}`);
+      if(el) el.textContent=`${count} pedidos pendientes`;
     });
-
-  } catch(e) {
-    console.error(`Error init ${key}:`, e);
-  }
+  } catch(e){console.error(key,e);}
 }
 
-// ══════════════════════════════════════
-//  HELPERS
-// ══════════════════════════════════════
-function resolverModulo(sistemaStr) {
-  const s = String(sistemaStr || '').trim().toLowerCase();
-  for (const [key, mod] of Object.entries(MODULOS)) {
-    if (mod.aliases.some(a => a === s)) return key;
+function resolverModulo(s) {
+  const v=String(s||'').trim().toLowerCase();
+  for(const [key,mod] of Object.entries(MODULOS)) if(mod.aliases.some(a=>a===v)) return key;
+  return null;
+}
+
+function parsearFecha(val) {
+  if(!val) return null;
+  // SheetJS con cellDates:true devuelve strings "DD/MM/YYYY" o "YYYY-MM-DD" según locale
+  // o puede venir como string directamente
+  const s = String(val).trim();
+  // YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // DD/MM/YYYY o D/M/YYYY
+  const m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // Número serial Excel (sin cellDates)
+  const n = parseFloat(s);
+  if(!isNaN(n) && n>40000) {
+    const d = new Date(Math.round((n-25569)*86400000));
+    return d.toISOString().slice(0,10);
   }
   return null;
 }
 
-// ══════════════════════════════════════
-//  DRAG & DROP
-// ══════════════════════════════════════
-window.onDragOver = (e) => {
-  e.preventDefault();
-  document.getElementById('dropZone').classList.add('drag-over');
-};
-window.onDragLeave = () => {
-  document.getElementById('dropZone').classList.remove('drag-over');
-};
-window.onDrop = (e) => {
-  e.preventDefault();
-  document.getElementById('dropZone').classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) procesarExcelFile(file);
-};
+function formatLabel(iso) {
+  if(!iso || iso==='sin-fecha') return '⚠️ Sin fecha';
+  const hoy    = new Date().toISOString().slice(0,10);
+  const manana = new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const d = new Date(iso+'T12:00:00');
+  const base = d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'});
+  if(iso===hoy)    return `🟢 Hoy — ${base}`;
+  if(iso===manana) return `🔵 Mañana — ${base}`;
+  return `📅 ${base}`;
+}
 
-// ══════════════════════════════════════
-//  PROCESAR EXCEL
-// ══════════════════════════════════════
-let pedidosProcesados = [];
+window.onDragOver = e => { e.preventDefault(); document.getElementById('dropZone').classList.add('drag-over'); };
+window.onDragLeave = () => document.getElementById('dropZone').classList.remove('drag-over');
+window.onDrop = e => { e.preventDefault(); document.getElementById('dropZone').classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f) procesarFile(f); };
 
-window.procesarExcel = (e) => {
-  const file = e.target.files[0];
-  if (file) procesarExcelFile(file);
-  e.target.value = '';
-};
+let pedidos=[], diaActivo=null;
 
-function procesarExcelFile(file) {
-  const reader = new FileReader();
-  reader.onload = (evt) => {
+window.procesarExcel = e => { const f=e.target.files[0]; if(f) procesarFile(f); e.target.value=''; };
+
+function procesarFile(file) {
+  const r = new FileReader();
+  r.onload = evt => {
     try {
-      const data = new Uint8Array(evt.target.result);
-      const wb   = XLSX.read(data, { type: 'array' });
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      // raw:false para que fechas vengan como strings formateados
+      const wb   = XLSX.read(new Uint8Array(evt.target.result), {type:'array', cellDates:true, dateNF:'yyyy-mm-dd'});
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:'', raw:false});
+      if(!json.length){alert('El archivo está vacío');return;}
 
-      if (json.length === 0) { alert("El archivo está vacío"); return; }
+      pedidos=[];
+      const errores=[];
 
-      pedidosProcesados = [];
-      const errores = [];
-
-      json.forEach((item, idx) => {
-        // Normalizar claves
-        const row = {};
-        Object.keys(item).forEach(k => { row[k.trim().toLowerCase()] = String(item[k]).trim(); });
-
-        const pedido  = row["pedido"]  || row["orden"]  || "";
-        const codigo  = row["código"]  || row["codigo"] || "";
-        const sistema = row["sistema"] || "";
-
-        if (!pedido && !codigo) return; // fila vacía
+      json.forEach((item,idx)=>{
+        const row={};
+        Object.keys(item).forEach(k=>{ row[k.trim().toLowerCase()]=item[k]; });
+        const pedido  = String(row.pedido||row.orden||'').trim();
+        const codigo  = String(row['código']||row.codigo||'').trim();
+        const sistema = String(row.sistema||'').trim();
+        const fechaRaw = row.fecha || row['fecha montaje'] || row.fecha_montaje || null;
+        if(!pedido&&!codigo) return;
 
         const moduloKey = resolverModulo(sistema);
-        if (!moduloKey) {
-          errores.push(`Fila ${idx+2}: Sistema desconocido "${sistema}"`);
-        }
+        if(!moduloKey) errores.push(`Fila ${idx+2}: Sistema desconocido "${sistema}"`);
 
-        const cliente  = row["cliente"]   || row["client"] || "Sin cliente";
-        const notas    = row["notas"]     || row["observaciones"] || "";
-        const serieBase = row["serie"]    || row["nº serie"] || "";
-        const cantidad  = parseInt(row["unidaes"] || row["unidades"] || row["cantidad"] || row["uds"] || row["qty"] || "1") || 1;
+        const fecha    = parsearFecha(fechaRaw);
+        const cliente  = String(row.cliente||row.client||'Sin cliente').trim();
+        const notas    = String(row.notas||row.observaciones||'').trim();
+        const serieBase= String(row.serie||row['nº serie']||'').trim();
+        const cantidad = parseInt(String(row.unidaes||row.unidades||row.cantidad||row.uds||row.qty||'1'))||1;
 
-        // Generar series
-        const matchSerie = serieBase.match(/^(.*?)(\d+)$/);
-        let prefijo = "", numeroBase = 0, padding = 0;
-        if (matchSerie) {
-          prefijo     = matchSerie[1];
-          const num   = matchSerie[2];
-          numeroBase  = parseInt(num);
-          padding     = num.length;
-        }
+        const ms = serieBase.match(/^(.*?)(\d+)$/);
+        let pref='',numBase=0,pad=0;
+        if(ms){pref=ms[1];const n=ms[2];numBase=parseInt(n);pad=n.length;}
 
-        for (let i = 0; i < cantidad; i++) {
-          let serie;
-          if (matchSerie) {
-            serie = prefijo + String(numeroBase + i).padStart(padding, '0');
-          } else {
-            serie = i === 0 ? (serieBase || "--") : `${serieBase || "--"}-${i+1}`;
-          }
-          pedidosProcesados.push({
-            moduloKey,
-            pedido: pedido || "S/P",
-            codigo: codigo || "--",
-            serie,
-            cliente,
-            notas,
-            sistema: sistema,
-            estado: moduloKey ? 'listo' : 'error'
-          });
-        }
-
-        if (errores.length > 0) {
-          document.getElementById('alertaErrores').classList.remove('hidden');
-          document.getElementById('alertaErrores').innerHTML = `⚠️ Filas con módulo no reconocido (no se enviarán):<br>${errores.join('<br>')}`;
-        } else {
-          document.getElementById('alertaErrores').classList.add('hidden');
+        for(let i=0;i<cantidad;i++){
+          const serie = ms
+            ? pref+String(numBase+i).padStart(pad,'0')
+            : (i===0?(serieBase||'--'):`${serieBase||'--'}-${i+1}`);
+          pedidos.push({moduloKey,pedido:pedido||'S/P',codigo:codigo||'--',serie,cliente,notas,fecha,estado:'listo'});
         }
       });
 
-      renderPreview();
-    } catch(err) {
-      alert("❌ Error procesando Excel: " + err.message);
-    }
+      const errEl=document.getElementById('alertaErrores');
+      if(errores.length){errEl.classList.remove('hidden');errEl.innerHTML='⚠️ Módulos no reconocidos:<br>'+errores.join('<br>');}
+      else errEl.classList.add('hidden');
+
+      const dias=[...new Set(pedidos.map(p=>p.fecha||'sin-fecha'))].sort();
+      diaActivo = dias[0]||'todos';
+
+      renderTabs(dias);
+      renderResumen();
+      renderTabla();
+      document.getElementById('seccionPreview').classList.remove('hidden');
+    } catch(e){alert('❌ Error: '+e.message);}
   };
-  reader.readAsArrayBuffer(file);
+  r.readAsArrayBuffer(file);
 }
 
-function renderPreview() {
-  if (pedidosProcesados.length === 0) { alert("No se encontraron filas válidas"); return; }
-
-  document.getElementById('seccionPreview').classList.remove('hidden');
-  document.getElementById('totalFilas').textContent = pedidosProcesados.length;
-
-  // Resumen por módulo
-  const conteo = {};
-  pedidosProcesados.forEach(p => {
-    const k = p.moduloKey || 'error';
-    conteo[k] = (conteo[k] || 0) + 1;
-  });
-
-  const colores = { agitador:'emerald', dostec40:'red', dostec50:'orange', restyling:'violet', error:'slate' };
-  document.getElementById('resumenModulos').innerHTML = Object.entries(conteo).map(([k,n]) => {
-    const mod = MODULOS[k];
-    const c   = colores[k] || 'slate';
-    const lbl = mod ? mod.label : '⚠️ Sin módulo';
-    return `<div class="bg-${c}-50 border-2 border-${c}-200 rounded-2xl p-4 text-center">
-      <p class="text-2xl font-black text-${c}-600">${n}</p>
-      <p class="text-xs font-black uppercase text-${c}-500 mt-1">${lbl}</p>
-    </div>`;
+function renderTabs(dias) {
+  const todos = `<button id="tab-todos" class="day-tab px-4 py-2 rounded-xl text-xs font-black uppercase border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('todos')">
+    📋 Todos <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${pedidos.length}</span>
+  </button>`;
+  const tabsDias = dias.map(d=>{
+    const n = pedidos.filter(p=>(p.fecha||'sin-fecha')===d).length;
+    return `<button id="tab-${d}" class="day-tab px-4 py-2 rounded-xl text-xs font-black border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('${d}')">
+      ${formatLabel(d)} <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${n}</span>
+    </button>`;
   }).join('');
+  document.getElementById('tabsDias').innerHTML = todos+tabsDias;
+  actualizarTabActivo();
+}
 
-  // Tabla preview
-  const modColores = { agitador:'row-agitador', dostec40:'row-dostec40', dostec50:'row-dostec50', restyling:'row-restyling' };
-  const modBadge   = {
-    agitador:  '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>',
-    dostec40:  '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>',
-    dostec50:  '<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>',
-    restyling: '<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>'
+function actualizarTabActivo() {
+  document.querySelectorAll('.day-tab').forEach(btn=>{
+    const id = btn.id.replace('tab-','');
+    btn.classList.toggle('active', id===diaActivo);
+  });
+}
+
+window.selDia = dia => {
+  diaActivo=dia;
+  actualizarTabActivo();
+  renderTabla();
+};
+
+function renderResumen() {
+  const c={};
+  pedidos.forEach(p=>{ const k=p.moduloKey||'error'; c[k]=(c[k]||0)+1; });
+  const col={agitador:'emerald',dostec40:'red',dostec50:'orange',restyling:'violet',error:'slate'};
+  document.getElementById('resumenModulos').innerHTML=Object.entries(c).map(([k,n])=>{
+    const lbl=MODULOS[k]?MODULOS[k].label:'⚠️ Sin módulo';
+    const cv=col[k]||'slate';
+    return `<div class="bg-${cv}-50 border-2 border-${cv}-200 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-${cv}-600">${n}</p><p class="text-xs font-black uppercase text-${cv}-500 mt-1">${lbl}</p></div>`;
+  }).join('');
+}
+
+function renderTabla() {
+  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
+  document.getElementById('totalFilasVisible').textContent=filtrados.length;
+  document.getElementById('subtituloFiltro').textContent = diaActivo==='todos'
+    ? '(todos los días)' : `(${formatLabel(diaActivo)})`;
+
+  const btnDia=document.getElementById('btnEnviarDia');
+  if(diaActivo==='todos') btnDia.classList.add('hidden');
+  else { btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
+
+  const badge={
+    agitador: '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>',
+    dostec40: '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>',
+    dostec50: '<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>',
+    restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>'
   };
+  const clsRow={agitador:'row-agitador',dostec40:'row-dostec40',dostec50:'row-dostec50',restyling:'row-restyling'};
 
-  document.getElementById('tablaPreview').innerHTML = pedidosProcesados.map((p, i) => {
-    const cls   = modColores[p.moduloKey] || 'row-unknown';
-    const badge = p.moduloKey ? modBadge[p.moduloKey] : '<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Desconocido</span>';
-    return `<tr class="${cls} border-b border-slate-100 hover:bg-slate-50" id="row-${i}">
-      <td class="p-3">${badge}</td>
+  document.getElementById('tablaPreview').innerHTML = filtrados.map(p=>{
+    const gi=pedidos.indexOf(p);
+    const fechaHtml = p.fecha
+      ? `<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`
+      : '<span class="text-slate-300 text-[10px]">—</span>';
+    return `<tr class="${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 hover:bg-slate-50" id="row-${gi}">
+      <td class="p-3">${p.moduloKey?badge[p.moduloKey]:'<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Sin módulo</span>'}</td>
+      <td class="p-3">${fechaHtml}</td>
       <td class="p-3 font-bold text-slate-600">${p.pedido}</td>
-      <td class="p-3 text-slate-500">${p.codigo}</td>
+      <td class="p-3 text-slate-500 font-mono text-[11px]">${p.codigo}</td>
       <td class="p-3"><span class="bg-slate-100 px-2 py-0.5 rounded font-mono font-black text-[11px]">${p.serie}</span></td>
-      <td class="p-3 text-center text-slate-500">1</td>
       <td class="p-3 text-blue-600 font-bold text-[11px]">${p.cliente}</td>
-      <td class="p-3 text-slate-400 text-[11px] max-w-xs truncate">${p.notas || '—'}</td>
-      <td class="p-3 text-center" id="estado-${i}"><span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">PENDIENTE</span></td>
+      <td class="p-3 text-slate-400 text-[11px] max-w-xs truncate">${p.notas||'—'}</td>
+      <td class="p-3 text-center" id="estado-${gi}"><span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">PENDIENTE</span></td>
     </tr>`;
   }).join('');
 }
 
-window.limpiarPreview = () => {
-  pedidosProcesados = [];
+window.limpiarPreview = ()=>{
+  pedidos=[]; diaActivo=null;
   document.getElementById('seccionPreview').classList.add('hidden');
   document.getElementById('seccionLog').classList.add('hidden');
 };
 
-// ══════════════════════════════════════
-//  ENVIAR A FIREBASE
-// ══════════════════════════════════════
-window.enviarTodo = async () => {
-  const validos = pedidosProcesados.filter(p => p.moduloKey && p.estado !== 'error');
-  if (validos.length === 0) { alert("No hay registros válidos para enviar"); return; }
+window.enviarDiaActual = ()=>{
+  if(!diaActivo||diaActivo==='todos') return;
+  enviarLote(pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo), formatLabel(diaActivo));
+};
+window.enviarTodo = ()=> enviarLote(pedidos,'todos los días');
 
-  document.getElementById('btnEnviar').disabled = true;
-  document.getElementById('btnEnviar').textContent = '⏳ Enviando...';
+async function enviarLote(lote, desc) {
+  const validos=lote.filter(p=>p.moduloKey);
+  if(!validos.length){alert('No hay registros válidos');return;}
+
+  ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=true; });
   document.getElementById('seccionLog').classList.remove('hidden');
+  const log=document.getElementById('logContenido');
+  log.innerHTML='';
+  document.getElementById('resultadoFinal').classList.add('hidden');
 
-  const log = document.getElementById('logContenido');
-  log.innerHTML = '';
+  const addLog=(msg,cls='text-slate-300')=>{ log.innerHTML+=`<div class="${cls}">${msg}</div>`; log.scrollTop=log.scrollHeight; };
+  addLog(`📋 Enviando ${validos.length} series (${desc})...`,'text-yellow-400');
 
-  const addLog = (msg, color = 'text-slate-300') => {
-    log.innerHTML += `<div class="${color}">${msg}</div>`;
-    log.scrollTop = log.scrollHeight;
-  };
-
-  addLog(`📋 Iniciando envío de ${pedidosProcesados.length} series...`, 'text-yellow-400');
-
-  let ok = 0, err = 0;
-
-  for (let i = 0; i < pedidosProcesados.length; i++) {
-    const p = pedidosProcesados[i];
-
-    if (!p.moduloKey) {
-      addLog(`⚠️ [${i+1}] ${p.serie} — sin módulo asignado, omitido`, 'text-amber-400');
-      setEstado(i, 'omitido');
-      err++;
-      continue;
-    }
-
-    try {
-      const planRef = ref(dbs[p.moduloKey], 'planificacion');
-      await push(planRef, {
-        pedido: p.pedido,
-        cliente: p.cliente,
-        codigo: p.codigo,
-        serie: p.serie,
-        notas: p.notas,
-        orden: Date.now() + i
+  let ok=0,err=0;
+  for(let i=0;i<pedidos.length;i++){
+    const p=pedidos[i];
+    if(!validos.includes(p)) continue;
+    if(!p.moduloKey){setEstado(i,'omitido');err++;continue;}
+    try{
+      await push(ref(dbs[p.moduloKey],'planificacion'),{
+        pedido:p.pedido, cliente:p.cliente, codigo:p.codigo,
+        serie:p.serie,   notas:p.notas,   fecha:p.fecha||null,
+        orden:Date.now()+i
       });
-      addLog(`✅ [${i+1}] ${p.serie} → <span class="font-black">${MODULOS[p.moduloKey].label}</span>`, 'text-emerald-400');
-      setEstado(i, 'enviado');
-      ok++;
-    } catch(e) {
-      addLog(`❌ [${i+1}] ${p.serie} — Error: ${e.message}`, 'text-red-400');
-      setEstado(i, 'error');
-      err++;
+      addLog(`✅ ${p.serie} → <b>${MODULOS[p.moduloKey].label}</b>${p.fecha?` <span class="text-blue-300">${p.fecha}</span>`:''}`, 'text-emerald-400');
+      setEstado(i,'enviado'); ok++;
+    }catch(e){
+      addLog(`❌ ${p.serie} — ${e.message}`,'text-red-400');
+      setEstado(i,'error'); err++;
     }
-
-    // Micro pausa para no saturar Firebase
-    if (i % 10 === 9) await new Promise(r => setTimeout(r, 100));
+    if((ok+err)%10===0) await new Promise(r=>setTimeout(r,80));
   }
 
-  addLog(`\n📊 Envío completado: ${ok} OK — ${err} errores`, 'text-white font-bold');
-
-  const resultado = document.getElementById('resultadoFinal');
-  resultado.classList.remove('hidden');
-  resultado.textContent = err === 0
-    ? `✅ ${ok} pedidos enviados correctamente a todos los módulos`
-    : `⚠️ ${ok} enviados correctamente — ${err} con errores`;
-  if (err > 0) resultado.className = 'mt-4 bg-amber-500 text-white rounded-2xl p-4 text-center font-black text-base';
-
-  document.getElementById('btnEnviar').disabled = false;
-  document.getElementById('btnEnviar').textContent = '🚀 Enviar a todos los módulos';
-};
-
-function setEstado(i, estado) {
-  const el = document.getElementById(`estado-${i}`);
-  if (!el) return;
-  const configs = {
-    enviado: 'bg-emerald-100 text-emerald-700',
-    error:   'bg-red-100 text-red-600',
-    omitido: 'bg-amber-100 text-amber-600'
-  };
-  const labels = { enviado: '✅ ENVIADO', error: '❌ ERROR', omitido: '⚠️ OMITIDO' };
-  el.innerHTML = `<span class="${configs[estado]} px-2 py-0.5 rounded-full text-[10px] font-black">${labels[estado]}</span>`;
+  addLog(`\n📊 ${ok} enviados — ${err} errores`,'text-white font-bold');
+  const res=document.getElementById('resultadoFinal');
+  res.classList.remove('hidden');
+  res.className=`mt-4 ${err===0?'bg-emerald-500':'bg-amber-500'} text-white rounded-2xl p-4 text-center font-black text-base`;
+  res.textContent=err===0?`✅ ${ok} pedidos enviados correctamente`:`⚠️ ${ok} enviados — ${err} errores`;
+  ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=false; });
 }
 
-// Función filtrar incidencias (compatibilidad global)
-window.filtrarIncidenciasPorMes = () => {};
+function setEstado(i,estado){
+  const el=document.getElementById(`estado-${i}`);
+  if(!el) return;
+  const m={enviado:['bg-emerald-100 text-emerald-700','✅ ENVIADO'],error:['bg-red-100 text-red-600','❌ ERROR'],omitido:['bg-amber-100 text-amber-600','⚠️ OMITIDO']};
+  const [cls,lbl]=m[estado]||m.omitido;
+  el.innerHTML=`<span class="${cls} px-2 py-0.5 rounded-full text-[10px] font-black">${lbl}</span>`;
+}
 </script>
 </body>
 </html>
