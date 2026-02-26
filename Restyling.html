@@ -55,6 +55,7 @@ const state = {
     modoEdicionGrafico: false,
     filtroFechaTareas: null,
     firebaseConectado: false,
+    modoPrueba: false,
 };
 
 // Listener para estado de conexión con Firebase
@@ -66,31 +67,75 @@ onValue(conexionRef, (snap) => {
 });
 
 const actualizarIndicadorConexion = (conectado) => {
+    if (state.modoPrueba) return; // No sobreescribir si está en modo prueba
     const indicador = document.getElementById('indicadorFirebase');
     const led = document.getElementById('ledFirebase');
     const texto = document.getElementById('textoFirebase');
     if (!indicador || !led || !texto) return;
-    
+
+    // Limpiar todas las clases de color posibles
+    indicador.classList.remove('bg-red-100','border-red-300','bg-emerald-100','border-emerald-400','bg-orange-100','border-orange-400');
+    led.classList.remove('bg-red-500','animate-pulse','bg-emerald-500','shadow-emerald-500/60','led-conectado','bg-orange-500');
+    texto.classList.remove('text-red-700','text-emerald-800','text-orange-700');
+
     if (conectado) {
-        indicador.classList.remove('bg-red-100', 'border-red-300');
         indicador.classList.add('bg-emerald-100', 'border-emerald-400');
-        led.classList.remove('bg-red-500', 'animate-pulse');
         led.classList.add('bg-emerald-500', 'shadow-emerald-500/60', 'led-conectado');
         texto.textContent = 'EN LÍNEA';
-        texto.classList.remove('text-red-700');
         texto.classList.add('text-emerald-800');
     } else {
-        indicador.classList.remove('bg-emerald-100', 'border-emerald-400');
         indicador.classList.add('bg-red-100', 'border-red-300');
-        led.classList.remove('bg-emerald-500', 'shadow-emerald-500/60', 'led-conectado');
         led.classList.add('bg-red-500', 'animate-pulse');
         texto.textContent = 'SIN CONEXIÓN';
-        texto.classList.remove('text-emerald-800');
         texto.classList.add('text-red-700');
     }
 };
 
+// ═══════════════════════════════════════════
+// MODO PRUEBA — bloquea todas las escrituras
+// ═══════════════════════════════════════════
+window.toggleModoPrueba = () => {
+    state.modoPrueba = !state.modoPrueba;
+    const btn = document.getElementById('btnModoPrueba');
+    const indicador = document.getElementById('indicadorFirebase');
+    const led = document.getElementById('ledFirebase');
+    const texto = document.getElementById('textoFirebase');
+    const banner = document.getElementById('bannerModoPrueba');
+
+    if (state.modoPrueba) {
+        btn.textContent = '🔴 Desactivar prueba';
+        btn.classList.replace('bg-slate-100', 'bg-orange-100');
+        btn.classList.replace('text-slate-600', 'text-orange-700');
+        btn.classList.replace('border-slate-200', 'border-orange-300');
+        indicador.classList.remove('bg-emerald-100', 'border-emerald-400');
+        indicador.classList.add('bg-orange-100', 'border-orange-400');
+        led.classList.remove('bg-emerald-500', 'led-conectado');
+        led.classList.add('bg-orange-500');
+        texto.textContent = 'MODO PRUEBA';
+        texto.classList.remove('text-emerald-800');
+        texto.classList.add('text-orange-700');
+        if (banner) banner.classList.remove('hidden');
+    } else {
+        btn.textContent = '🧪 Modo prueba';
+        btn.classList.replace('bg-orange-100', 'bg-slate-100');
+        btn.classList.replace('text-orange-700', 'text-slate-600');
+        btn.classList.replace('border-orange-300', 'border-slate-200');
+        actualizarIndicadorConexion(state.firebaseConectado);
+        texto.classList.remove('text-orange-700');
+        if (banner) banner.classList.add('hidden');
+    }
+};
+
+const puedeEscribir = () => {
+    if (state.modoPrueba) {
+        console.warn('[MODO PRUEBA] Escritura bloqueada');
+        return false;
+    }
+    return true;
+};
+
 const guardarEstadoSesion = async (datos) => {
+    if (!puedeEscribir()) return;
     await update(estadoSesionRef, datos);
 };
 
@@ -100,6 +145,7 @@ const obtenerEstadoSesion = async () => {
 };
 
 const guardarPreferencias = async (clave, valor) => {
+    if (!puedeEscribir()) return;
     await update(ref(db, `preferencias/${clave}`), { valor });
 };
 
@@ -114,6 +160,7 @@ const obtenerProductividadDiaria = async () => {
 };
 
 const guardarTiempoPorTarea = async (fecha, serie, tiempo, finMS) => {
+    if (!puedeEscribir()) return;
     const fechaKey = fechaToKey(fecha);
     // Verificar si ya existe un registro para esta serie en esta fecha (evitar duplicados)
     const snapshot = await get(ref(db, `tiempoPorTarea/${fechaKey}`));
@@ -139,6 +186,7 @@ const calcularProductividadDiaria = (totalTareas, horasPonderadas) => {
 };
 
 const guardarSesionDiaria = async (fecha, operarios, tareasEnSesion, horasEnSesion) => {
+    if (!puedeEscribir()) return;
     const fechaKey = fechaToKey(fecha);
     const snapDia = await get(ref(db, `productividadDiaria/${fechaKey}`));
     const diaActual = snapDia.val() || { totalTareas: 0, horasPonderadas: 0 };
@@ -2037,10 +2085,18 @@ window.addEventListener('load', async () => {
     <!-- Fila superior: Volver + EN LÍNEA -->
     <div class="flex items-center justify-between">
         <a href="index.html" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border">Volver</a>
-        <div id="indicadorFirebase" class="flex items-center gap-2 bg-emerald-100 border-2 border-emerald-400 px-4 py-2 rounded-full shadow-md">
-            <div id="ledFirebase" class="w-3 h-3 rounded-full bg-emerald-500 led-conectado shadow-lg"></div>
-            <span id="textoFirebase" class="text-[11px] font-black uppercase tracking-wider text-emerald-800">EN LÍNEA</span>
+        <div class="flex items-center gap-2">
+            <button id="btnModoPrueba" onclick="toggleModoPrueba()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border border-slate-200">🧪 Modo prueba</button>
+            <div id="indicadorFirebase" class="flex items-center gap-2 bg-emerald-100 border-2 border-emerald-400 px-4 py-2 rounded-full shadow-md">
+                <div id="ledFirebase" class="w-3 h-3 rounded-full bg-emerald-500 led-conectado shadow-lg"></div>
+                <span id="textoFirebase" class="text-[11px] font-black uppercase tracking-wider text-emerald-800">EN LÍNEA</span>
+            </div>
         </div>
+    </div>
+
+    <!-- Banner modo prueba -->
+    <div id="bannerModoPrueba" class="hidden bg-orange-500 text-white text-center text-[11px] font-black uppercase tracking-widest py-2 rounded-xl">
+        ⚠️ MODO PRUEBA ACTIVO — Ningún cambio se guardará en Firebase
     </div>
 
     <!-- Header Principal -->
