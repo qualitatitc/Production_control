@@ -1776,10 +1776,24 @@ onValue(tareasRef, () => {
 
 // Listener para planificación
 onValue(planRef, (snap) => {
-    const data = snap.val() || {};
+    const rawData = snap.val() || {};
+    // Filtrar entradas nulas que Firebase puede dejar al borrar
+    const data = Object.fromEntries(Object.entries(rawData).filter(([, v]) => v !== null));
     const cuerpo = document.getElementById('cuerpoPlan');
-    document.getElementById('sec-plan').classList.toggle('hidden', Object.keys(data).length === 0);
+    document.getElementById('sec-plan').classList.remove('hidden');
     cuerpo.innerHTML = "";
+
+    if (Object.keys(data).length === 0) {
+        cuerpo.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-8 text-center">
+                    <p class="text-2xl mb-2">📋</p>
+                    <p class="font-black text-sm text-slate-400 uppercase tracking-wide">Sin pedidos pendientes</p>
+                </td>
+            </tr>`;
+        setTimeout(inicializarDragDrop, 100);
+        return;
+    }
     
     if (state.sortable) {
         state.sortable.destroy();
