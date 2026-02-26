@@ -54,6 +54,22 @@ window.toggleFirebase = function() {
   }
 };
 
+// ── Helpers Firebase que funcionan también en modo desconectado (pruebas) ──
+// En modo desconectado Firebase nunca resuelve sus promesas; estos wrappers
+// resuelven inmediatamente con un valor vacío para que el flujo no se bloquee.
+async function fbPush(r, val) {
+  if (firebaseDesconectado) return { key: 'offline_' + Date.now() };
+  return push(r, val);
+}
+async function fbUpdate(r, val) {
+  if (firebaseDesconectado) return;
+  return update(r, val);
+}
+async function fbGet(r) {
+  if (firebaseDesconectado) return { val: () => null, exists: () => false };
+  return get(r);
+}
+
 const tareasRef = ref(db, 'tareas');
 const tareasHistorialRef = ref(db, 'historial_tareas');
 const pausaRef = ref(db, 'estadoPausa');
@@ -133,8 +149,13 @@ function actualizarEstadoBotones() {
     btnSalida.classList.remove('opacity-50', 'cursor-not-allowed');
     indicadorLinea.innerHTML = '<span class="inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-lg animate-pulse">🟢 Línea Activa</span>';
   } else {
-    btnPausa.disabled = true;
-    btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
+    if (Object.keys(desayunosActivos).length > 0) {
+      btnPausa.disabled = false;
+      btnPausa.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+      btnPausa.disabled = true;
+      btnPausa.classList.add('opacity-50', 'cursor-not-allowed');
+    }
     btnIncidencia.disabled = true;
     btnIncidencia.classList.add('opacity-50', 'cursor-not-allowed');
     btnReposicion.disabled = false;
@@ -157,7 +178,7 @@ window.forzarParadaLinea = async function() {
   const fechaActual = obtenerFecha();
   const ahora = Date.now();
 
-  const snapTareas = await get(tareasRef);
+  const snapTareas = await fbGet(tareasRef);
   const tareas = snapTareas.val() || {};
   const updates = {};
 
@@ -169,9 +190,9 @@ window.forzarParadaLinea = async function() {
     }
   });
 
-  if (Object.keys(updates).length > 0) await update(ref(db), updates);
+  if (Object.keys(updates).length > 0) await fbUpdate(ref(db), updates);
 
-  await push(tareasHistorialRef, {
+  await fbPush(tareasHistorialRef, {
     operario, numSerie: "---", codigo: "⛔ SALIDA FORZADA",
     fecha: fechaActual, inicio: horaActual, inicioMS: ahora,
     fin: "---", total: 0, tipo: "jornada", numOperarios: 0, timestamp: Date.now()
@@ -182,7 +203,7 @@ window.forzarParadaLinea = async function() {
   operarioLineaActiva = null;
   operariosEnLinea = [];
   actualizarDisplayOperario();
-  await update(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
+  await fbUpdate(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
   actualizarEstadoBotones();
 };
 
@@ -621,7 +642,7 @@ window.mostrarModalEliminarDiaTodos = function(dia, mes, anio, fecha) {
 window.eliminarTareasDiaTodos = async function(fecha, fechaAnterior) {
   if (!confirm(`¿Estás seguro de eliminar las tareas que generan el punto del ${fecha}?`)) { cerrarModalEliminar(); return; }
   try {
-    const snapshot = await get(tareasHistorialRef);
+    const snapshot = await fbGet(tareasHistorialRef);
     const tareas = snapshot.val() || {};
     let eliminadas = 0;
     for (const [id, tarea] of Object.entries(tareas)) {
@@ -710,7 +731,7 @@ window.finalizarTarea = async function(id) {
     const ahora = Date.now();
 
     // Obtener datos con fallback a cache local
-    const snap = await get(ref(db, `tareas/${id}`));
+    const snap = await fbGet(ref(db, `tareas/${id}`));
     let t = snap.val() || tareasActivasTemp[id] || null;
     if (!t) { alert('❌ No se encontró la tarea'); return; }
 
@@ -720,7 +741,7 @@ window.finalizarTarea = async function(id) {
     const horaFin = new Date().toLocaleTimeString('es-ES');
 
     // ✅ Guardar en historial con el MISMO ID que en tareasRef para evitar duplicados
-    await update(ref(db, `historial_tareas/${id}`), {
+    await fbUpdate(ref(db, `historial_tareas/${id}`), {
       operario: t.operario, numSerie: t.numSerie, codigo: t.codigo,
       fecha: t.fecha, inicio: t.inicio, inicioMS: t.inicioMS,
       fin: horaFin, total: tiempoTotal, tipo: "produccion", timestamp: Date.now()
@@ -760,18 +781,18 @@ window.borrarHistorialGrafico = () => {
 
 window.toggleReposicion = async function() {
   const ahora = Date.now();
-  const snapTareas = await get(tareasRef);
+  const snapTareas = await fbGet(tareasRef);
   const tareas = snapTareas.val() || {};
   const updates = {};
   if (!hayReposicionGlobal) {
     update(reposicionRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), operario: obtenerOperarioActual() });
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausa_reposicion"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
   } else {
-    const snapR = await get(reposicionRef);
+    const snapR = await fbGet(reposicionRef);
     const infoR = snapR.val();
     const horaFin = new Date().toLocaleTimeString('es-ES');
     const duracion = Math.round((ahora - infoR.inicioMS) / 60000) || 1;
-    await push(tareasHistorialRef, { operario: infoR.operario || "SISTEMA", numSerie: "---", codigo: "📦 REPOSICIÓN", fecha: infoR.fecha, inicio: infoR.horaTexto, inicioMS: infoR.inicioMS, fin: horaFin, total: duracion, tipo: "reposicion", timestamp: Date.now() });
+    await fbPush(tareasHistorialRef, { operario: infoR.operario || "SISTEMA", numSerie: "---", codigo: "📦 REPOSICIÓN", fecha: infoR.fecha, inicio: infoR.horaTexto, inicioMS: infoR.inicioMS, fin: horaFin, total: duracion, tipo: "reposicion", timestamp: Date.now() });
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "pausa_reposicion") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; } });
     update(reposicionRef, { activa: false, inicioMS: 0 });
   }
@@ -781,43 +802,53 @@ window.toggleReposicion = async function() {
 window.toggleIncidencia = async function() {
   if (!lineaIniciada && !hayIncidenciaGlobal) { alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias'); return; }
   const ahora = Date.now();
-  const snapTareas = await get(tareasRef);
+  const snapTareas = await fbGet(tareasRef);
   const tareas = snapTareas.val() || {};
   const updates = {};
   if (!hayIncidenciaGlobal) {
     const motivo = prompt("Motivo de la incidencia:");
     if (!motivo) return;
-    await push(incidenciasTextoRef, { descripcion: motivo.trim(), fecha: obtenerFecha(), timestamp: Date.now() });
+    await fbPush(incidenciasTextoRef, { descripcion: motivo.trim(), fecha: obtenerFecha(), timestamp: Date.now() });
     update(incidenciaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual() });
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausa_incidencia"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
   } else {
-    const snapI = await get(incidenciaRef);
+    const snapI = await fbGet(incidenciaRef);
     const infoInc = snapI.val();
     const horaFin = new Date().toLocaleTimeString('es-ES');
     const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
-    await push(tareasHistorialRef, { operario: infoInc.operario || "SISTEMA", numSerie: "---", codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, fecha: infoInc.fecha, inicio: infoInc.horaTexto, inicioMS: infoInc.inicioMS, fin: horaFin, total: duracion, tipo: "incidencia", timestamp: Date.now() });
+    await fbPush(tareasHistorialRef, { operario: infoInc.operario || "SISTEMA", numSerie: "---", codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, fecha: infoInc.fecha, inicio: infoInc.horaTexto, inicioMS: infoInc.inicioMS, fin: horaFin, total: duracion, tipo: "incidencia", timestamp: Date.now() });
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "pausa_incidencia") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; } });
     update(incidenciaRef, { activa: false, inicioMS: 0 });
   }
   if (Object.keys(updates).length > 0) update(ref(db), updates);
 };
 
+let pausaEnProceso = false; // evitar doble click
+
 window.togglePausa = async function() {
+  if (pausaEnProceso) return;
+  
   if (!lineaIniciada && !estaPausadoGlobal) { alert('⚠️ Debes registrar la ENTRADA antes de tomar desayuno'); return; }
   
-  // Si hay desayunos activos, mostrar modal de vuelta
+  // ===== VOLVER DEL DESAYUNO =====
   if (Object.keys(desayunosActivos).length > 0) {
     mostrarModalVolverDesayuno();
     return;
   }
   
-  // Si solo hay 1 operario en línea, ir directo sin preguntar
+  // ===== INICIAR DESAYUNO =====
+  // Si solo hay 1 operario en línea → ir directo
   if (operariosEnLinea.length <= 1) {
-    await iniciarDesayunoDirecto(operariosEnLinea.length === 1 ? [operariosEnLinea[0]] : [obtenerOperarioActual()]);
+    pausaEnProceso = true;
+    try {
+      await iniciarDesayunoDirecto(operariosEnLinea.length === 1 ? [operariosEnLinea[0]] : [obtenerOperarioActual()]);
+    } finally {
+      pausaEnProceso = false;
+    }
     return;
   }
   
-  // Si hay 2 operarios, mostrar modal para seleccionar quién va
+  // Si hay 2 operarios → mostrar modal para elegir
   document.getElementById('modalDesayuno').classList.remove('hidden');
   document.getElementById('chkAdrian').checked = false;
   document.getElementById('chkAitor').checked = false;
@@ -827,19 +858,100 @@ window.cerrarModalDesayuno = function() {
   document.getElementById('modalDesayuno').classList.add('hidden');
 };
 
+// ===== MODAL VOLVER DEL DESAYUNO =====
+function mostrarModalVolverDesayuno() {
+  const modal = document.getElementById('modalVolverDesayuno');
+  const contenido = document.getElementById('volverDesayunoContenido');
+  const operarios = Object.keys(desayunosActivos);
+  contenido.innerHTML = '';
+  operarios.forEach(nombre => {
+    const esAdrian = nombre.includes('Adrian');
+    const color = esAdrian ? 'blue' : 'red';
+    const idChk  = esAdrian ? 'chkVolverAdrian' : 'chkVolverAitor';
+    const checked = operarios.length === 1 ? 'checked' : '';
+    contenido.innerHTML += `
+      <label class="flex items-center gap-4 bg-${color}-50 border-2 border-${color}-200 p-5 rounded-2xl cursor-pointer hover:bg-${color}-100 transition-all">
+        <input type="checkbox" id="${idChk}" ${checked} class="w-6 h-6 rounded-lg accent-${color}-600 cursor-pointer">
+        <div class="flex items-center gap-3 flex-1">
+          <div class="text-4xl">☕</div>
+          <div>
+            <p class="font-black text-${color}-700 text-lg">${nombre}</p>
+            <p class="text-xs text-${color}-400 font-bold uppercase">Vuelve al trabajo</p>
+          </div>
+        </div>
+      </label>`;
+  });
+  modal.classList.remove('hidden');
+}
+
+window.cerrarModalVolverDesayuno = function() {
+  document.getElementById('modalVolverDesayuno').classList.add('hidden');
+};
+
+window.confirmarVolverDesayuno = async function() {
+  const chkAdrian = document.getElementById('chkVolverAdrian');
+  const chkAitor  = document.getElementById('chkVolverAitor');
+  const volverAdrian = chkAdrian ? chkAdrian.checked : false;
+  const volverAitor  = chkAitor  ? chkAitor.checked  : false;
+  if (!volverAdrian && !volverAitor) { alert('⚠️ Selecciona al menos un operario'); return; }
+  cerrarModalVolverDesayuno();
+  try {
+    const ahora   = Date.now();
+    const horaFin = new Date().toLocaleTimeString('es-ES');
+    const quedanDesayunando = {};
+    const updates = {};
+    for (const [nombre, info] of Object.entries(desayunosActivos)) {
+      const vuelve = (nombre.includes('Adrian') && volverAdrian) ||
+                     (nombre.includes('Aitor')  && volverAitor);
+      if (vuelve) {
+        const duracion = Math.round((ahora - info.inicioMS) / 60000) || 1;
+        await fbPush(tareasHistorialRef, {
+          operario: nombre, numSerie: '---',
+          codigo: `☕ DESAYUNO (${nombre.split(' ')[0]})`,
+          fecha: info.fecha, inicio: info.horaTexto, inicioMS: info.inicioMS,
+          fin: horaFin, total: duracion, tipo: 'descanso', timestamp: Date.now()
+        });
+      } else {
+        quedanDesayunando[nombre] = info;
+      }
+    }
+    if (Object.keys(quedanDesayunando).length === 0) {
+      if (tareasPausadasPorDesayuno) {
+        const snapTareas = await fbGet(tareasRef);
+        const tareas = snapTareas.val() || {};
+        Object.keys(tareas).forEach(id => {
+          if (tareas[id].estado === 'pausado_desayuno') {
+            updates[`tareas/${id}/estado`]   = 'activo';
+            updates[`tareas/${id}/inicioMS`] = ahora;
+          }
+        });
+      }
+      updates['estadoPausa'] = { activa: false };
+    } else {
+      const nuevoEstado = { activa: true, tareasPausadas: tareasPausadasPorDesayuno };
+      for (const [nombre, info] of Object.entries(quedanDesayunando)) {
+        nuevoEstado[nombre.replace(/\s/g, '_')] = info;
+      }
+      updates['estadoPausa'] = nuevoEstado;
+    }
+    await fbUpdate(ref(db), updates);
+  } catch(e) { console.error('Error confirmarVolverDesayuno:', e); }
+};
+
 window.confirmarDesayuno = async function() {
   const adrian = document.getElementById('chkAdrian').checked;
   const aitor = document.getElementById('chkAitor').checked;
-  
   if (!adrian && !aitor) { alert('⚠️ Selecciona al menos un operario'); return; }
-  
   cerrarModalDesayuno();
-  
   const seleccionados = [];
   if (adrian) seleccionados.push('Adrian García');
   if (aitor) seleccionados.push('Aitor Bautista');
-  
-  await iniciarDesayunoDirecto(seleccionados);
+  pausaEnProceso = true;
+  try {
+    await iniciarDesayunoDirecto(seleccionados);
+  } finally {
+    pausaEnProceso = false;
+  }
 };
 
 async function iniciarDesayunoDirecto(operariosSeleccionados) {
@@ -847,21 +959,17 @@ async function iniciarDesayunoDirecto(operariosSeleccionados) {
   const horaTexto = new Date().toLocaleTimeString('es-ES');
   const fecha = obtenerFecha();
   
-  const ambosVan = operariosSeleccionados.length >= 2 || operariosEnLinea.length <= 1;
+  const todosVan = operariosSeleccionados.length >= operariosEnLinea.length;
   
-  // Guardar estado de desayuno en Firebase
-  const estadoDesayuno = {};
+  const estadoDesayuno = { activa: true, tareasPausadas: todosVan };
   operariosSeleccionados.forEach(op => {
     estadoDesayuno[op.replace(/\s/g, '_')] = { inicioMS: ahora, horaTexto, fecha, operario: op };
   });
-  estadoDesayuno.tareasPausadas = ambosVan;
-  estadoDesayuno.activa = true;
   
-  await update(pausaRef, estadoDesayuno);
+  await fbUpdate(ref(db), { estadoPausa: estadoDesayuno });
   
-  // Si van los dos, pausar las tareas activas
-  if (ambosVan) {
-    const snapTareas = await get(tareasRef);
+  if (todosVan) {
+    const snapTareas = await fbGet(tareasRef);
     const tareas = snapTareas.val() || {};
     const updates = {};
     Object.keys(tareas).forEach(id => {
@@ -870,95 +978,28 @@ async function iniciarDesayunoDirecto(operariosSeleccionados) {
         updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS);
       }
     });
-    if (Object.keys(updates).length > 0) await update(ref(db), updates);
+    if (Object.keys(updates).length > 0) await fbUpdate(ref(db), updates);
   }
-};
-
-function mostrarModalVolverDesayuno() {
-  const modal = document.getElementById('modalVolverDesayuno');
-  const contenido = document.getElementById('contenidoVolverDesayuno');
-  const ahora = Date.now();
-  
-  let html = '';
-  Object.entries(desayunosActivos).forEach(([nombre, info]) => {
-    const tiempoMS = ahora - info.inicioMS;
-    const min = Math.floor(tiempoMS / 60000);
-    const seg = Math.floor((tiempoMS % 60000) / 1000);
-    const colorOp = nombre === 'Adrian García' ? 'blue' : 'red';
-    html += `
-      <div class="flex items-center justify-between bg-${colorOp}-50 border-2 border-${colorOp}-200 p-4 rounded-xl">
-        <div>
-          <p class="font-black text-${colorOp}-700 text-lg">${nombre}</p>
-          <p class="text-sm text-slate-500">Desde las ${info.horaTexto} — <span class="font-bold text-orange-600">${min}m ${seg}s</span></p>
-        </div>
-        <button onclick="volverDeDesayuno('${nombre}')" class="bg-green-500 hover:bg-green-600 text-white px-5 py-3 rounded-xl font-black text-sm uppercase shadow-lg transition-all transform hover:scale-105">
-          ✅ Ha vuelto
-        </button>
-      </div>`;
-  });
-  
-  contenido.innerHTML = html;
-  modal.classList.remove('hidden');
 }
 
-window.cerrarModalVolverDesayuno = function() {
-  document.getElementById('modalVolverDesayuno').classList.add('hidden');
-};
-
-window.volverDeDesayuno = async function(nombre) {
+async function finalizarTodosDesayunos() {
   const ahora = Date.now();
   const horaFin = new Date().toLocaleTimeString('es-ES');
-  const info = desayunosActivos[nombre];
   
-  if (!info) { alert('❌ No se encontró info de desayuno para ' + nombre); return; }
+  // Registrar cada operario que estaba desayunando en el historial
+  for (const [nombre, info] of Object.entries(desayunosActivos)) {
+    const duracion = Math.round((ahora - info.inicioMS) / 60000) || 1;
+    await fbPush(tareasHistorialRef, {
+      operario: nombre, numSerie: "---",
+      codigo: `☕ DESAYUNO (${nombre.split(' ')[0]})`,
+      fecha: info.fecha, inicio: info.horaTexto, inicioMS: info.inicioMS,
+      fin: horaFin, total: duracion, tipo: "descanso", timestamp: Date.now()
+    });
+  }
   
-  const duracion = Math.round((ahora - info.inicioMS) / 60000) || 1;
-  
-  // Registrar en historial con nombre del operario
-  await push(tareasHistorialRef, {
-    operario: nombre,
-    numSerie: "---",
-    codigo: `☕ DESAYUNO (${nombre.split(' ')[0]})`,
-    fecha: info.fecha,
-    inicio: info.horaTexto,
-    inicioMS: info.inicioMS,
-    fin: horaFin,
-    total: duracion,
-    tipo: "descanso",
-    timestamp: Date.now()
-  });
-  
-  // Eliminar este operario del estado de pausa en Firebase
-  const keyFirebase = nombre.replace(/\s/g, '_');
-  await update(pausaRef, { [keyFirebase]: null });
-  
-  // Comprobar si quedan más desayunos activos
-  const snapPausa = await get(pausaRef);
-  const estadoPausa = snapPausa.val() || {};
-  
-  const operariosRestantes = [];
-  if (estadoPausa['Adrian_García'] && estadoPausa['Adrian_García'].inicioMS) operariosRestantes.push('Adrian García');
-  if (estadoPausa['Aitor_Bautista'] && estadoPausa['Aitor_Bautista'].inicioMS) operariosRestantes.push('Aitor Bautista');
-  
-  if (operariosRestantes.length === 0) {
-    // Ya no queda nadie desayunando — reactivar tareas si estaban pausadas
-    if (estadoPausa.tareasPausadas) {
-      const snapTareas = await get(tareasRef);
-      const tareas = snapTareas.val() || {};
-      const updates = {};
-      Object.keys(tareas).forEach(id => {
-        if (tareas[id].estado === "pausado_desayuno") {
-          updates[`tareas/${id}/estado`] = "activo";
-          updates[`tareas/${id}/inicioMS`] = ahora;
-        }
-      });
-      if (Object.keys(updates).length > 0) await update(ref(db), updates);
-    }
-    await update(pausaRef, { activa: false, tareasPausadas: false });
-  } else if (operariosRestantes.length === 1 && estadoPausa.tareasPausadas) {
-    // Queda 1 operario desayunando pero las tareas estaban pausadas → reactivar tareas
-    // porque ahora hay un operario disponible para trabajar
-    const snapTareas = await get(tareasRef);
+  // Reactivar tareas si estaban pausadas
+  if (tareasPausadasPorDesayuno) {
+    const snapTareas = await fbGet(tareasRef);
     const tareas = snapTareas.val() || {};
     const updates = {};
     Object.keys(tareas).forEach(id => {
@@ -967,20 +1008,12 @@ window.volverDeDesayuno = async function(nombre) {
         updates[`tareas/${id}/inicioMS`] = ahora;
       }
     });
-    if (Object.keys(updates).length > 0) await update(ref(db), updates);
-    await update(pausaRef, { tareasPausadas: false });
+    if (Object.keys(updates).length > 0) await fbUpdate(ref(db), updates);
   }
   
-  cerrarModalVolverDesayuno();
-  
-  // Si aún quedan operarios desayunando, reabrir el modal actualizado
-  if (operariosRestantes.length > 0) {
-    // Refrescar datos y reabrir
-    setTimeout(() => {
-      if (Object.keys(desayunosActivos).length > 0) mostrarModalVolverDesayuno();
-    }, 300);
-  }
-};
+  // Limpiar pausa por completo
+  await fbUpdate(ref(db), { estadoPausa: { activa: false } });
+}
 
 window.registrarJornada = async (tipo) => {
   const esEntrada = tipo === 'INICIO';
@@ -1025,24 +1058,24 @@ async function ejecutarRegistroJornada(tipo, numOperarios, nombresOperarios) {
     operarioLineaActiva = operariosEnLinea.join(' + ');
     lineaIniciada = true;
     actualizarDisplayOperario();
-    await update(estadoLineaRef, { activa: true, operario: operarioLineaActiva, operarios: operariosEnLinea, numOperarios, horaInicio: horaActual, fecha: fechaActual });
-    const snapTareas = await get(tareasRef);
+    await fbUpdate(estadoLineaRef, { activa: true, operario: operarioLineaActiva, operarios: operariosEnLinea, numOperarios, horaInicio: horaActual, fecha: fechaActual });
+    const snapTareas = await fbGet(tareasRef);
     const tareas = snapTareas.val() || {};
     const updates = {};
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "pausa_salida_linea") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; } });
-    if (Object.keys(updates).length > 0) await update(ref(db), updates);
+    if (Object.keys(updates).length > 0) await fbUpdate(ref(db), updates);
   } else {
-    const snapTareas = await get(tareasRef);
+    const snapTareas = await fbGet(tareasRef);
     const tareas = snapTareas.val() || {};
     const updates = {};
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausa_salida_linea"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
-    if (Object.keys(updates).length > 0) await update(ref(db), updates);
+    if (Object.keys(updates).length > 0) await fbUpdate(ref(db), updates);
     lineaIniciada = false;
     numOperariosActivos = 1;
     operarioLineaActiva = null;
     operariosEnLinea = [];
     actualizarDisplayOperario();
-    await update(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
+    await fbUpdate(estadoLineaRef, { activa: false, operario: null, operarios: [], numOperarios: 0 });
   }
 
   actualizarEstadoBotones();
@@ -1050,7 +1083,7 @@ async function ejecutarRegistroJornada(tipo, numOperarios, nombresOperarios) {
   const operarioRegistro = esEntrada ? operariosEnLinea.join(' + ') : operarioLineaActiva || 'SISTEMA';
   const nombresCortos = esEntrada ? operariosEnLinea.map(n => n.split(' ')[0]).join(' + ') : '';
 
-  await push(tareasHistorialRef, {
+  await fbPush(tareasHistorialRef, {
     operario: operarioRegistro, numSerie: "---",
     codigo: esEntrada ? `🟢 ENTRADA (${nombresCortos})` : "🔴 SALIDA",
     fecha: fechaActual, inicio: horaActual, inicioMS: ahora,
@@ -1095,7 +1128,7 @@ window.iniciarTarea = async function() {
   };
 
   try {
-    const tareaRef = await push(tareasRef, nuevaTarea);
+    const tareaRef = await fbPush(tareasRef, nuevaTarea);
     if (!todasLasTareas) todasLasTareas = {};
     todasLasTareas[tareaRef.key] = { ...nuevaTarea, id: tareaRef.key, timestamp: ahora };
     actualizarTablaTareas();
@@ -1244,12 +1277,12 @@ function actualizarTablaTareas() {
 window.agregarMantenimiento = async function() {
   const descripcion = prompt("Descripción de la tarea de mantenimiento:");
   if (!descripcion || !descripcion.trim()) return;
-  await push(mantenimientoRef, { descripcion: descripcion.trim(), fecha: obtenerFecha(), completada: false, timestamp: Date.now() });
+  await fbPush(mantenimientoRef, { descripcion: descripcion.trim(), fecha: obtenerFecha(), completada: false, timestamp: Date.now() });
 };
 
 window.completarMantenimiento = async function(id) {
   if (!confirm('¿Marcar tarea como realizada?')) return;
-  await update(ref(db, `tareas_mantenimiento/${id}`), { completada: true, fechaCompletada: obtenerFecha(), horaCompletada: new Date().toLocaleTimeString('es-ES') });
+  await fbUpdate(ref(db, `tareas_mantenimiento/${id}`), { completada: true, fechaCompletada: obtenerFecha(), horaCompletada: new Date().toLocaleTimeString('es-ES') });
 };
 
 window.borrarMantenimiento = async function(id) {
@@ -1379,7 +1412,7 @@ onValue(pausaRef, s => {
   desayunosActivos = {};
   tareasPausadasPorDesayuno = false;
   
-  if (d && d.activa) {
+  if (d && d.activa === true) {
     if (d['Adrian_García'] && d['Adrian_García'].inicioMS) {
       desayunosActivos['Adrian García'] = d['Adrian_García'];
     }
@@ -1392,7 +1425,6 @@ onValue(pausaRef, s => {
   const numDesayunando = Object.keys(desayunosActivos).length;
   estaPausadoGlobal = numDesayunando > 0;
   
-  // Para el timer usamos el inicio más antiguo
   if (numDesayunando > 0) {
     inicioPausaMS = Math.min(...Object.values(desayunosActivos).map(i => i.inicioMS));
   }
@@ -1404,15 +1436,14 @@ onValue(pausaRef, s => {
     const nombres = Object.keys(desayunosActivos).map(n => n.split(' ')[0]).join(' + ');
     btnPausa.innerHTML = `☕ VOLVER (${nombres})`;
     cajaDesayuno.classList.remove('hidden');
-    // Mostrar quiénes están desayunando en la caja
-    const infoDesayuno = document.getElementById('tiempoDesayuno');
-    if (infoDesayuno) {
-      infoDesayuno.dataset.multi = numDesayunando > 1 ? 'true' : 'false';
-    }
   } else {
     btnPausa.innerHTML = "🥐 DESAYUNO";
     cajaDesayuno.classList.add('hidden');
   }
+  
+  // Refrescar tabla para mostrar/ocultar filas de desayuno
+  actualizarTablaTareas();
+  actualizarEstadoBotones();
 });
 
 onValue(reposicionRef, s => {
@@ -1448,7 +1479,7 @@ onValue(estadoLineaRef, s => {
 // ✅ Limpieza automática: eliminar de tareasRef las tareas con estado "finalizado"
 // Son residuos del sistema anterior que causan duplicados en la tabla
 async function limpiarTareasFinalizadas() {
-  const snap = await get(tareasRef);
+  const snap = await fbGet(tareasRef);
   const tareas = snap.val() || {};
   for (const [id, t] of Object.entries(tareas)) {
     if (t.estado === 'finalizado' || t.tipo === 'jornada') {
@@ -1506,7 +1537,7 @@ window.exportarExcel = async () => {
   if (!fechaInicio) return;
   const fechaFin = prompt('📅 Fecha de fin (DD/MM/YYYY):');
   if (!fechaFin) return;
-  const snapshot = await get(tareasHistorialRef);
+  const snapshot = await fbGet(tareasHistorialRef);
   const datos = snapshot.val();
   if (!datos) { alert('❌ No hay datos para exportar'); return; }
   const datosFiltrados = Object.values(datos).filter(tarea => {
@@ -1579,6 +1610,19 @@ window.exportarExcel = async () => {
   </div>
 </div>
 
+<!-- Modal Volver del Desayuno -->
+<div id="modalVolverDesayuno" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8">
+    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">✅ Vuelta del Desayuno</h3>
+    <p class="text-slate-600 text-center mb-8">¿Quién ha vuelto a incorporarse?</p>
+    <div id="volverDesayunoContenido" class="space-y-4 mb-8"></div>
+    <div class="flex gap-3">
+      <button onclick="cerrarModalVolverDesayuno()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
+      <button onclick="confirmarVolverDesayuno()" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-black uppercase transition-colors shadow-lg">✅ Confirmar Vuelta</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Seleccionar Operarios para Desayuno -->
 <div id="modalDesayuno" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
@@ -1616,15 +1660,7 @@ window.exportarExcel = async () => {
   </div>
 </div>
 
-<!-- Modal Volver de Desayuno -->
-<div id="modalVolverDesayuno" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
-    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">☕ Vuelta del Desayuno</h3>
-    <p class="text-slate-600 text-center mb-6">Marca quién ha vuelto de desayunar</p>
-    <div id="contenidoVolverDesayuno" class="space-y-4 mb-6"></div>
-    <button onclick="cerrarModalVolverDesayuno()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cerrar</button>
-  </div>
-</div>
+
 
 <div class="max-w-7xl mx-auto">
   <div class="flex justify-between items-center mb-4">
