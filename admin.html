@@ -33,7 +33,7 @@
   .pedido-pill.dragging { opacity:.45; transform:scale(.95); }
 
   .cal-cell {
-    min-height:96px;
+    min-height:120px;
     transition: background .15s, box-shadow .15s;
     position: relative;
   }
@@ -46,6 +46,29 @@
   .cal-cell.drop-target-violet{ background:#f5f3ff!important;box-shadow:inset 0 0 0 2px #8b5cf6; }
 
   #modalCal { backdrop-filter:blur(4px); }
+
+  /* ── ZONAS DE CAMBIO DE MES AL ARRASTRAR ── */
+  .month-nav-zone {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 56px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 1px 4px rgba(0,0,0,.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s, background .25s;
+  }
+  .month-nav-zone.left  { left: 0;  background: linear-gradient(to right, rgba(15,23,42,.6) 0%, rgba(15,23,42,.15) 70%, transparent 100%); border-radius: 0 0 0 20px; }
+  .month-nav-zone.right { right: 0; background: linear-gradient(to left,  rgba(15,23,42,.6) 0%, rgba(15,23,42,.15) 70%, transparent 100%); border-radius: 0 0 20px 0; }
+  body.is-dragging .month-nav-zone { opacity: .5; pointer-events: all; }
+  body.is-dragging .month-nav-zone.hovering { opacity: 1; background: rgba(15,23,42,.72); }
+  .cal-wrapper { position: relative; }
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -62,8 +85,10 @@
 </header>
 
 <!-- MODAL CALENDARIO INDIVIDUAL -->
-<div id="modalCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+<div id="modalCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-2 md:p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-[98vw] h-[95vh] flex flex-col overflow-hidden cal-wrapper" id="calModalOuter">
+    <div class="month-nav-zone left"  id="calNavLeft"  ondragenter="onMonthNavEnter(event,'cal',-1)" ondragleave="onMonthNavLeave(event,'calNavLeft')"  ondragover="onNavDragOver(event)">‹</div>
+    <div class="month-nav-zone right" id="calNavRight" ondragenter="onMonthNavEnter(event,'cal',1)"  ondragleave="onMonthNavLeave(event,'calNavRight')" ondragover="onNavDragOver(event)">›</div>
     <div id="modalCalHeader" class="px-6 py-4 flex items-center justify-between">
       <div>
         <h2 id="modalCalTitulo" class="text-xl font-black uppercase tracking-tight">Calendario</h2>
@@ -76,7 +101,7 @@
         <button onclick="cerrarCal()" class="ml-4 w-8 h-8 rounded-full bg-white/20 hover:bg-red-400 flex items-center justify-center font-black text-white">✕</button>
       </div>
     </div>
-    <div class="overflow-y-auto flex-1 px-4 pb-4">
+    <div class="overflow-y-auto flex-1 px-4 pb-4" id="calModalWrapper">
       <div class="grid grid-cols-7 gap-0.5 mb-0.5">
         <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Lun</div>
         <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Mar</div>
@@ -149,7 +174,11 @@
       <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2 border-r border-slate-50">Sáb</div>
       <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2">Dom</div>
     </div>
-    <div id="globalCalGrid" class="grid grid-cols-7"></div>
+    <div class="cal-wrapper" id="globalCalWrapper">
+      <div class="month-nav-zone left"  id="globalNavLeft"  ondragenter="onMonthNavEnter(event,'global',-1)" ondragleave="onMonthNavLeave(event,'globalNavLeft')"  ondragover="onNavDragOver(event)">‹</div>
+      <div class="month-nav-zone right" id="globalNavRight" ondragenter="onMonthNavEnter(event,'global',1)"  ondragleave="onMonthNavLeave(event,'globalNavRight')" ondragover="onNavDragOver(event)">›</div>
+      <div id="globalCalGrid" class="grid grid-cols-7"></div>
+    </div>
     <div id="globalCalDetalle" class="hidden border-t border-slate-200 bg-slate-50 px-6 py-4 max-h-64 overflow-y-auto">
       <div class="flex items-center justify-between mb-3">
         <h4 id="globalCalDetalleTitulo" class="text-xs font-black uppercase text-slate-600"></h4>
@@ -521,19 +550,25 @@ function renderCalGrid(){
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     // Pills arrastrables por pedido
-    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>`
-      <div class="pedido-pill ${col.pill} border ${col.border} rounded-lg px-2 py-1 mb-1 text-[10px] font-black leading-tight"
+    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>{
+      const cliente=items[0].cliente||'—';
+      const codigo=items[0].codigo||'—';
+      const uds=items.length;
+      return `
+      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight"
            draggable="true"
            data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
            ondragstart="onPillDragStart(event)"
            ondragend="onPillDragEnd(event)">
-        <div class="flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
-          <span class="truncate max-w-[80px]">Ped.${pedId}</span>
-          <span class="ml-auto opacity-70">${items.length}u</span>
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
+          <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
+          <span class="ml-auto text-[11px] font-black">${uds}u</span>
         </div>
-        <div class="text-[9px] opacity-60 truncate">${items[0].codigo||'—'}</div>
-      </div>`).join('');
+        <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
+        <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+      </div>`;
+    }).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,'${modulo}')"
@@ -580,16 +615,21 @@ function renderGlobalCal(){
     const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>
       Object.entries(grupos).map(([pedId,items])=>{
         const col=MOD_COLORS[key];
-        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-0.5 mb-0.5 text-[9px] font-black leading-tight w-full"
+        const cliente=items[0].cliente||'—';
+        const codigo=items[0].codigo||'—';
+        const uds=items.length;
+        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full"
              draggable="true"
              data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
              ondragstart="onPillDragStart(event)"
              ondragend="onPillDragEnd(event)">
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 mb-0.5">
             <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
-            <span class="truncate">${pedId}</span>
-            <span class="ml-auto">${items.length}u</span>
+            <span class="font-black truncate">Ped.${pedId}</span>
+            <span class="ml-auto font-black">${uds}u</span>
           </div>
+          <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
+          <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
         </div>`;
       })
     ).join('');
@@ -610,39 +650,87 @@ function renderGlobalCal(){
 }
 window.cambiarMesGlobal=(dir)=>{ globalCal.month+=dir; if(globalCal.month>11){globalCal.month=0;globalCal.year++;} if(globalCal.month<0){globalCal.month=11;globalCal.year--;} globalCal.diaSeleccionado=null; document.getElementById('globalCalDetalle').classList.add('hidden'); renderGlobalCal(); };
 
-// ── DRAG HANDLERS COMPARTIDOS ────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// DRAG HANDLERS COMPARTIDOS
+// — Estado global persiste aunque el calendario se rerenderice —
+// ════════════════════════════════════════════════════════════════════
 let activeDragEl = null;
+const activeDragState = { modulo: null, pedido: null, fecha: null };
+
+// Temporizador para cambio automático de mes al mantener sobre la zona de borde
+const monthNavTimer = { id: null, calType: null, dir: 0 };
+
+function clearMonthNavTimer(){
+  if(monthNavTimer.id){ clearTimeout(monthNavTimer.id); monthNavTimer.id=null; }
+}
+
+// Avanza o retrocede el mes del calendario correcto y re-renderiza
+function navMes(calType, dir){
+  if(calType==='cal'){
+    calState.month += dir;
+    if(calState.month > 11){ calState.month=0; calState.year++; }
+    if(calState.month < 0 ){ calState.month=11; calState.year--; }
+    renderCalGrid();
+  } else {
+    globalCal.month += dir;
+    if(globalCal.month > 11){ globalCal.month=0; globalCal.year++; }
+    if(globalCal.month < 0 ){ globalCal.month=11; globalCal.year--; }
+    renderGlobalCal();
+  }
+}
+
+// Cuando el cursor entra en la zona de borde durante un drag
+window.onNavDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect='move'; };
+
+window.onMonthNavEnter = (e, calType, dir) => {
+  e.preventDefault();
+  const zoneId = dir < 0
+    ? (calType==='cal' ? 'calNavLeft'    : 'globalNavLeft')
+    : (calType==='cal' ? 'calNavRight'   : 'globalNavRight');
+  document.getElementById(zoneId)?.classList.add('hovering');
+  clearMonthNavTimer();
+  // Cambia el mes tras 600 ms de espera, y luego cada 900 ms si sigue ahí
+  const fire = () => { navMes(calType, dir); monthNavTimer.id = setTimeout(fire, 900); };
+  monthNavTimer.id = setTimeout(fire, 600);
+};
+
+// Cuando el cursor sale de la zona de borde
+window.onMonthNavLeave = (e, zoneId) => {
+  document.getElementById(zoneId)?.classList.remove('hovering');
+  clearMonthNavTimer();
+};
 
 window.onPillDragStart = (e) => {
   activeDragEl = e.currentTarget;
-  activeDragEl.classList.add('dragging');
+  try{ activeDragEl.classList.add('dragging'); }catch(_){}
   const { modulo, pedido, fecha } = e.currentTarget.dataset;
-  const data = buildDragData(modulo, pedido, fecha);
+  activeDragState.modulo = modulo;
+  activeDragState.pedido = pedido;
+  activeDragState.fecha  = fecha;
   e.dataTransfer.setData('text/plain', JSON.stringify({ modulo, pedido, fecha }));
-  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.effectAllowed = 'move';
+  // Mostrar zonas de navegación en todos los calendarios visibles
+  document.body.classList.add('is-dragging');
 };
 
 window.onPillDragEnd = (e) => {
-  if(activeDragEl) activeDragEl.classList.remove('dragging');
-  activeDragEl=null;
-  // Limpiar todos los resaltados
-  document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+  document.body.classList.remove('is-dragging');
+  clearMonthNavTimer();
+  document.querySelectorAll('.month-nav-zone').forEach(z=>z.classList.remove('hovering'));
+  if(activeDragEl){ try{ activeDragEl.classList.remove('dragging'); }catch(_){} }
+  activeDragEl = null;
+  document.querySelectorAll('.cal-cell').forEach(c=>
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
 };
 
 window.onCalCellDragOver = (e, moduloContexto) => {
   e.preventDefault();
-  e.dataTransfer.dropEffect='move';
+  e.dataTransfer.dropEffect = 'move';
   const cell = e.currentTarget;
-  // Determinar color del resaltado según módulo del elemento arrastrado
-  let colorCls='drop-target';
-  try{
-    // No podemos leer dataTransfer en dragover en algunos browsers, usar activeDragEl
-    if(activeDragEl){
-      const m=activeDragEl.dataset.modulo;
-      colorCls=MOD_COLORS[m]?.dropCls||'drop-target';
-    }
-  }catch(e){}
-  document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+  const m = activeDragState.modulo;
+  const colorCls = (m && MOD_COLORS[m]?.dropCls) || 'drop-target';
+  document.querySelectorAll('.cal-cell').forEach(c=>
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
   cell.classList.add(colorCls);
 };
 
@@ -653,11 +741,19 @@ window.onCalCellDragLeave = (e) => {
 window.onCalCellDrop = (e, moduloContexto) => {
   e.preventDefault();
   e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
+  clearMonthNavTimer();
   const fechaDestino = e.currentTarget.dataset.iso;
   if(!fechaDestino) return;
-  let raw; try{ raw=JSON.parse(e.dataTransfer.getData('text/plain')); }catch(ex){ return; }
-  const { modulo, pedido, fecha: fechaOrigen } = raw;
-  if(fechaDestino===fechaOrigen) return; // sin cambio
+  // Leer datos del drag — activeDragState es la fuente más fiable
+  let { modulo, pedido, fecha: fechaOrigen } = activeDragState;
+  if(!modulo || !pedido || !fechaOrigen){
+    try{
+      const raw = JSON.parse(e.dataTransfer.getData('text/plain'));
+      modulo=raw.modulo; pedido=raw.pedido; fechaOrigen=raw.fecha;
+    }catch(_){}
+  }
+  if(!modulo || !pedido || !fechaOrigen) return;
+  if(fechaDestino === fechaOrigen) return;
   const movData = buildDragData(modulo, pedido, fechaOrigen);
   movData.fechaDestino = fechaDestino;
   mostrarConfirm(movData);

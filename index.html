@@ -186,7 +186,7 @@
                 <div class="drag-handle absolute top-4 right-4 text-slate-300">
                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V5h-4v4zm0 10h4v-4h-4v4zm-6-10h4V5H4v4zm0 10h4v-4H4v4zm12-10h4V5h-4v4zm0 10h4v-4h-4v4z"/></svg>
                 </div>
-                <a href="admin.html" class="flex flex-col h-full">
+                <a href="#" onclick="accessAdmin(event)" class="flex flex-col h-full">
                     <div class="w-14 h-14 bg-yellow-200 text-yellow-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     </div>
@@ -212,6 +212,29 @@
             </div>
         </div>
     </footer>
+
+    <!-- Modal contraseña Admin -->
+    <div id="admin-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-sm mx-4">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-12 h-12 bg-yellow-200 text-yellow-700 rounded-2xl flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 uppercase tracking-tight">Acceso Restringido</h3>
+                    <p class="text-slate-400 text-xs">Admin Central</p>
+                </div>
+            </div>
+            <input id="admin-password" type="password" placeholder="Introduce la contraseña" maxlength="20"
+                class="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-2"
+                onkeydown="if(event.key==='Enter') checkAdminPassword()">
+            <p id="admin-error" class="text-red-500 text-xs font-bold mb-4 hidden">Contraseña incorrecta. Inténtalo de nuevo.</p>
+            <div class="flex gap-3 mt-4">
+                <button onclick="closeAdminModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm uppercase tracking-wide transition-colors">Cancelar</button>
+                <button onclick="checkAdminPassword()" class="flex-1 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold py-3 rounded-xl text-sm uppercase tracking-wide transition-colors">Entrar</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const grid = document.getElementById('dashboard-grid');
@@ -249,6 +272,35 @@
 
         setInterval(updateDateTime, 1000);
         updateDateTime();
+
+        function accessAdmin(e) {
+            e.preventDefault();
+            document.getElementById('admin-password').value = '';
+            document.getElementById('admin-error').classList.add('hidden');
+            document.getElementById('admin-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('admin-password').focus(), 100);
+        }
+
+        function checkAdminPassword() {
+            const pw = document.getElementById('admin-password').value;
+            if (pw === '1445') {
+                document.getElementById('admin-modal').classList.add('hidden');
+                window.location.href = 'admin.html';
+            } else {
+                document.getElementById('admin-error').classList.remove('hidden');
+                document.getElementById('admin-password').value = '';
+                document.getElementById('admin-password').focus();
+            }
+        }
+
+        function closeAdminModal() {
+            document.getElementById('admin-modal').classList.add('hidden');
+        }
+
+        // Cerrar modal al hacer clic fuera
+        document.getElementById('admin-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeAdminModal();
+        });
     </script>
 </body>
 </html>
