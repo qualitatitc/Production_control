@@ -8,25 +8,49 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <style>
-  body { font-family: 'Inter', sans-serif; }
-  .drop-zone { transition: all 0.2s ease; }
-  .drop-zone.drag-over { background: #f0fdf4; border-color: #16a34a; transform: scale(1.01); }
-  @keyframes pulse-soft {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
-    50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+  body { font-family:'Inter',sans-serif; }
+  @keyframes pulse-soft { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}50%{box-shadow:0 0 0 6px rgba(16,185,129,0)} }
+  .led-on { animation:pulse-soft 2s infinite; }
+  .drop-zone { transition:all .2s; }
+  .drop-zone.drag-over { background:#f0fdf4;border-color:#16a34a;transform:scale(1.01); }
+  .day-tab { transition:all .15s;cursor:pointer; }
+  .day-tab.active { background:#1e293b!important;color:#fff!important;border-color:#1e293b!important; }
+  .mod-card { transition:all .2s;cursor:pointer; }
+  .mod-card:hover { transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.1); }
+  .row-agitador  { border-left:4px solid #10b981; }
+  .row-dostec40  { border-left:4px solid #ef4444; }
+  .row-dostec50  { border-left:4px solid #f97316; }
+  .row-restyling { border-left:4px solid #8b5cf6; }
+  .row-unknown   { border-left:4px solid #94a3b8; }
+
+  /* ── DRAG & DROP CALENDARIOS ── */
+  .pedido-pill {
+    cursor: grab;
+    transition: opacity .15s, transform .15s, box-shadow .15s;
+    user-select: none;
   }
-  .led-on { animation: pulse-soft 2s infinite; }
-  .row-agitador  { border-left: 4px solid #10b981; }
-  .row-dostec40  { border-left: 4px solid #ef4444; }
-  .row-dostec50  { border-left: 4px solid #f97316; }
-  .row-restyling { border-left: 4px solid #8b5cf6; }
-  .row-unknown   { border-left: 4px solid #94a3b8; }
-  .day-tab { transition: all 0.15s ease; cursor: pointer; }
-  .day-tab.active { background: #1e293b !important; color: white !important; border-color: #1e293b !important; }
+  .pedido-pill:active { cursor:grabbing; }
+  .pedido-pill.dragging { opacity:.45; transform:scale(.95); }
+
+  .cal-cell {
+    min-height:96px;
+    transition: background .15s, box-shadow .15s;
+    position: relative;
+  }
+  .cal-cell.drop-target {
+    background: #f0fdf4 !important;
+    box-shadow: inset 0 0 0 2px #10b981;
+  }
+  .cal-cell.drop-target-red   { background:#fff1f2!important;box-shadow:inset 0 0 0 2px #ef4444; }
+  .cal-cell.drop-target-orange{ background:#fff7ed!important;box-shadow:inset 0 0 0 2px #f97316; }
+  .cal-cell.drop-target-violet{ background:#f5f3ff!important;box-shadow:inset 0 0 0 2px #8b5cf6; }
+
+  #modalCal { backdrop-filter:blur(4px); }
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
 
+<!-- HEADER -->
 <header class="bg-slate-900 text-white py-6 shadow-xl">
   <div class="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
     <div>
@@ -37,33 +61,105 @@
   </div>
 </header>
 
+<!-- MODAL CALENDARIO INDIVIDUAL -->
+<div id="modalCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div id="modalCalHeader" class="px-6 py-4 flex items-center justify-between">
+      <div>
+        <h2 id="modalCalTitulo" class="text-xl font-black uppercase tracking-tight">Calendario</h2>
+        <p id="modalCalSub" class="text-[10px] text-white/70 font-bold mt-0.5 uppercase tracking-wider">Arrastra los pedidos para cambiar su fecha</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="cambiarMesCal(-1)" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white text-lg">‹</button>
+        <span id="modalCalMes" class="text-sm font-black text-white min-w-[130px] text-center"></span>
+        <button onclick="cambiarMesCal(1)"  class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white text-lg">›</button>
+        <button onclick="cerrarCal()" class="ml-4 w-8 h-8 rounded-full bg-white/20 hover:bg-red-400 flex items-center justify-center font-black text-white">✕</button>
+      </div>
+    </div>
+    <div class="overflow-y-auto flex-1 px-4 pb-4">
+      <div class="grid grid-cols-7 gap-0.5 mb-0.5">
+        <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Lun</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Mar</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Mié</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Jue</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2">Vie</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2">Sáb</div>
+        <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2">Dom</div>
+      </div>
+      <div id="calGrid" class="grid grid-cols-7 gap-0.5"></div>
+    </div>
+  </div>
+</div>
+
 <div class="container mx-auto px-6 py-6">
 
-  <!-- Conexiones -->
+  <!-- TARJETAS MÓDULOS -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
-      <div class="flex items-center gap-2 mb-1"><div id="led-agitador" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
+    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('agitador')">
+      <div class="flex items-center gap-2 mb-1"><div id="led-agitador"  class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
       <p class="text-base font-black text-emerald-600">Agitador</p>
-      <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pedidos pendientes</p>
+      <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pendientes</p>
+      <p class="text-[9px] text-emerald-500 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec40')">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
       <p class="text-base font-black text-red-600">Dostec 40</p>
-      <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pedidos pendientes</p>
+      <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pendientes</p>
+      <p class="text-[9px] text-red-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec50')">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span></div>
       <p class="text-base font-black text-orange-500">Dostec 50</p>
-      <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pedidos pendientes</p>
+      <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pendientes</p>
+      <p class="text-[9px] text-orange-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div class="bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('restyling')">
       <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
       <p class="text-base font-black text-violet-600">Restyling</p>
-      <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pedidos pendientes</p>
+      <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pendientes</p>
+      <p class="text-[9px] text-violet-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
   </div>
 
-  <!-- Drop Zone -->
+  <!-- CALENDARIO GLOBAL -->
+  <div class="bg-white rounded-3xl border border-slate-200 shadow-sm mb-8 overflow-hidden">
+    <div class="bg-slate-900 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <h2 class="text-white font-black uppercase tracking-widest text-sm">📅 Planificación General</h2>
+        <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-0.5">Arrastra los pedidos para replanificar</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="hidden md:flex items-center gap-3 mr-2">
+          <span class="flex items-center gap-1 text-[10px] font-black text-emerald-400"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>Agitador</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Dostec 40</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-orange-400"><span class="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>Dostec 50</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-violet-400"><span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span>Restyling</span>
+        </div>
+        <button onclick="cambiarMesGlobal(-1)" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-black text-white text-lg">‹</button>
+        <span id="globalCalMes" class="text-sm font-black text-white min-w-[130px] text-center"></span>
+        <button onclick="cambiarMesGlobal(1)"  class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-black text-white text-lg">›</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-7 border-b border-slate-100">
+      <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2 border-r border-slate-50">Lun</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2 border-r border-slate-50">Mar</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2 border-r border-slate-50">Mié</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2 border-r border-slate-50">Jue</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-400 py-2 border-r border-slate-50">Vie</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2 border-r border-slate-50">Sáb</div>
+      <div class="text-center text-[10px] font-black uppercase text-slate-300 py-2">Dom</div>
+    </div>
+    <div id="globalCalGrid" class="grid grid-cols-7"></div>
+    <div id="globalCalDetalle" class="hidden border-t border-slate-200 bg-slate-50 px-6 py-4 max-h-64 overflow-y-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h4 id="globalCalDetalleTitulo" class="text-xs font-black uppercase text-slate-600"></h4>
+        <button onclick="document.getElementById('globalCalDetalle').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-xs font-black">✕</button>
+      </div>
+      <div id="globalCalDetalleContenido" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+    </div>
+  </div>
+
+  <!-- DROP ZONE EXCEL -->
   <div class="bg-white rounded-3xl border-2 border-dashed border-slate-300 p-10 text-center drop-zone mb-8 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-all"
        id="dropZone" onclick="document.getElementById('fileInput').click()"
        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
@@ -83,44 +179,45 @@
     <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls" onchange="procesarExcel(event)">
   </div>
 
-  <!-- Preview -->
+  <!-- PREVIEW -->
   <div id="seccionPreview" class="hidden">
-    <div id="alertaErrores" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-sm text-amber-800 font-bold"></div>
-
-    <!-- Resumen módulos -->
+    <div id="alertaErrores"    class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-sm text-amber-800 font-bold"></div>
+    <div id="alertaDuplicados" class="hidden bg-orange-50 border-2 border-orange-300 rounded-2xl p-4 mb-6">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl">⚠️</span>
+        <div>
+          <p class="font-black text-orange-800 text-sm uppercase mb-1">Series ya existentes — no se volverán a enviar</p>
+          <div id="listaDuplicados" class="text-xs text-orange-600 font-mono mt-2"></div>
+        </div>
+      </div>
+    </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="resumenModulos"></div>
-
-    <!-- Tabs por día -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
       <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest mb-4">📅 Filtrar por día de montaje</h3>
       <div id="tabsDias" class="flex flex-wrap gap-2"></div>
     </div>
-
-    <!-- Tabla -->
     <div class="bg-white rounded-3xl shadow-sm border overflow-hidden mb-6">
       <div class="bg-slate-900 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <h3 class="text-white font-black uppercase text-sm tracking-widest">
-          <span id="totalFilasVisible" class="text-yellow-400">0</span> series
-          <span class="text-slate-400 font-normal normal-case text-xs ml-2" id="subtituloFiltro"></span>
-        </h3>
+        <div>
+          <h3 class="text-white font-black uppercase text-sm tracking-widest">
+            <span id="totalFilasVisible" class="text-yellow-400">0</span> series
+            <span class="text-slate-400 font-normal normal-case text-xs ml-2" id="subtituloFiltro"></span>
+          </h3>
+          <p id="infoDuplicadosHeader" class="text-orange-400 text-[10px] font-bold mt-0.5 hidden"></p>
+        </div>
         <div class="flex gap-2 flex-wrap">
           <button onclick="limpiarPreview()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase">✕ Cancelar</button>
-          <button onclick="enviarDiaActual()" id="btnEnviarDia" class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow hidden">📅 Enviar día</button>
-          <button onclick="enviarTodo()" id="btnEnviarTodo" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow-lg">🚀 Enviar todo</button>
+          <button onclick="enviarDiaActual()" id="btnEnviarDia"  class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow hidden">📅 Enviar día</button>
+          <button onclick="enviarTodo()"      id="btnEnviarTodo" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow-lg">🚀 Enviar todo</button>
         </div>
       </div>
       <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
         <table class="w-full text-left text-xs">
           <thead class="bg-slate-100 text-slate-600 text-[11px] font-black uppercase sticky top-0">
             <tr>
-              <th class="p-3">Módulo</th>
-              <th class="p-3">📅 Fecha montaje</th>
-              <th class="p-3">Pedido</th>
-              <th class="p-3">Código</th>
-              <th class="p-3">Serie</th>
-              <th class="p-3">Cliente</th>
-              <th class="p-3">Notas</th>
-              <th class="p-3 text-center">Estado</th>
+              <th class="p-3">Módulo</th><th class="p-3">📅 Fecha</th><th class="p-3">Pedido</th>
+              <th class="p-3">Código</th><th class="p-3">Serie</th><th class="p-3">Cliente</th>
+              <th class="p-3">Notas</th><th class="p-3 text-center">Estado</th>
             </tr>
           </thead>
           <tbody id="tablaPreview"></tbody>
@@ -129,7 +226,7 @@
     </div>
   </div>
 
-  <!-- Log -->
+  <!-- LOG -->
   <div id="seccionLog" class="hidden">
     <div class="bg-slate-900 rounded-3xl p-6">
       <h3 class="text-white font-black uppercase text-sm tracking-widest mb-4">📡 Log de envío</h3>
@@ -138,288 +235,439 @@
     </div>
   </div>
 
-</div>
+</div><!-- /container -->
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+// ── CONFIG ──────────────────────────────────────────────────────────────────
 const MODULOS = {
-  agitador: {
-    label:"Agitador", color:"emerald", aliases:["agitador"],
-    config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }
-  },
-  dostec40: {
-    label:"Dostec 40", color:"red", aliases:["dostec40","dostec 40","d40"],
-    config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }
-  },
-  dostec50: {
-    label:"Dostec 50", color:"orange", aliases:["dostec50","dostec 50","d50"],
-    config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }
-  },
-  restyling: {
-    label:"Restyling", color:"violet", aliases:["restyling"],
-    config:{ apiKey:"AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain:"d40restyling.firebaseapp.com", databaseURL:"https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId:"d40restyling", storageBucket:"d40restyling.appspot.com", appId:"1:1085425091704:web:4ce5ab8af47546035b998d" }
-  }
+  agitador:  { label:"Agitador",  color:"emerald", aliases:["agitador"],
+    config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }},
+  dostec40:  { label:"Dostec 40", color:"red",     aliases:["dostec40","dostec 40","d40"],
+    config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }},
+  dostec50:  { label:"Dostec 50", color:"orange",  aliases:["dostec50","dostec 50","d50"],
+    config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }},
+  restyling: { label:"Restyling", color:"violet",  aliases:["restyling"],
+    config:{ apiKey:"AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain:"d40restyling.firebaseapp.com", databaseURL:"https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId:"d40restyling", storageBucket:"d40restyling.appspot.com", appId:"1:1085425091704:web:4ce5ab8af47546035b998d" }}
 };
 
+const MOD_COLORS = {
+  agitador:  { dot:'bg-emerald-500', pill:'bg-emerald-100 text-emerald-800', border:'border-emerald-300', dropCls:'drop-target',         label:'Agitador' },
+  dostec40:  { dot:'bg-red-500',     pill:'bg-red-100 text-red-800',         border:'border-red-300',     dropCls:'drop-target-red',      label:'Dostec 40' },
+  dostec50:  { dot:'bg-orange-500',  pill:'bg-orange-100 text-orange-800',   border:'border-orange-300',  dropCls:'drop-target-orange',   label:'Dostec 50' },
+  restyling: { dot:'bg-violet-500',  pill:'bg-violet-100 text-violet-800',   border:'border-violet-300',  dropCls:'drop-target-violet',   label:'Restyling' }
+};
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
+const planCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
     apps[key] = initializeApp(mod.config, key);
     dbs[key]  = getDatabase(apps[key]);
-    onValue(ref(dbs[key],'.info/connected'), snap => {
-      const on = snap.val()===true;
+    onValue(ref(dbs[key],'.info/connected'), snap=>{
+      const on=snap.val()===true;
       const led=document.getElementById(`led-${key}`), txt=document.getElementById(`txt-${key}`);
       if(!led||!txt) return;
       led.className = on?'w-3 h-3 rounded-full bg-emerald-500 led-on':'w-3 h-3 rounded-full bg-red-400 animate-pulse';
-      txt.textContent = on?'EN LÍNEA':'SIN CONEXIÓN';
-      txt.className   = on?'text-[10px] font-black uppercase text-emerald-600':'text-[10px] font-black uppercase text-red-500';
+      txt.textContent=on?'EN LÍNEA':'SIN CONEXIÓN';
+      txt.className=on?'text-[10px] font-black uppercase text-emerald-600':'text-[10px] font-black uppercase text-red-500';
     });
-    onValue(ref(dbs[key],'planificacion'), snap => {
-      const count = snap.exists()?Object.keys(snap.val()).length:0;
+    onValue(ref(dbs[key],'planificacion'), snap=>{
+      const raw=snap.val()||{};
+      planCache[key]=Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==null));
       const el=document.getElementById(`count-${key}`);
-      if(el) el.textContent=`${count} pedidos pendientes`;
+      if(el) el.textContent=`${Object.keys(planCache[key]).length} pendientes`;
+      if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
+      renderGlobalCal();
     });
-  } catch(e){console.error(key,e);}
+  } catch(e){ console.error(key,e); }
 }
 
-function resolverModulo(s) {
-  const v=String(s||'').trim().toLowerCase();
-  for(const [key,mod] of Object.entries(MODULOS)) if(mod.aliases.some(a=>a===v)) return key;
-  return null;
-}
-
-function parsearFecha(val) {
-  if(!val) return null;
-  // SheetJS con cellDates:true devuelve strings "DD/MM/YYYY" o "YYYY-MM-DD" según locale
-  // o puede venir como string directamente
-  const s = String(val).trim();
-  // YYYY-MM-DD
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const hoyISO = () => new Date().toISOString().slice(0,10);
+function resolverModulo(s){ const v=String(s||'').trim().toLowerCase(); for(const [k,m] of Object.entries(MODULOS)) if(m.aliases.some(a=>a===v)) return k; return null; }
+function parsearFecha(val){
+  if(!val) return null; const s=String(val).trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // DD/MM/YYYY o D/M/YYYY
-  const m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  const m=s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
   if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  // Número serial Excel (sin cellDates)
-  const n = parseFloat(s);
-  if(!isNaN(n) && n>40000) {
-    const d = new Date(Math.round((n-25569)*86400000));
-    return d.toISOString().slice(0,10);
-  }
+  const n=parseFloat(s); if(!isNaN(n)&&n>40000){ const d=new Date(Math.round((n-25569)*86400000)); return d.toISOString().slice(0,10); }
   return null;
 }
-
-function formatLabel(iso) {
-  if(!iso || iso==='sin-fecha') return '⚠️ Sin fecha';
-  const hoy    = new Date().toISOString().slice(0,10);
-  const manana = new Date(Date.now()+86400000).toISOString().slice(0,10);
-  const d = new Date(iso+'T12:00:00');
-  const base = d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'});
-  if(iso===hoy)    return `🟢 Hoy — ${base}`;
-  if(iso===manana) return `🔵 Mañana — ${base}`;
-  return `📅 ${base}`;
+function formatLabel(iso){
+  if(!iso||iso==='sin-fecha') return '⚠️ Sin fecha';
+  const hoy=hoyISO(), man=new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const base=new Date(iso+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'});
+  if(iso===hoy) return `🟢 Hoy — ${base}`; if(iso===man) return `🔵 Mañana — ${base}`; return `📅 ${base}`;
+}
+function formatFechaLarga(iso){
+  return new Date(iso+'T12:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 
-window.onDragOver = e => { e.preventDefault(); document.getElementById('dropZone').classList.add('drag-over'); };
-window.onDragLeave = () => document.getElementById('dropZone').classList.remove('drag-over');
-window.onDrop = e => { e.preventDefault(); document.getElementById('dropZone').classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f) procesarFile(f); };
+// ── DRAG & DROP EXCEL ────────────────────────────────────────────────────────
+window.onDragOver = e=>{ e.preventDefault(); document.getElementById('dropZone').classList.add('drag-over'); };
+window.onDragLeave= ()=> document.getElementById('dropZone').classList.remove('drag-over');
+window.onDrop     = e=>{ e.preventDefault(); document.getElementById('dropZone').classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f) procesarFile(f); };
 
+// ── ESTADO ───────────────────────────────────────────────────────────────────
 let pedidos=[], diaActivo=null;
 
-window.procesarExcel = e => { const f=e.target.files[0]; if(f) procesarFile(f); e.target.value=''; };
-
-function procesarFile(file) {
-  const r = new FileReader();
-  r.onload = evt => {
-    try {
-      // raw:false para que fechas vengan como strings formateados
-      const wb   = XLSX.read(new Uint8Array(evt.target.result), {type:'array', cellDates:true, dateNF:'yyyy-mm-dd'});
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:'', raw:false});
+// Estado de la operación drag de pedido (replanificación)
+const dragOp = { moduloKey:null, pedidoId:null, fechaOrigen:null, fechaDestino:null, items:[] };
+// ── EXCEL PARSE ──────────────────────────────────────────────────────────────
+window.procesarExcel = e=>{ const f=e.target.files[0]; if(f) procesarFile(f); e.target.value=''; };
+function procesarFile(file){
+  const r=new FileReader();
+  r.onload=async evt=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(evt.target.result),{type:'array',cellDates:true,dateNF:'yyyy-mm-dd'});
+      const json=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
       if(!json.length){alert('El archivo está vacío');return;}
-
-      pedidos=[];
-      const errores=[];
-
+      pedidos=[]; const errores=[];
       json.forEach((item,idx)=>{
-        const row={};
-        Object.keys(item).forEach(k=>{ row[k.trim().toLowerCase()]=item[k]; });
-        const pedido  = String(row.pedido||row.orden||'').trim();
-        const codigo  = String(row['código']||row.codigo||'').trim();
-        const sistema = String(row.sistema||'').trim();
-        const fechaRaw = row.fecha || row['fecha montaje'] || row.fecha_montaje || null;
+        const row={}; Object.keys(item).forEach(k=>{ row[k.trim().toLowerCase()]=item[k]; });
+        const pedido=String(row.pedido||row.orden||'').trim(), codigo=String(row['código']||row.codigo||'').trim();
+        const sistema=String(row.sistema||'').trim(), fechaRaw=row.fecha||row['fecha montaje']||null;
         if(!pedido&&!codigo) return;
-
-        const moduloKey = resolverModulo(sistema);
+        const moduloKey=resolverModulo(sistema);
         if(!moduloKey) errores.push(`Fila ${idx+2}: Sistema desconocido "${sistema}"`);
-
-        const fecha    = parsearFecha(fechaRaw);
-        const cliente  = String(row.cliente||row.client||'Sin cliente').trim();
-        const notas    = String(row.notas||row.observaciones||'').trim();
-        const serieBase= String(row.serie||row['nº serie']||'').trim();
-        const cantidad = parseInt(String(row.unidaes||row.unidades||row.cantidad||row.uds||row.qty||'1'))||1;
-
-        const ms = serieBase.match(/^(.*?)(\d+)$/);
-        let pref='',numBase=0,pad=0;
+        const fecha=parsearFecha(fechaRaw), cliente=String(row.cliente||row.client||'Sin cliente').trim();
+        const notas=String(row.notas||row.observaciones||'').trim(), serieBase=String(row.serie||row['nº serie']||'').trim();
+        const cantidad=parseInt(String(row.unidaes||row.unidades||row.cantidad||row.uds||row.qty||'1'))||1;
+        const ms=serieBase.match(/^(.*?)(\d+)$/); let pref='',numBase=0,pad=0;
         if(ms){pref=ms[1];const n=ms[2];numBase=parseInt(n);pad=n.length;}
-
         for(let i=0;i<cantidad;i++){
-          const serie = ms
-            ? pref+String(numBase+i).padStart(pad,'0')
-            : (i===0?(serieBase||'--'):`${serieBase||'--'}-${i+1}`);
-          pedidos.push({moduloKey,pedido:pedido||'S/P',codigo:codigo||'--',serie,cliente,notas,fecha,estado:'listo'});
+          const serie=ms?pref+String(numBase+i).padStart(pad,'0'):(i===0?(serieBase||'--'):`${serieBase||'--'}-${i+1}`);
+          pedidos.push({moduloKey,pedido:pedido||'S/P',codigo:codigo||'--',serie,cliente,notas,fecha,esDuplicado:false});
         }
       });
-
       const errEl=document.getElementById('alertaErrores');
       if(errores.length){errEl.classList.remove('hidden');errEl.innerHTML='⚠️ Módulos no reconocidos:<br>'+errores.join('<br>');}
       else errEl.classList.add('hidden');
-
+      await comprobarDuplicados();
       const dias=[...new Set(pedidos.map(p=>p.fecha||'sin-fecha'))].sort();
-      diaActivo = dias[0]||'todos';
-
-      renderTabs(dias);
-      renderResumen();
-      renderTabla();
+      diaActivo=dias[0]||'todos';
+      renderTabs(dias); renderResumen(); renderTabla();
       document.getElementById('seccionPreview').classList.remove('hidden');
-    } catch(e){alert('❌ Error: '+e.message);}
+    }catch(e){alert('❌ Error: '+e.message);}
   };
   r.readAsArrayBuffer(file);
 }
 
-function renderTabs(dias) {
-  const todos = `<button id="tab-todos" class="day-tab px-4 py-2 rounded-xl text-xs font-black uppercase border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('todos')">
-    📋 Todos <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${pedidos.length}</span>
-  </button>`;
-  const tabsDias = dias.map(d=>{
-    const n = pedidos.filter(p=>(p.fecha||'sin-fecha')===d).length;
-    return `<button id="tab-${d}" class="day-tab px-4 py-2 rounded-xl text-xs font-black border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('${d}')">
-      ${formatLabel(d)} <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${n}</span>
-    </button>`;
-  }).join('');
-  document.getElementById('tabsDias').innerHTML = todos+tabsDias;
-  actualizarTabActivo();
+async function comprobarDuplicados(){
+  const modulos=[...new Set(pedidos.filter(p=>p.moduloKey).map(p=>p.moduloKey))];
+  const existentes={};
+  await Promise.all(modulos.map(async key=>{
+    const data=Object.keys(planCache[key]).length?planCache[key]:await get(ref(dbs[key],'planificacion')).then(s=>s.val()||{});
+    existentes[key]=new Set(Object.values(data).map(i=>String(i.serie||'').trim()).filter(Boolean));
+  }));
+  const dups=[];
+  pedidos.forEach(p=>{ if(p.moduloKey&&existentes[p.moduloKey]?.has(p.serie)){p.esDuplicado=true;dups.push(`${MODULOS[p.moduloKey].label} — ${p.serie} (Ped.${p.pedido})`);} });
+  const aEl=document.getElementById('alertaDuplicados'), lEl=document.getElementById('listaDuplicados'), hEl=document.getElementById('infoDuplicadosHeader');
+  if(dups.length){aEl.classList.remove('hidden');lEl.innerHTML=dups.map(d=>`<div>• ${d}</div>`).join('');hEl.classList.remove('hidden');hEl.textContent=`⚠️ ${dups.length} duplicada${dups.length>1?'s':''} — no se enviarán`;}
+  else{aEl.classList.add('hidden');hEl.classList.add('hidden');}
 }
 
-function actualizarTabActivo() {
-  document.querySelectorAll('.day-tab').forEach(btn=>{
-    const id = btn.id.replace('tab-','');
-    btn.classList.toggle('active', id===diaActivo);
-  });
+function renderTabs(dias){
+  const total=pedidos.filter(p=>!p.esDuplicado).length;
+  let html=`<button id="tab-todos" class="day-tab px-4 py-2 rounded-xl text-xs font-black uppercase border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('todos')">📋 Todos <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${total}</span></button>`;
+  dias.forEach(d=>{ const n=pedidos.filter(p=>(p.fecha||'sin-fecha')===d&&!p.esDuplicado).length;
+    html+=`<button id="tab-${d.replace(/[^a-z0-9]/gi,'-')}" class="day-tab px-4 py-2 rounded-xl text-xs font-black border border-slate-200 shadow-sm bg-white text-slate-600" onclick="selDia('${d}')">${formatLabel(d)} <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full text-[10px]">${n}</span></button>`; });
+  document.getElementById('tabsDias').innerHTML=html; actualizarTabActivo();
 }
+function actualizarTabActivo(){ document.querySelectorAll('.day-tab').forEach(b=>{ b.classList.toggle('active',!!b.getAttribute('onclick')?.includes(`'${diaActivo}'`)); }); }
+window.selDia=dia=>{ diaActivo=dia; actualizarTabActivo(); renderTabla(); };
 
-window.selDia = dia => {
-  diaActivo=dia;
-  actualizarTabActivo();
-  renderTabla();
-};
-
-function renderResumen() {
-  const c={};
-  pedidos.forEach(p=>{ const k=p.moduloKey||'error'; c[k]=(c[k]||0)+1; });
+function renderResumen(){
+  const c={}; pedidos.filter(p=>!p.esDuplicado).forEach(p=>{ const k=p.moduloKey||'error'; c[k]=(c[k]||0)+1; });
   const col={agitador:'emerald',dostec40:'red',dostec50:'orange',restyling:'violet',error:'slate'};
   document.getElementById('resumenModulos').innerHTML=Object.entries(c).map(([k,n])=>{
-    const lbl=MODULOS[k]?MODULOS[k].label:'⚠️ Sin módulo';
-    const cv=col[k]||'slate';
+    const lbl=MODULOS[k]?MODULOS[k].label:'⚠️ Sin módulo'; const cv=col[k]||'slate';
     return `<div class="bg-${cv}-50 border-2 border-${cv}-200 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-${cv}-600">${n}</p><p class="text-xs font-black uppercase text-${cv}-500 mt-1">${lbl}</p></div>`;
   }).join('');
 }
 
-function renderTabla() {
-  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  document.getElementById('totalFilasVisible').textContent=filtrados.length;
-  document.getElementById('subtituloFiltro').textContent = diaActivo==='todos'
-    ? '(todos los días)' : `(${formatLabel(diaActivo)})`;
-
+function renderTabla(){
+  const filtrados=diaActivo==='todos'?pedidos:pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
+  const nuevos=filtrados.filter(p=>!p.esDuplicado).length;
+  document.getElementById('totalFilasVisible').textContent=nuevos;
+  document.getElementById('subtituloFiltro').textContent=diaActivo==='todos'?'(todos los días)':`(${formatLabel(diaActivo)})`;
   const btnDia=document.getElementById('btnEnviarDia');
   if(diaActivo==='todos') btnDia.classList.add('hidden');
-  else { btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
-
-  const badge={
-    agitador: '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>',
-    dostec40: '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>',
-    dostec50: '<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>',
-    restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>'
-  };
+  else{ btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
+  const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
   const clsRow={agitador:'row-agitador',dostec40:'row-dostec40',dostec50:'row-dostec50',restyling:'row-restyling'};
-
-  document.getElementById('tablaPreview').innerHTML = filtrados.map(p=>{
-    const gi=pedidos.indexOf(p);
-    const fechaHtml = p.fecha
-      ? `<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`
-      : '<span class="text-slate-300 text-[10px]">—</span>';
-    return `<tr class="${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 hover:bg-slate-50" id="row-${gi}">
+  document.getElementById('tablaPreview').innerHTML=filtrados.map(p=>{
+    const gi=pedidos.indexOf(p), isDup=p.esDuplicado;
+    const fechaHtml=p.fecha?`<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`:'<span class="text-slate-300 text-[10px]">—</span>';
+    const estadoHtml=isDup?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>':`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
+    return `<tr class="${isDup?'bg-orange-50 opacity-60':''}${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${isDup?'':'hover:bg-slate-50'}" id="row-${gi}">
       <td class="p-3">${p.moduloKey?badge[p.moduloKey]:'<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Sin módulo</span>'}</td>
-      <td class="p-3">${fechaHtml}</td>
-      <td class="p-3 font-bold text-slate-600">${p.pedido}</td>
+      <td class="p-3">${fechaHtml}</td><td class="p-3 font-bold text-slate-600 ${isDup?'line-through text-slate-400':''}">${p.pedido}</td>
       <td class="p-3 text-slate-500 font-mono text-[11px]">${p.codigo}</td>
-      <td class="p-3"><span class="bg-slate-100 px-2 py-0.5 rounded font-mono font-black text-[11px]">${p.serie}</span></td>
+      <td class="p-3"><span class="px-2 py-0.5 rounded font-mono font-black text-[11px] ${isDup?'bg-orange-100 text-orange-500':'bg-slate-100'}">${p.serie}</span></td>
       <td class="p-3 text-blue-600 font-bold text-[11px]">${p.cliente}</td>
       <td class="p-3 text-slate-400 text-[11px] max-w-xs truncate">${p.notas||'—'}</td>
-      <td class="p-3 text-center" id="estado-${gi}"><span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">PENDIENTE</span></td>
-    </tr>`;
+      <td class="p-3 text-center">${estadoHtml}</td></tr>`;
   }).join('');
 }
 
-window.limpiarPreview = ()=>{
-  pedidos=[]; diaActivo=null;
-  document.getElementById('seccionPreview').classList.add('hidden');
-  document.getElementById('seccionLog').classList.add('hidden');
-};
+window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
+window.enviarDiaActual=()=>{ if(!diaActivo||diaActivo==='todos') return; enviarLote(pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo),formatLabel(diaActivo)); };
+window.enviarTodo=()=>enviarLote(pedidos,'todos los días');
 
-window.enviarDiaActual = ()=>{
-  if(!diaActivo||diaActivo==='todos') return;
-  enviarLote(pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo), formatLabel(diaActivo));
-};
-window.enviarTodo = ()=> enviarLote(pedidos,'todos los días');
-
-async function enviarLote(lote, desc) {
-  const validos=lote.filter(p=>p.moduloKey);
-  if(!validos.length){alert('No hay registros válidos');return;}
-
+async function enviarLote(lote,desc){
+  const validos=lote.filter(p=>p.moduloKey&&!p.esDuplicado), omitidos=lote.filter(p=>p.esDuplicado).length;
+  if(!validos.length){alert(omitidos>0?`⚠️ Todas las series ya están en Firebase (${omitidos} duplicadas).`:'No hay registros válidos');return;}
   ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=true; });
   document.getElementById('seccionLog').classList.remove('hidden');
-  const log=document.getElementById('logContenido');
-  log.innerHTML='';
-  document.getElementById('resultadoFinal').classList.add('hidden');
-
+  const log=document.getElementById('logContenido'); log.innerHTML=''; document.getElementById('resultadoFinal').classList.add('hidden');
   const addLog=(msg,cls='text-slate-300')=>{ log.innerHTML+=`<div class="${cls}">${msg}</div>`; log.scrollTop=log.scrollHeight; };
-  addLog(`📋 Enviando ${validos.length} series (${desc})...`,'text-yellow-400');
-
+  addLog(`📋 Enviando ${validos.length} series (${desc})${omitidos?` — ${omitidos} duplicadas omitidas`:''}...`,'text-yellow-400');
   let ok=0,err=0;
   for(let i=0;i<pedidos.length;i++){
-    const p=pedidos[i];
-    if(!validos.includes(p)) continue;
-    if(!p.moduloKey){setEstado(i,'omitido');err++;continue;}
-    try{
-      await push(ref(dbs[p.moduloKey],'planificacion'),{
-        pedido:p.pedido, cliente:p.cliente, codigo:p.codigo,
-        serie:p.serie,   notas:p.notas,   fecha:p.fecha||null,
-        orden:Date.now()+i
-      });
+    const p=pedidos[i]; if(!validos.includes(p)) continue;
+    try{ await push(ref(dbs[p.moduloKey],'planificacion'),{pedido:p.pedido,cliente:p.cliente,codigo:p.codigo,serie:p.serie,notas:p.notas,fecha:p.fecha||null,orden:Date.now()+i});
       addLog(`✅ ${p.serie} → <b>${MODULOS[p.moduloKey].label}</b>${p.fecha?` <span class="text-blue-300">${p.fecha}</span>`:''}`, 'text-emerald-400');
       setEstado(i,'enviado'); ok++;
-    }catch(e){
-      addLog(`❌ ${p.serie} — ${e.message}`,'text-red-400');
-      setEstado(i,'error'); err++;
-    }
+    }catch(e){ addLog(`❌ ${p.serie} — ${e.message}`,'text-red-400'); setEstado(i,'error'); err++; }
     if((ok+err)%10===0) await new Promise(r=>setTimeout(r,80));
   }
-
+  if(omitidos) addLog(`⚠️ ${omitidos} duplicadas omitidas`,'text-orange-400');
   addLog(`\n📊 ${ok} enviados — ${err} errores`,'text-white font-bold');
-  const res=document.getElementById('resultadoFinal');
-  res.classList.remove('hidden');
+  const res=document.getElementById('resultadoFinal'); res.classList.remove('hidden');
   res.className=`mt-4 ${err===0?'bg-emerald-500':'bg-amber-500'} text-white rounded-2xl p-4 text-center font-black text-base`;
-  res.textContent=err===0?`✅ ${ok} pedidos enviados correctamente`:`⚠️ ${ok} enviados — ${err} errores`;
+  res.textContent=err===0?`✅ ${ok} pedidos enviados${omitidos?` (${omitidos} duplicados omitidos)`:''}`:`⚠️ ${ok} enviados — ${err} errores`;
   ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=false; });
 }
-
 function setEstado(i,estado){
-  const el=document.getElementById(`estado-${i}`);
-  if(!el) return;
+  const el=document.getElementById(`estado-${i}`); if(!el) return;
   const m={enviado:['bg-emerald-100 text-emerald-700','✅ ENVIADO'],error:['bg-red-100 text-red-600','❌ ERROR'],omitido:['bg-amber-100 text-amber-600','⚠️ OMITIDO']};
-  const [cls,lbl]=m[estado]||m.omitido;
-  el.innerHTML=`<span class="${cls} px-2 py-0.5 rounded-full text-[10px] font-black">${lbl}</span>`;
+  const [cls,lbl]=m[estado]||m.omitido; el.outerHTML=`<span class="${cls} px-2 py-0.5 rounded-full text-[10px] font-black">${lbl}</span>`;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// DRAG & DROP REPLANIFICACIÓN — lógica compartida
+// ════════════════════════════════════════════════════════════════════
+
+// Construye los datos de un drag: { moduloKey, pedidoId, fechaOrigen, ids:[], items:[] }
+// pedidoId es el identificador de pedido (campo .pedido) que agrupa todas las series
+function buildDragData(moduloKey, pedidoId, fechaOrigen){
+  const data = planCache[moduloKey];
+  const items = Object.entries(data)
+    .filter(([,v]) => v.pedido === pedidoId && v.fecha === fechaOrigen)
+    .map(([fbId, v]) => ({ fbId, ...v }));
+  return { moduloKey, pedidoId, fechaOrigen, items };
+}
+
+// Aplica el cambio de fecha en Firebase para todas las series del pedido
+async function aplicarCambioFecha(moduloKey, items, nuevaFecha){
+  const updates={};
+  items.forEach(item=>{ updates[`${item.fbId}/fecha`]=nuevaFecha; });
+  await update(ref(dbs[moduloKey],'planificacion'), updates);
+}
+
+// Aplicación directa sin confirmación
+async function mostrarConfirm(movData){
+  const { moduloKey, items, fechaDestino } = movData;
+  await aplicarCambioFecha(moduloKey, items, fechaDestino);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CALENDARIO INDIVIDUAL (modal) con drag & drop
+// ════════════════════════════════════════════════════════════════════
+const calState = { modulo:null, year:new Date().getFullYear(), month:new Date().getMonth(), dragData:null };
+
+window.abrirCal = (moduloKey) => {
+  calState.modulo=moduloKey; calState.year=new Date().getFullYear(); calState.month=new Date().getMonth(); calState.dragData=null;
+  const mod=MODULOS[moduloKey], col=MOD_COLORS[moduloKey];
+  const bgMap={emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',violet:'bg-violet-600'};
+  document.getElementById('modalCalHeader').className=`px-6 py-4 flex items-center justify-between ${bgMap[mod.color]} text-white`;
+  document.getElementById('modalCalTitulo').textContent=`${mod.label} — Planificación`;
+  renderCalGrid();
+  document.getElementById('modalCal').classList.remove('hidden');
+  document.getElementById('modalCal').classList.add('flex');
+};
+window.cerrarCal=()=>{ document.getElementById('modalCal').classList.add('hidden'); document.getElementById('modalCal').classList.remove('flex'); calState.modulo=null; };
+window.cambiarMesCal=(dir)=>{ calState.month+=dir; if(calState.month>11){calState.month=0;calState.year++;} if(calState.month<0){calState.month=11;calState.year--;} renderCalGrid(); };
+
+function renderCalGrid(){
+  const { modulo, year, month } = calState;
+  if(!modulo) return;
+  document.getElementById('modalCalMes').textContent=`${MESES[month]} ${year}`;
+  const col=MOD_COLORS[modulo];
+  const data=planCache[modulo];
+  // Agrupar por fecha → pedido → items
+  const porFecha={};
+  Object.entries(data).forEach(([fbId,item])=>{
+    const f=item.fecha||'sin-fecha'; if(!porFecha[f]) porFecha[f]={};
+    const p=item.pedido||'S/P'; if(!porFecha[f][p]) porFecha[f][p]=[];
+    porFecha[f][p].push({fbId,...item});
+  });
+  const hoy=hoyISO();
+  const primerDia=new Date(year,month,1).getDay(); const offset=primerDia===0?6:primerDia-1;
+  const diasMes=new Date(year,month+1,0).getDate();
+  let html='';
+  for(let i=0;i<offset;i++) html+=`<div class="cal-cell bg-slate-50/50 border border-slate-50"></div>`;
+  for(let d=1;d<=diasMes;d++){
+    const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const grupos=porFecha[iso]||{};
+    const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
+    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    // Pills arrastrables por pedido
+    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>`
+      <div class="pedido-pill ${col.pill} border ${col.border} rounded-lg px-2 py-1 mb-1 text-[10px] font-black leading-tight"
+           draggable="true"
+           data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
+           ondragstart="onPillDragStart(event)"
+           ondragend="onPillDragEnd(event)">
+        <div class="flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
+          <span class="truncate max-w-[80px]">Ped.${pedId}</span>
+          <span class="ml-auto opacity-70">${items.length}u</span>
+        </div>
+        <div class="text-[9px] opacity-60 truncate">${items[0].codigo||'—'}</div>
+      </div>`).join('');
+    html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
+               data-iso="${iso}"
+               ondragover="onCalCellDragOver(event,'${modulo}')"
+               ondragleave="onCalCellDragLeave(event)"
+               ondrop="onCalCellDrop(event,'${modulo}')">
+      <div class="text-[11px] font-black mb-1 ${esHoy?'text-blue-600':esFinSem?'text-slate-300':'text-slate-600'}">${d}</div>
+      ${pillsHtml}
+    </div>`;
+  }
+  const resto=(offset+diasMes)%7; if(resto>0) for(let i=0;i<7-resto;i++) html+=`<div class="cal-cell bg-slate-50/50 border border-slate-50"></div>`;
+  document.getElementById('calGrid').innerHTML=html;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CALENDARIO GLOBAL con drag & drop
+// ════════════════════════════════════════════════════════════════════
+const globalCal = { year:new Date().getFullYear(), month:new Date().getMonth(), diaSeleccionado:null };
+
+function renderGlobalCal(){
+  const { year, month } = globalCal;
+  document.getElementById('globalCalMes').textContent=`${MESES[month]} ${year}`;
+  // Mapa fecha → modulo → grupos de pedido
+  const porFecha={};
+  for(const [key,data] of Object.entries(planCache)){
+    Object.entries(data).forEach(([fbId,item])=>{
+      const f=item.fecha||'sin-fecha'; if(!porFecha[f]) porFecha[f]={};
+      if(!porFecha[f][key]) porFecha[f][key]={};
+      const p=item.pedido||'S/P'; if(!porFecha[f][key][p]) porFecha[f][key][p]=[];
+      porFecha[f][key][p].push({fbId,...item});
+    });
+  }
+  const hoy=hoyISO();
+  const primerDia=new Date(year,month,1).getDay(); const offset=primerDia===0?6:primerDia-1;
+  const diasMes=new Date(year,month+1,0).getDate();
+  let html='';
+  for(let i=0;i<offset;i++) html+=`<div class="cal-cell bg-slate-50/30 border-b border-r border-slate-50"></div>`;
+  for(let d=1;d<=diasMes;d++){
+    const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const modsDia=porFecha[iso]||{};
+    const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
+    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
+    // Pills por módulo → pedido
+    const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>
+      Object.entries(grupos).map(([pedId,items])=>{
+        const col=MOD_COLORS[key];
+        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-0.5 mb-0.5 text-[9px] font-black leading-tight w-full"
+             draggable="true"
+             data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
+             ondragstart="onPillDragStart(event)"
+             ondragend="onPillDragEnd(event)">
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
+            <span class="truncate">${pedId}</span>
+            <span class="ml-auto">${items.length}u</span>
+          </div>
+        </div>`;
+      })
+    ).join('');
+    html+=`<div class="cal-cell ${bgCls} border-b border-r border-slate-100 p-1.5"
+               data-iso="${iso}"
+               ondragover="onCalCellDragOver(event,null)"
+               ondragleave="onCalCellDragLeave(event)"
+               ondrop="onCalCellDrop(event,null)">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[11px] font-black ${esHoy?'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]':esFinSem?'text-slate-300':'text-slate-700'}">${d}</span>
+        ${totalDia?`<span class="text-[9px] font-black text-slate-400">${totalDia}</span>`:''}
+      </div>
+      ${pillsHtml}
+    </div>`;
+  }
+  const resto=(offset+diasMes)%7; if(resto>0) for(let i=0;i<7-resto;i++) html+=`<div class="cal-cell bg-slate-50/30 border-b border-r border-slate-50"></div>`;
+  document.getElementById('globalCalGrid').innerHTML=html;
+}
+window.cambiarMesGlobal=(dir)=>{ globalCal.month+=dir; if(globalCal.month>11){globalCal.month=0;globalCal.year++;} if(globalCal.month<0){globalCal.month=11;globalCal.year--;} globalCal.diaSeleccionado=null; document.getElementById('globalCalDetalle').classList.add('hidden'); renderGlobalCal(); };
+
+// ── DRAG HANDLERS COMPARTIDOS ────────────────────────────────────────────────
+let activeDragEl = null;
+
+window.onPillDragStart = (e) => {
+  activeDragEl = e.currentTarget;
+  activeDragEl.classList.add('dragging');
+  const { modulo, pedido, fecha } = e.currentTarget.dataset;
+  const data = buildDragData(modulo, pedido, fecha);
+  e.dataTransfer.setData('text/plain', JSON.stringify({ modulo, pedido, fecha }));
+  e.dataTransfer.effectAllowed='move';
+};
+
+window.onPillDragEnd = (e) => {
+  if(activeDragEl) activeDragEl.classList.remove('dragging');
+  activeDragEl=null;
+  // Limpiar todos los resaltados
+  document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+};
+
+window.onCalCellDragOver = (e, moduloContexto) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  const cell = e.currentTarget;
+  // Determinar color del resaltado según módulo del elemento arrastrado
+  let colorCls='drop-target';
+  try{
+    // No podemos leer dataTransfer en dragover en algunos browsers, usar activeDragEl
+    if(activeDragEl){
+      const m=activeDragEl.dataset.modulo;
+      colorCls=MOD_COLORS[m]?.dropCls||'drop-target';
+    }
+  }catch(e){}
+  document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+  cell.classList.add(colorCls);
+};
+
+window.onCalCellDragLeave = (e) => {
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
+};
+
+window.onCalCellDrop = (e, moduloContexto) => {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
+  const fechaDestino = e.currentTarget.dataset.iso;
+  if(!fechaDestino) return;
+  let raw; try{ raw=JSON.parse(e.dataTransfer.getData('text/plain')); }catch(ex){ return; }
+  const { modulo, pedido, fecha: fechaOrigen } = raw;
+  if(fechaDestino===fechaOrigen) return; // sin cambio
+  const movData = buildDragData(modulo, pedido, fechaOrigen);
+  movData.fechaDestino = fechaDestino;
+  mostrarConfirm(movData);
+};
+
+// Inicializar
+renderGlobalCal();
+
+// Cerrar modal individual al clic fuera
+document.getElementById('modalCal').addEventListener('click', e=>{ if(e.target===document.getElementById('modalCal')) cerrarCal(); });
 </script>
 </body>
 </html>
