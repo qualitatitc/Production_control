@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, onValue, update, remove, get, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAJAp5Zx4nmf0336aucWsQy8jB2L3LIsNM",
@@ -24,6 +24,35 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
+let firebaseDesconectado = false;
+
+window.toggleFirebase = function() {
+  if (!firebaseDesconectado) {
+    if (!confirm('⚠️ ¿Desconectar Firebase?\nLos cambios NO se guardarán en la base de datos mientras esté desconectado.')) return;
+    goOffline(db);
+    firebaseDesconectado = true;
+    const btn = document.getElementById('btnDesconectar');
+    btn.textContent = '🔌 Conectar';
+    btn.classList.remove('text-slate-500', 'border-slate-200');
+    btn.classList.add('text-red-600', 'border-red-300', 'bg-red-50');
+    const led = document.getElementById('firebaseLed');
+    led.classList.remove('bg-green-500');
+    led.classList.add('bg-red-500');
+    document.getElementById('firebaseLedPulse').classList.add('opacity-0');
+    const status = document.getElementById('firebaseStatus');
+    status.textContent = 'MODO PRUEBAS';
+    status.classList.remove('text-green-600');
+    status.classList.add('text-red-600');
+  } else {
+    goOnline(db);
+    firebaseDesconectado = false;
+    const btn = document.getElementById('btnDesconectar');
+    btn.textContent = '🔌 Desconectar';
+    btn.classList.remove('text-red-600', 'border-red-300', 'bg-red-50');
+    btn.classList.add('text-slate-500', 'border-slate-200');
+  }
+};
 
 const tareasRef = ref(db, 'tareas');
 const tareasHistorialRef = ref(db, 'historial_tareas');
@@ -215,6 +244,7 @@ function sumarDiaAFecha(fechaStr, dias) {
 function actualizarGraficoPuntos(fechaFiltro = null) {
   const tareasAdrian = [];
   const tareasAlberto = [];
+  const tareasAmbos = [];
 
   if (todasLasTareas) {
     const tareasProduccion = Object.entries(todasLasTareas)
@@ -234,7 +264,9 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
 
     tareasProduccion.forEach((t, index) => {
       const punto = { x: index, y: t.tiempoNum, tarea: t.codigo, serie: t.numSerie, hora: t.inicio, fecha: t.fecha, firebaseId: t.id, operario: t.operario };
-      if (t.operario === 'Adrian García') tareasAdrian.push(punto);
+      const esAmbos = t.operario && t.operario.includes('+');
+      if (esAmbos) tareasAmbos.push(punto);
+      else if (t.operario === 'Adrian García') tareasAdrian.push(punto);
       else if (t.operario === 'Aitor Bautista') tareasAlberto.push(punto);
     });
   }
@@ -242,17 +274,50 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
   const ctx = document.getElementById('graficoTareas').getContext('2d');
   if (chartInstance) chartInstance.destroy();
 
-  if (tareasAdrian.length === 0 && tareasAlberto.length === 0) {
+  const totalTareas = tareasAdrian.length + tareasAlberto.length + tareasAmbos.length;
+  if (totalTareas === 0) {
     document.getElementById('contadorTareas').textContent = fechaFiltro ? `Sin datos para ${fechaFiltro}` : 'Sin tareas en el historial';
   } else {
-    const totalTareas = tareasAdrian.length + tareasAlberto.length;
     document.getElementById('contadorTareas').textContent = fechaFiltro ? `${totalTareas} tareas el ${fechaFiltro}` : `${totalTareas} tareas totales`;
   }
 
-  const todosTiempos = [...tareasAdrian, ...tareasAlberto].map(t => t.y);
+  const todosTiempos = [...tareasAdrian, ...tareasAlberto, ...tareasAmbos].map(t => t.y);
   const tiempoMedio = todosTiempos.length > 0 ? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length : 0;
-  const maxX = Math.max(tareasAdrian.length, tareasAlberto.length) - 1;
+  const maxX = totalTareas - 1;
   const lineaMedia = maxX >= 0 ? [{ x: 0, y: tiempoMedio }, { x: maxX, y: tiempoMedio }] : [];
+
+  // Plugin para dibujar puntos mitad azul / mitad rojo
+  const splitPointPlugin = {
+    id: 'splitPoint',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(2); // dataset "Ambos" es el index 2
+      if (!meta || meta.hidden) return;
+      const ctx = chart.ctx;
+      meta.data.forEach(point => {
+        const x = point.x;
+        const y = point.y;
+        const r = 8;
+        ctx.save();
+        // Mitad izquierda azul
+        ctx.beginPath();
+        ctx.arc(x, y, r, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.fillStyle = '#3b82f6';
+        ctx.fill();
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Mitad derecha roja
+        ctx.beginPath();
+        ctx.arc(x, y, r, Math.PI * 1.5, Math.PI * 0.5);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+  };
 
   chartInstance = new Chart(ctx, {
     type: 'scatter',
@@ -260,9 +325,11 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
       datasets: [
         { label: 'Adrian García', data: tareasAdrian, backgroundColor: '#3b82f6', borderColor: '#2563eb', borderWidth: 2, pointRadius: 8, pointHoverRadius: 12, order: 2 },
         { label: 'Aitor Bautista', data: tareasAlberto, backgroundColor: '#ef4444', borderColor: '#dc2626', borderWidth: 2, pointRadius: 8, pointHoverRadius: 12, order: 2 },
+        { label: 'Ambos', data: tareasAmbos, backgroundColor: 'transparent', borderColor: 'transparent', pointRadius: 0, pointHoverRadius: 12, order: 2 },
         { label: 'Tiempo Medio', data: lineaMedia, type: 'line', borderColor: '#fbbf24', backgroundColor: 'rgba(251, 191, 36, 0.1)', borderWidth: 3, borderDash: [5, 5], pointRadius: 0, fill: false, showLine: true, order: 1 }
       ]
     },
+    plugins: [splitPointPlugin],
     options: {
       responsive: true, maintainAspectRatio: false,
       onClick: (e) => {
@@ -270,7 +337,7 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
         if (points.length) {
           const firstPoint = points[0];
           const dataset = chartInstance.data.datasets[firstPoint.datasetIndex];
-          mostrarModalEliminar(dataset.data[firstPoint.index]);
+          if (dataset.data[firstPoint.index]?.firebaseId) mostrarModalEliminar(dataset.data[firstPoint.index]);
         }
       },
       onHover: (e, activeElements) => { e.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default'; },
@@ -281,7 +348,9 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
             title: (ctx) => `Tarea #${ctx[0].parsed.x + 1}`,
             label: (ctx) => {
               const p = ctx.raw;
-              const operario = ctx.datasetIndex === 0 ? 'Adrian' : 'Alberto';
+              let operario = 'Ambos';
+              if (ctx.datasetIndex === 0) operario = 'Adrian';
+              else if (ctx.datasetIndex === 1) operario = 'Aitor';
               return [`Operario: ${operario}`, `Tarea: ${p.tarea}`, `Serie: ${p.serie}`, `Hora: ${p.hora}`, `Tiempo: ${p.y} minutos`];
             }
           }
@@ -1219,18 +1288,43 @@ onValue(mantenimientoRef, (snapshot) => {
   });
 });
 
+let datosIncidenciasGlobal = {};
+
 onValue(incidenciasTextoRef, (snapshot) => {
+  datosIncidenciasGlobal = snapshot.val() || {};
+  renderizarIncidencias();
+});
+
+function renderizarIncidencias() {
   const cuerpo = document.getElementById('cuerpoIncidencias');
   cuerpo.innerHTML = "";
-  const datos = snapshot.val();
-  if (!datos) { cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>'; return; }
-  const arr = Object.keys(datos).map(id => ({ id, ...datos[id] })).sort((a, b) => b.timestamp - a.timestamp);
+  const datos = datosIncidenciasGlobal;
+  if (!datos || Object.keys(datos).length === 0) { cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>'; return; }
+  
+  const filtroMes = document.getElementById('filtroMesIncidencias').value;
+  let arr = Object.keys(datos).map(id => ({ id, ...datos[id] })).sort((a, b) => b.timestamp - a.timestamp);
+  
+  if (filtroMes) {
+    const [anioF, mesF] = filtroMes.split('-').map(Number);
+    arr = arr.filter(t => {
+      if (!t.fecha) return false;
+      const partes = t.fecha.split('/');
+      if (partes.length < 3) return false;
+      return parseInt(partes[1]) === mesF && parseInt(partes[2]) === anioF;
+    });
+  }
+  
+  if (arr.length === 0) { cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay incidencias en este mes</td></tr>'; return; }
+  
   arr.forEach(t => {
     cuerpo.innerHTML += `<tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
       <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-      <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td></tr>`;
+      <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+      <td class="p-4 text-right"><button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500 transition-colors" title="Borrar incidencia">🗑️</button></td></tr>`;
   });
-});
+}
+
+window.filtrarIncidenciasPorMes = function() { renderizarIncidencias(); };
 
 // ============================================
 // LISTENER HISTORIAL — actualiza gráficos y tabla
@@ -1535,12 +1629,15 @@ window.exportarExcel = async () => {
 <div class="max-w-7xl mx-auto">
   <div class="flex justify-between items-center mb-4">
     <a href="index.html" class="bg-white hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase transition-colors flex items-center gap-1 shadow-sm">← Volver</a>
-    <div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
-      <div class="relative">
-        <div id="firebaseLed" class="w-3 h-3 rounded-full bg-gray-400"></div>
-        <div id="firebaseLedPulse" class="absolute top-0 left-0 w-3 h-3 rounded-full bg-green-500 opacity-0 animate-ping"></div>
+    <div class="flex items-center gap-3">
+      <button id="btnDesconectar" onclick="toggleFirebase()" class="bg-white hover:bg-slate-100 text-slate-500 px-3 py-2 rounded-xl text-[10px] font-bold uppercase shadow-sm transition-colors border border-slate-200">🔌 Desconectar</button>
+      <div id="firebaseIndicator" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm">
+        <div class="relative">
+          <div id="firebaseLed" class="w-3 h-3 rounded-full bg-gray-400"></div>
+          <div id="firebaseLedPulse" class="absolute top-0 left-0 w-3 h-3 rounded-full bg-green-500 opacity-0 animate-ping"></div>
+        </div>
+        <span id="firebaseStatus" class="text-xs font-bold text-slate-600">Conectando...</span>
       </div>
-      <span id="firebaseStatus" class="text-xs font-bold text-slate-600">Conectando...</span>
     </div>
   </div>
 
@@ -1633,6 +1730,7 @@ window.exportarExcel = async () => {
       <div class="flex justify-center gap-8">
         <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-blue-500"></div><span class="font-bold text-slate-700">Adrian García</span></div>
         <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-red-500"></div><span class="font-bold text-slate-700">Aitor Bautista</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full" style="background:linear-gradient(90deg, #3b82f6 50%, #ef4444 50%)"></div><span class="font-bold text-slate-700">Ambos</span></div>
       </div>
       <div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">Cargando...</div>
     </div>
@@ -1718,16 +1816,17 @@ window.exportarExcel = async () => {
     </div>
 
     <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-orange-200">
-      <div class="bg-orange-500 p-4">
+      <div class="bg-orange-500 p-4 flex items-center justify-between">
         <h3 class="text-white font-black uppercase text-sm flex items-center gap-2">⚠️ Registro de Incidencias</h3>
+        <input type="month" id="filtroMesIncidencias" onchange="filtrarIncidenciasPorMes()" class="bg-orange-400 text-white border border-orange-300 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-white placeholder-orange-200">
       </div>
       <div class="max-h-96 overflow-y-auto">
         <table class="w-full text-left">
           <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
-            <tr><th class="p-4 w-32">Fecha</th><th class="p-4">Motivo</th></tr>
+            <tr><th class="p-4 w-32">Fecha</th><th class="p-4">Motivo</th><th class="p-4 text-right w-16">Borrar</th></tr>
           </thead>
           <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-            <tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
