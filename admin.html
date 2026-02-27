@@ -506,16 +506,17 @@ for (const [key, mod] of Object.entries(MODULOS)) {
 const FESTIVOS_FIJOS = [
   [1,  1,  'Año Nuevo'],
   [1,  6,  'Reyes Magos'],
+  [4,  2,  'Pascua Granada'],
   [5,  1,  'Día del Trabajo'],
+  [6,  24, 'Sant Joan'],
   [8,  15, 'Asunción'],
+  [9,  11, 'Diada Nacional'],
   [10, 12, 'Fiesta Nacional'],
   [11, 1,  'Todos los Santos'],
   [12, 6,  'Constitución'],
   [12, 8,  'Inmaculada'],
   [12, 25, 'Navidad'],
-  [12, 26, 'San Esteban'],        // Cataluña
-  [4,  23, 'Sant Jordi'],         // Cataluña (no laborable en CA)
-  [6,  24, 'Sant Joan'],          // Cataluña
+  [12, 26, 'San Esteban'],
 ];
 // Festivos móviles calculados por año (Viernes Santo + Lunes de Pascua)
 function calcularPascua(year) {
