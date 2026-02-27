@@ -20,7 +20,7 @@
   .row-agitador  { border-left:4px solid #10b981; }
   .row-dostec40  { border-left:4px solid #ef4444; }
   .row-dostec50  { border-left:4px solid #f97316; }
-  .row-restyling { border-left:4px solid #8b5cf6; }
+  .row-restyling { border-left:4px solid #0066ff; }
   .row-unknown   { border-left:4px solid #94a3b8; }
 
   /* ── DRAG & DROP CALENDARIOS ── */
@@ -28,9 +28,87 @@
     cursor: grab;
     transition: opacity .15s, transform .15s, box-shadow .15s;
     user-select: none;
+    position: relative;
   }
   .pedido-pill:active { cursor:grabbing; }
   .pedido-pill.dragging { opacity:.45; transform:scale(.95); }
+
+  /* ── TAREA FINALIZADA ── */
+  .pedido-pill.finalizada {
+    background: #f0fdf4 !important;
+    border-color: #86efac !important;
+    color: #166534 !important;
+    cursor: default;
+    opacity: 0.85;
+  }
+  .pedido-pill.finalizada .pill-dot {
+    background: #22c55e !important;
+  }
+  .pedido-pill.finalizada .pill-check-badge {
+    display: flex !important;
+  }
+  .pedido-pill.finalizada[draggable="true"] {
+    cursor: default;
+  }
+
+  .pill-actions {
+    display: none;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    gap: 3px;
+    z-index: 10;
+  }
+  .pedido-pill:hover .pill-actions {
+    display: flex;
+  }
+  .pedido-pill.finalizada:hover .pill-actions {
+    display: flex;
+  }
+
+  .pill-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 900;
+    cursor: pointer;
+    border: none;
+    transition: transform .1s, background .1s;
+    line-height: 1;
+  }
+  .pill-btn:hover { transform: scale(1.2); }
+  .pill-btn-delete {
+    background: #ef4444;
+    color: white;
+  }
+  .pill-btn-delete:hover { background: #dc2626; }
+
+  /* Confirmación de borrado inline */
+  .delete-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.7);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .delete-confirm-box {
+    background: white;
+    border-radius: 20px;
+    padding: 28px 32px;
+    max-width: 380px;
+    width: 90%;
+    box-shadow: 0 24px 64px rgba(0,0,0,.25);
+    text-align: center;
+    animation: popIn .15s ease-out;
+  }
+  @keyframes popIn { from{transform:scale(.9);opacity:0} to{transform:scale(1);opacity:1} }
 
   .cal-cell {
     min-height:120px;
@@ -44,6 +122,7 @@
   .cal-cell.drop-target-red   { background:#fff1f2!important;box-shadow:inset 0 0 0 2px #ef4444; }
   .cal-cell.drop-target-orange{ background:#fff7ed!important;box-shadow:inset 0 0 0 2px #f97316; }
   .cal-cell.drop-target-violet{ background:#f5f3ff!important;box-shadow:inset 0 0 0 2px #8b5cf6; }
+  .cal-cell.drop-target-blue  { background:#eff6ff!important;box-shadow:inset 0 0 0 2px #0066ff; }
 
   #modalCal { backdrop-filter:blur(4px); }
 
@@ -84,6 +163,20 @@
   </div>
 </header>
 
+<!-- MODAL CONFIRMACIÓN BORRADO -->
+<div id="deleteConfirmOverlay" class="delete-confirm-overlay hidden">
+  <div class="delete-confirm-box">
+    <div class="text-4xl mb-3">🗑️</div>
+    <h3 class="text-lg font-black text-slate-800 uppercase tracking-tight mb-1" id="deleteConfirmTitle">Eliminar pedido</h3>
+    <p class="text-sm text-slate-500 mb-2" id="deleteConfirmSub"></p>
+    <p class="text-xs text-red-600 font-bold bg-red-50 rounded-xl p-2 mb-5" id="deleteConfirmDetail"></p>
+    <div class="flex gap-3 justify-center">
+      <button onclick="cancelarBorrado()" class="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-sm uppercase">Cancelar</button>
+      <button onclick="confirmarBorrado()" class="px-5 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black text-sm uppercase shadow-lg">Eliminar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CALENDARIO INDIVIDUAL -->
 <div id="modalCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-2 md:p-4">
   <div class="bg-white rounded-3xl shadow-2xl w-full max-w-[98vw] h-[95vh] flex flex-col overflow-hidden cal-wrapper" id="calModalOuter">
@@ -92,7 +185,7 @@
     <div id="modalCalHeader" class="px-6 py-4 flex items-center justify-between">
       <div>
         <h2 id="modalCalTitulo" class="text-xl font-black uppercase tracking-tight">Calendario</h2>
-        <p id="modalCalSub" class="text-[10px] text-white/70 font-bold mt-0.5 uppercase tracking-wider">Arrastra los pedidos para cambiar su fecha</p>
+        <p id="modalCalSub" class="text-[10px] text-white/70 font-bold mt-0.5 uppercase tracking-wider">Arrastra para mover · 🗑 borrar · ✓ = finalizado en módulo</p>
       </div>
       <div class="flex items-center gap-3">
         <button onclick="cambiarMesCal(-1)" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white text-lg">‹</button>
@@ -128,7 +221,7 @@
     </div>
     <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec40')">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
-      <p class="text-base font-black text-red-600">Dostec 40</p>
+      <p class="text-base font-black text-red-600">Dostec 40 OEM</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pendientes</p>
       <p class="text-[9px] text-red-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
@@ -140,9 +233,9 @@
     </div>
     <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('restyling')">
       <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
-      <p class="text-base font-black text-violet-600">Restyling</p>
+      <p class="text-base font-black text-blue-600">Restyling</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pendientes</p>
-      <p class="text-[9px] text-violet-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
+      <p class="text-[9px] text-blue-600 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
   </div>
 
@@ -151,14 +244,14 @@
     <div class="bg-slate-900 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
       <div>
         <h2 class="text-white font-black uppercase tracking-widest text-sm">📅 Planificación General</h2>
-        <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-0.5">Arrastra los pedidos para replanificar</p>
+        <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-0.5">Arrastra para mover · 🗑 borrar · ✓ = finalizado en módulo</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap">
         <div class="hidden md:flex items-center gap-3 mr-2">
           <span class="flex items-center gap-1 text-[10px] font-black text-emerald-400"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>Agitador</span>
-          <span class="flex items-center gap-1 text-[10px] font-black text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Dostec 40</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Dostec 40 OEM</span>
           <span class="flex items-center gap-1 text-[10px] font-black text-orange-400"><span class="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>Dostec 50</span>
-          <span class="flex items-center gap-1 text-[10px] font-black text-violet-400"><span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span>Restyling</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-blue-600"><span class="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>Restyling</span>
         </div>
         <button onclick="cambiarMesGlobal(-1)" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-black text-white text-lg">‹</button>
         <span id="globalCalMes" class="text-sm font-black text-white min-w-[130px] text-center"></span>
@@ -268,13 +361,13 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, get, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const MODULOS = {
   agitador:  { label:"Agitador",  color:"emerald", aliases:["agitador"],
     config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }},
-  dostec40:  { label:"Dostec 40", color:"red",     aliases:["dostec40","dostec 40","d40"],
+  dostec40:  { label:"Dostec 40 OEM", color:"red",     aliases:["dostec40","dostec 40","d40"],
     config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }},
   dostec50:  { label:"Dostec 50", color:"orange",  aliases:["dostec50","dostec 50","d50"],
     config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }},
@@ -284,16 +377,38 @@ const MODULOS = {
 
 const MOD_COLORS = {
   agitador:  { dot:'bg-emerald-500', pill:'bg-emerald-100 text-emerald-800', border:'border-emerald-300', dropCls:'drop-target',         label:'Agitador' },
-  dostec40:  { dot:'bg-red-500',     pill:'bg-red-100 text-red-800',         border:'border-red-300',     dropCls:'drop-target-red',      label:'Dostec 40' },
+  dostec40:  { dot:'bg-red-500',     pill:'bg-red-100 text-red-800',         border:'border-red-300',     dropCls:'drop-target-red',      label:'Dostec 40 OEM' },
   dostec50:  { dot:'bg-orange-500',  pill:'bg-orange-100 text-orange-800',   border:'border-orange-300',  dropCls:'drop-target-orange',   label:'Dostec 50' },
-  restyling: { dot:'bg-violet-500',  pill:'bg-violet-100 text-violet-800',   border:'border-violet-300',  dropCls:'drop-target-violet',   label:'Restyling' }
+  restyling: { dot:'bg-blue-600',  pill:'bg-blue-100 text-blue-900',   border:'border-blue-500',  dropCls:'drop-target-blue',   label:'Restyling' }
 };
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
-const planCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+// tareasCache: set de series con estado 'finalizado' en el nodo tareas de cada modulo
+const tareasCache = { agitador: new Set(), dostec40: new Set(), dostec50: new Set(), restyling: new Set() };
+
+// Devuelve true si TODAS las series del grupo tienen estado finalizado en tareas
+function esPedidoFinalizado(moduloKey, items) {
+  const set = tareasCache[moduloKey];
+  if(!set || set.size === 0) return false;
+  return items.every(item => set.has(String(item.serie).trim()));
+}
+
+function actualizarContador(key) {
+  const el = document.getElementById(`count-${key}`);
+  if(!el) return;
+  const grupos = {};
+  Object.entries(planCache[key]).forEach(([fbId, v]) => {
+    const gk = `${v.pedido}__${v.fecha||''}`;
+    if(!grupos[gk]) grupos[gk] = [];
+    grupos[gk].push({fbId, ...v});
+  });
+  const pendientes = Object.values(grupos).filter(items => !esPedidoFinalizado(key, items)).length;
+  el.textContent = `${pendientes} pendientes`;
+}
 
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
@@ -304,14 +419,26 @@ for (const [key, mod] of Object.entries(MODULOS)) {
       const led=document.getElementById(`led-${key}`), txt=document.getElementById(`txt-${key}`);
       if(!led||!txt) return;
       led.className = on?'w-3 h-3 rounded-full bg-emerald-500 led-on':'w-3 h-3 rounded-full bg-red-400 animate-pulse';
-      txt.textContent=on?'EN LÍNEA':'SIN CONEXIÓN';
+      txt.textContent=on?'EN LINEA':'SIN CONEXION';
       txt.className=on?'text-[10px] font-black uppercase text-emerald-600':'text-[10px] font-black uppercase text-red-500';
     });
+    // Escucha planificacion
     onValue(ref(dbs[key],'planificacion'), snap=>{
       const raw=snap.val()||{};
       planCache[key]=Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==null));
-      const el=document.getElementById(`count-${key}`);
-      if(el) el.textContent=`${Object.keys(planCache[key]).length} pendientes`;
+      actualizarContador(key);
+      if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
+      renderGlobalCal();
+    });
+    // Escucha tareas — reconstruye el set de series finalizadas
+    onValue(ref(dbs[key],'tareas'), snap=>{
+      const raw=snap.val()||{};
+      tareasCache[key] = new Set(
+        Object.values(raw)
+          .filter(t => t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.numSerie)
+          .map(t => String(t.numSerie).trim())
+      );
+      actualizarContador(key);
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
@@ -347,8 +474,52 @@ window.onDrop     = e=>{ e.preventDefault(); document.getElementById('dropZone')
 // ── ESTADO ───────────────────────────────────────────────────────────────────
 let pedidos=[], diaActivo=null;
 
-// Estado de la operación drag de pedido (replanificación)
 const dragOp = { moduloKey:null, pedidoId:null, fechaOrigen:null, fechaDestino:null, items:[] };
+
+// ── ESTADO BORRADO ───────────────────────────────────────────────────────────
+let pendingDelete = null; // { moduloKey, items[], pedidoId }
+
+window.iniciarBorrado = (moduloKey, pedidoId, fechaOrigen) => {
+  const data = planCache[moduloKey];
+  const items = Object.entries(data)
+    .filter(([,v]) => v.pedido === pedidoId && v.fecha === fechaOrigen)
+    .map(([fbId, v]) => ({ fbId, ...v }));
+  if(!items.length) return;
+  pendingDelete = { moduloKey, items, pedidoId };
+  const modLabel = MODULOS[moduloKey].label;
+  const cliente = items[0].cliente || '—';
+  const series = items.map(i => i.serie).join(', ');
+  document.getElementById('deleteConfirmTitle').textContent = `Eliminar Pedido ${pedidoId}`;
+  document.getElementById('deleteConfirmSub').textContent = `${modLabel} · ${cliente}`;
+  document.getElementById('deleteConfirmDetail').innerHTML =
+    `${items.length} serie${items.length>1?'s':''}: <b>${series}</b><br><span class="text-slate-500">Fecha: ${formatLabel(fechaOrigen)}</span>`;
+  document.getElementById('deleteConfirmOverlay').classList.remove('hidden');
+};
+
+window.cancelarBorrado = () => {
+  pendingDelete = null;
+  document.getElementById('deleteConfirmOverlay').classList.add('hidden');
+};
+
+window.confirmarBorrado = async () => {
+  if(!pendingDelete) return;
+  const { moduloKey, items } = pendingDelete;
+  document.getElementById('deleteConfirmOverlay').classList.add('hidden');
+  try {
+    for(const item of items){
+      await remove(ref(dbs[moduloKey], `planificacion/${item.fbId}`));
+    }
+  } catch(e) {
+    alert('Error al eliminar: ' + e.message);
+  }
+  pendingDelete = null;
+};
+
+// Cerrar confirm con click fuera
+document.getElementById('deleteConfirmOverlay').addEventListener('click', e => {
+  if(e.target === document.getElementById('deleteConfirmOverlay')) cancelarBorrado();
+});
+
 // ── EXCEL PARSE ──────────────────────────────────────────────────────────────
 window.procesarExcel = e=>{ const f=e.target.files[0]; if(f) procesarFile(f); e.target.value=''; };
 function procesarFile(file){
@@ -430,7 +601,7 @@ function renderTabla(){
   const btnDia=document.getElementById('btnEnviarDia');
   if(diaActivo==='todos') btnDia.classList.add('hidden');
   else{ btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
-  const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
+  const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40 OEM</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
   const clsRow={agitador:'row-agitador',dostec40:'row-dostec40',dostec50:'row-dostec50',restyling:'row-restyling'};
   document.getElementById('tablaPreview').innerHTML=filtrados.map(p=>{
     const gi=pedidos.indexOf(p), isDup=p.esDuplicado;
@@ -484,9 +655,6 @@ function setEstado(i,estado){
 // ════════════════════════════════════════════════════════════════════
 // DRAG & DROP REPLANIFICACIÓN — lógica compartida
 // ════════════════════════════════════════════════════════════════════
-
-// Construye los datos de un drag: { moduloKey, pedidoId, fechaOrigen, ids:[], items:[] }
-// pedidoId es el identificador de pedido (campo .pedido) que agrupa todas las series
 function buildDragData(moduloKey, pedidoId, fechaOrigen){
   const data = planCache[moduloKey];
   const items = Object.entries(data)
@@ -495,17 +663,72 @@ function buildDragData(moduloKey, pedidoId, fechaOrigen){
   return { moduloKey, pedidoId, fechaOrigen, items };
 }
 
-// Aplica el cambio de fecha en Firebase para todas las series del pedido
 async function aplicarCambioFecha(moduloKey, items, nuevaFecha){
   const updates={};
   items.forEach(item=>{ updates[`${item.fbId}/fecha`]=nuevaFecha; });
   await update(ref(dbs[moduloKey],'planificacion'), updates);
 }
 
-// Aplicación directa sin confirmación
 async function mostrarConfirm(movData){
   const { moduloKey, items, fechaDestino } = movData;
   await aplicarCambioFecha(moduloKey, items, fechaDestino);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PILL HTML BUILDER — genera pill con botones de acción
+// El estado 'finalizada' se lee del nodo tareas del módulo (estado === 'finalizado')
+// ════════════════════════════════════════════════════════════════════
+function buildPillHtml({ modulo, pedId, iso, items, isGlobal }) {
+  const col = MOD_COLORS[modulo];
+  const cliente = items[0].cliente || '—';
+  const codigo  = items[0].codigo  || '—';
+  const uds     = items.length;
+  // La finalización viene de tareasCache, no del campo local
+  const esFinalizada = esPedidoFinalizado(modulo, items);
+
+  const finalizadaClass = esFinalizada ? ' finalizada' : '';
+  // Las tareas finalizadas no se pueden arrastrar
+  const draggable = !esFinalizada ? 'draggable="true"' : 'draggable="false"';
+
+  if (isGlobal) {
+    return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full${finalizadaClass}"
+         ${draggable}
+         data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
+         ondragstart="onPillDragStart(event)"
+         ondragend="onPillDragEnd(event)">
+      <div class="pill-actions">
+        <button class="pill-btn pill-btn-delete" title="Eliminar pedido"
+          onclick="event.stopPropagation();iniciarBorrado('${modulo}','${pedId}','${iso}')">✕</button>
+      </div>
+      <div class="flex items-center gap-1 mb-0.5">
+        <span class="w-1.5 h-1.5 rounded-full ${esFinalizada ? 'bg-green-500' : col.dot} pill-dot flex-shrink-0"></span>
+        <span class="font-black truncate">Ped.${pedId}</span>
+        <span class="ml-auto font-black">${uds}u</span>
+        ${esFinalizada ? '<span style="color:#16a34a;font-size:9px;font-weight:900">✓</span>' : ''}
+      </div>
+      <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
+      <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
+    </div>`;
+  } else {
+    return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight${finalizadaClass}"
+         ${draggable}
+         data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
+         ondragstart="onPillDragStart(event)"
+         ondragend="onPillDragEnd(event)">
+      <div class="pill-actions">
+        <button class="pill-btn pill-btn-delete" title="Eliminar pedido"
+          onclick="event.stopPropagation();iniciarBorrado('${modulo}','${pedId}','${iso}')">✕</button>
+      </div>
+      <div class="flex items-center gap-1.5 mb-1">
+        <span class="w-2 h-2 rounded-full ${esFinalizada ? 'bg-green-500' : col.dot} pill-dot flex-shrink-0"></span>
+        <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
+        <span class="ml-auto text-[11px] font-black">${uds}u</span>
+        ${esFinalizada ? '<span style="color:#16a34a;font-weight:900;font-size:11px;margin-left:4px">✓ Finalizado</span>' : ''}
+      </div>
+      <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
+      <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+    </div>`;
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -516,7 +739,7 @@ const calState = { modulo:null, year:new Date().getFullYear(), month:new Date().
 window.abrirCal = (moduloKey) => {
   calState.modulo=moduloKey; calState.year=new Date().getFullYear(); calState.month=new Date().getMonth(); calState.dragData=null;
   const mod=MODULOS[moduloKey], col=MOD_COLORS[moduloKey];
-  const bgMap={emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',violet:'bg-violet-600'};
+  const bgMap={emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',violet:'bg-violet-600',blue:'bg-blue-600'};
   document.getElementById('modalCalHeader').className=`px-6 py-4 flex items-center justify-between ${bgMap[mod.color]} text-white`;
   document.getElementById('modalCalTitulo').textContent=`${mod.label} — Planificación`;
   renderCalGrid();
@@ -549,26 +772,9 @@ function renderCalGrid(){
     const grupos=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
-    // Pills arrastrables por pedido
-    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>{
-      const cliente=items[0].cliente||'—';
-      const codigo=items[0].codigo||'—';
-      const uds=items.length;
-      return `
-      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight"
-           draggable="true"
-           data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
-           ondragstart="onPillDragStart(event)"
-           ondragend="onPillDragEnd(event)">
-        <div class="flex items-center gap-1.5 mb-1">
-          <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
-          <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
-          <span class="ml-auto text-[11px] font-black">${uds}u</span>
-        </div>
-        <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
-        <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
-      </div>`;
-    }).join('');
+    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>
+      buildPillHtml({ modulo, pedId, iso, items, isGlobal: false })
+    ).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,'${modulo}')"
@@ -611,27 +817,10 @@ function renderGlobalCal(){
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
-    // Pills por módulo → pedido
     const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>
-      Object.entries(grupos).map(([pedId,items])=>{
-        const col=MOD_COLORS[key];
-        const cliente=items[0].cliente||'—';
-        const codigo=items[0].codigo||'—';
-        const uds=items.length;
-        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full"
-             draggable="true"
-             data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
-             ondragstart="onPillDragStart(event)"
-             ondragend="onPillDragEnd(event)">
-          <div class="flex items-center gap-1 mb-0.5">
-            <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
-            <span class="font-black truncate">Ped.${pedId}</span>
-            <span class="ml-auto font-black">${uds}u</span>
-          </div>
-          <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-          <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
-        </div>`;
-      })
+      Object.entries(grupos).map(([pedId,items])=>
+        buildPillHtml({ modulo: key, pedId, iso, items, isGlobal: true })
+      )
     ).join('');
     html+=`<div class="cal-cell ${bgCls} border-b border-r border-slate-100 p-1.5"
                data-iso="${iso}"
@@ -652,19 +841,16 @@ window.cambiarMesGlobal=(dir)=>{ globalCal.month+=dir; if(globalCal.month>11){gl
 
 // ════════════════════════════════════════════════════════════════════
 // DRAG HANDLERS COMPARTIDOS
-// — Estado global persiste aunque el calendario se rerenderice —
 // ════════════════════════════════════════════════════════════════════
 let activeDragEl = null;
 const activeDragState = { modulo: null, pedido: null, fecha: null };
 
-// Temporizador para cambio automático de mes al mantener sobre la zona de borde
 const monthNavTimer = { id: null, calType: null, dir: 0 };
 
 function clearMonthNavTimer(){
   if(monthNavTimer.id){ clearTimeout(monthNavTimer.id); monthNavTimer.id=null; }
 }
 
-// Avanza o retrocede el mes del calendario correcto y re-renderiza
 function navMes(calType, dir){
   if(calType==='cal'){
     calState.month += dir;
@@ -679,7 +865,6 @@ function navMes(calType, dir){
   }
 }
 
-// Cuando el cursor entra en la zona de borde durante un drag
 window.onNavDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect='move'; };
 
 window.onMonthNavEnter = (e, calType, dir) => {
@@ -689,12 +874,10 @@ window.onMonthNavEnter = (e, calType, dir) => {
     : (calType==='cal' ? 'calNavRight'   : 'globalNavRight');
   document.getElementById(zoneId)?.classList.add('hovering');
   clearMonthNavTimer();
-  // Cambia el mes tras 600 ms de espera, y luego cada 900 ms si sigue ahí
   const fire = () => { navMes(calType, dir); monthNavTimer.id = setTimeout(fire, 900); };
   monthNavTimer.id = setTimeout(fire, 600);
 };
 
-// Cuando el cursor sale de la zona de borde
 window.onMonthNavLeave = (e, zoneId) => {
   document.getElementById(zoneId)?.classList.remove('hovering');
   clearMonthNavTimer();
@@ -709,7 +892,6 @@ window.onPillDragStart = (e) => {
   activeDragState.fecha  = fecha;
   e.dataTransfer.setData('text/plain', JSON.stringify({ modulo, pedido, fecha }));
   e.dataTransfer.effectAllowed = 'move';
-  // Mostrar zonas de navegación en todos los calendarios visibles
   document.body.classList.add('is-dragging');
 };
 
@@ -720,7 +902,7 @@ window.onPillDragEnd = (e) => {
   if(activeDragEl){ try{ activeDragEl.classList.remove('dragging'); }catch(_){} }
   activeDragEl = null;
   document.querySelectorAll('.cal-cell').forEach(c=>
-    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet','drop-target-blue'));
 };
 
 window.onCalCellDragOver = (e, moduloContexto) => {
@@ -730,21 +912,20 @@ window.onCalCellDragOver = (e, moduloContexto) => {
   const m = activeDragState.modulo;
   const colorCls = (m && MOD_COLORS[m]?.dropCls) || 'drop-target';
   document.querySelectorAll('.cal-cell').forEach(c=>
-    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet','drop-target-blue'));
   cell.classList.add(colorCls);
 };
 
 window.onCalCellDragLeave = (e) => {
-  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet','drop-target-blue');
 };
 
 window.onCalCellDrop = (e, moduloContexto) => {
   e.preventDefault();
-  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet','drop-target-blue');
   clearMonthNavTimer();
   const fechaDestino = e.currentTarget.dataset.iso;
   if(!fechaDestino) return;
-  // Leer datos del drag — activeDragState es la fuente más fiable
   let { modulo, pedido, fecha: fechaOrigen } = activeDragState;
   if(!modulo || !pedido || !fechaOrigen){
     try{
