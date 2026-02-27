@@ -148,6 +148,36 @@
   body.is-dragging .month-nav-zone { opacity: .5; pointer-events: all; }
   body.is-dragging .month-nav-zone.hovering { opacity: 1; background: rgba(15,23,42,.72); }
   .cal-wrapper { position: relative; }
+
+  /* ── FESTIVOS ── */
+  .cal-cell.festivo { background: #fef2f2 !important; }
+  .festivo-badge {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 900;
+    color: #dc2626;
+    background: #fee2e2;
+    border-radius: 4px;
+    padding: 0 3px;
+    margin-bottom: 2px;
+    line-height: 1.6;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+  .num-festivo { color: #dc2626 !important; }
+
+  /* ── MODAL IFRAME MÓDULO ── */
+  #modalModulo { backdrop-filter: blur(6px); }
+  #modalModuloFrame {
+    border: none;
+    width: 100%;
+    height: 100%;
+    border-radius: 0 0 24px 24px;
+  }
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -174,6 +204,20 @@
       <button onclick="cancelarBorrado()" class="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-sm uppercase">Cancelar</button>
       <button onclick="confirmarBorrado()" class="px-5 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black text-sm uppercase shadow-lg">Eliminar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL MÓDULO PRODUCTIVO (iframe) -->
+<div id="modalModulo" class="fixed inset-0 bg-slate-900/80 z-50 hidden items-center justify-center p-2 md:p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-[98vw] h-[96vh] flex flex-col overflow-hidden">
+    <div id="modalModuloHeader" class="px-5 py-3 flex items-center justify-between flex-shrink-0">
+      <div>
+        <h2 id="modalModuloTitulo" class="text-base font-black uppercase tracking-tight text-white">Módulo</h2>
+        <p class="text-[10px] text-white/60 font-bold uppercase tracking-wider">Vista del módulo productivo</p>
+      </div>
+      <button onclick="cerrarModulo()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-red-400 flex items-center justify-center font-black text-white text-lg transition-colors">✕</button>
+    </div>
+    <iframe id="modalModuloFrame" src="" title="Módulo productivo" allowfullscreen></iframe>
   </div>
 </div>
 
@@ -213,29 +257,41 @@
 
   <!-- TARJETAS MÓDULOS -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('agitador')">
-      <div class="flex items-center gap-2 mb-1"><div id="led-agitador"  class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
+    <div id="card-agitador" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+      <div class="flex items-center gap-2 mb-1"><div id="led-agitador" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
       <p class="text-base font-black text-emerald-600">Agitador</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pendientes</p>
-      <p class="text-[9px] text-emerald-500 mt-1 font-bold uppercase">📅 Ver calendario →</p>
+      <div class="flex gap-1.5 mt-2">
+        <button onclick="abrirCal('agitador')" class="flex-1 text-[9px] font-black uppercase bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-1 transition-colors">📅 Calendario</button>
+        <button onclick="abrirModulo('agitador')" class="flex-1 text-[9px] font-black uppercase bg-slate-800 hover:bg-slate-700 text-white rounded-lg py-1 transition-colors">⚙️ Módulo</button>
+      </div>
     </div>
-    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec40')">
+    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
       <p class="text-base font-black text-red-600">Dostec 40 OEM</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pendientes</p>
-      <p class="text-[9px] text-red-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
+      <div class="flex gap-1.5 mt-2">
+        <button onclick="abrirCal('dostec40')" class="flex-1 text-[9px] font-black uppercase bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg py-1 transition-colors">📅 Calendario</button>
+        <button onclick="abrirModulo('dostec40')" class="flex-1 text-[9px] font-black uppercase bg-slate-800 hover:bg-slate-700 text-white rounded-lg py-1 transition-colors">⚙️ Módulo</button>
+      </div>
     </div>
-    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec50')">
+    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span></div>
       <p class="text-base font-black text-orange-500">Dostec 50</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pendientes</p>
-      <p class="text-[9px] text-orange-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
+      <div class="flex gap-1.5 mt-2">
+        <button onclick="abrirCal('dostec50')" class="flex-1 text-[9px] font-black uppercase bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-lg py-1 transition-colors">📅 Calendario</button>
+        <button onclick="abrirModulo('dostec50')" class="flex-1 text-[9px] font-black uppercase bg-slate-800 hover:bg-slate-700 text-white rounded-lg py-1 transition-colors">⚙️ Módulo</button>
+      </div>
     </div>
-    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('restyling')">
+    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
       <p class="text-base font-black text-blue-600">Restyling</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pendientes</p>
-      <p class="text-[9px] text-blue-600 mt-1 font-bold uppercase">📅 Ver calendario →</p>
+      <div class="flex gap-1.5 mt-2">
+        <button onclick="abrirCal('restyling')" class="flex-1 text-[9px] font-black uppercase bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg py-1 transition-colors">📅 Calendario</button>
+        <button onclick="abrirModulo('restyling')" class="flex-1 text-[9px] font-black uppercase bg-slate-800 hover:bg-slate-700 text-white rounded-lg py-1 transition-colors">⚙️ Módulo</button>
+      </div>
     </div>
   </div>
 
@@ -365,13 +421,13 @@ import { getDatabase, ref, push, get, onValue, update, remove } from "https://ww
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const MODULOS = {
-  agitador:  { label:"Agitador",  color:"emerald", aliases:["agitador"],
+  agitador:  { label:"Agitador",  color:"emerald", aliases:["agitador"], url:"agitador.html",
     config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }},
-  dostec40:  { label:"Dostec 40 OEM", color:"red",     aliases:["dostec40","dostec 40","d40"],
+  dostec40:  { label:"Dostec 40 OEM", color:"red", aliases:["dostec40","dostec 40","d40"], url:"dostec40.html",
     config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }},
-  dostec50:  { label:"Dostec 50", color:"orange",  aliases:["dostec50","dostec 50","d50"],
+  dostec50:  { label:"Dostec 50", color:"orange",  aliases:["dostec50","dostec 50","d50"], url:"dostec50.html",
     config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }},
-  restyling: { label:"Restyling", color:"violet",  aliases:["restyling"],
+  restyling: { label:"Restyling", color:"violet",  aliases:["restyling"], url:"Restyling.html",
     config:{ apiKey:"AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain:"d40restyling.firebaseapp.com", databaseURL:"https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId:"d40restyling", storageBucket:"d40restyling.appspot.com", appId:"1:1085425091704:web:4ce5ab8af47546035b998d" }}
 };
 
@@ -444,6 +500,81 @@ for (const [key, mod] of Object.entries(MODULOS)) {
     });
   } catch(e){ console.error(key,e); }
 }
+
+// ── FESTIVOS ESPAÑA + CATALUÑA ─────────────────────────────────────────────
+// Festivos fijos nacionales (mes 1-based, dia)
+const FESTIVOS_FIJOS = [
+  [1,  1,  'Año Nuevo'],
+  [1,  6,  'Reyes Magos'],
+  [5,  1,  'Día del Trabajo'],
+  [8,  15, 'Asunción'],
+  [10, 12, 'Fiesta Nacional'],
+  [11, 1,  'Todos los Santos'],
+  [12, 6,  'Constitución'],
+  [12, 8,  'Inmaculada'],
+  [12, 25, 'Navidad'],
+  [12, 26, 'San Esteban'],        // Cataluña
+  [4,  23, 'Sant Jordi'],         // Cataluña (no laborable en CA)
+  [6,  24, 'Sant Joan'],          // Cataluña
+];
+// Festivos móviles calculados por año (Viernes Santo + Lunes de Pascua)
+function calcularPascua(year) {
+  // Algoritmo de Butcher
+  const a=year%19, b=Math.floor(year/100), c=year%100;
+  const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31);
+  const day=((h+l-7*m+114)%31)+1;
+  return new Date(year, month-1, day);
+}
+function festivosCatalunaMoviles(year) {
+  const pascua = calcularPascua(year);
+  const viernesSanto = new Date(pascua); viernesSanto.setDate(pascua.getDate()-2);
+  const lunesPascua  = new Date(pascua); lunesPascua.setDate(pascua.getDate()+1);
+  return [
+    { date: viernesSanto, nombre: 'Viernes Santo' },
+    { date: lunesPascua,  nombre: 'Lunes de Pascua' },
+  ];
+}
+// Devuelve nombre del festivo o null
+function esFestivo(iso) {
+  const [year, month, day] = iso.split('-').map(Number);
+  // Fijos
+  for(const [m, d, nombre] of FESTIVOS_FIJOS) {
+    if(m===month && d===day) return nombre;
+  }
+  // Móviles
+  for(const { date, nombre } of festivosCatalunaMoviles(year)) {
+    if(date.getFullYear()===year && date.getMonth()===month-1 && date.getDate()===day) return nombre;
+  }
+  return null;
+}
+
+// ── MODAL MÓDULO PRODUCTIVO ─────────────────────────────────────────────────
+const bgMapModulo = {emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',violet:'bg-violet-600',blue:'bg-blue-600'};
+window.abrirModulo = (moduloKey) => {
+  const mod = MODULOS[moduloKey];
+  const header = document.getElementById('modalModuloHeader');
+  header.className = `px-5 py-3 flex items-center justify-between flex-shrink-0 ${bgMapModulo[mod.color]} text-white`;
+  document.getElementById('modalModuloTitulo').textContent = `${mod.label} — Módulo Productivo`;
+  document.getElementById('modalModuloFrame').src = mod.url;
+  const modal = document.getElementById('modalModulo');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+};
+window.cerrarModulo = () => {
+  const modal = document.getElementById('modalModulo');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  // Limpiar iframe al cerrar para liberar recursos
+  document.getElementById('modalModuloFrame').src = '';
+};
+// Cerrar con click fuera
+document.getElementById('modalModulo').addEventListener('click', e => {
+  if(e.target === document.getElementById('modalModulo')) cerrarModulo();
+});
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 const hoyISO = () => new Date().toISOString().slice(0,10);
@@ -771,16 +902,21 @@ function renderCalGrid(){
     const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const grupos=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
-    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    const nombreFestivo=esFestivo(iso);
+    const esFest=!!nombreFestivo;
+    let bgCls=esFinSem?'bg-slate-50':'bg-white';
+    if(esHoy) bgCls='bg-blue-50';
+    if(esFest && !esHoy) bgCls='';  // la clase festivo la ponemos abajo
     const pillsHtml=Object.entries(grupos).map(([pedId,items])=>
       buildPillHtml({ modulo, pedId, iso, items, isGlobal: false })
     ).join('');
-    html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
+    html+=`<div class="cal-cell ${bgCls}${esFest&&!esHoy?' festivo':''} border border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,'${modulo}')"
                ondragleave="onCalCellDragLeave(event)"
                ondrop="onCalCellDrop(event,'${modulo}')">
-      <div class="text-[11px] font-black mb-1 ${esHoy?'text-blue-600':esFinSem?'text-slate-300':'text-slate-600'}">${d}</div>
+      <div class="text-[11px] font-black mb-0.5 ${esHoy?'text-blue-600':esFest?'num-festivo':esFinSem?'text-slate-300':'text-slate-600'}">${d}</div>
+      ${esFest?`<div class="festivo-badge" title="${nombreFestivo}">${nombreFestivo}</div>`:''}
       ${pillsHtml}
     </div>`;
   }
@@ -815,22 +951,27 @@ function renderGlobalCal(){
     const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const modsDia=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
-    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    const nombreFestivo=esFestivo(iso);
+    const esFest=!!nombreFestivo;
+    let bgCls=esFinSem?'bg-slate-50':'bg-white';
+    if(esHoy) bgCls='bg-blue-50';
+    if(esFest && !esHoy) bgCls='';
     const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
     const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>
       Object.entries(grupos).map(([pedId,items])=>
         buildPillHtml({ modulo: key, pedId, iso, items, isGlobal: true })
       )
     ).join('');
-    html+=`<div class="cal-cell ${bgCls} border-b border-r border-slate-100 p-1.5"
+    html+=`<div class="cal-cell ${bgCls}${esFest&&!esHoy?' festivo':''} border-b border-r border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,null)"
                ondragleave="onCalCellDragLeave(event)"
                ondrop="onCalCellDrop(event,null)">
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-[11px] font-black ${esHoy?'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]':esFinSem?'text-slate-300':'text-slate-700'}">${d}</span>
+      <div class="flex items-center justify-between mb-0.5">
+        <span class="text-[11px] font-black ${esHoy?'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]':esFest?'num-festivo':esFinSem?'text-slate-300':'text-slate-700'}">${d}</span>
         ${totalDia?`<span class="text-[9px] font-black text-slate-400">${totalDia}</span>`:''}
       </div>
+      ${esFest?`<div class="festivo-badge" title="${nombreFestivo}">${nombreFestivo}</div>`:''}
       ${pillsHtml}
     </div>`;
   }
