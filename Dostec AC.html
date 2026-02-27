@@ -402,58 +402,73 @@ function calcularTendencia(datos) {
 function calcularProductividadDiaria(anio, mes) {
   const diasDelMes = new Date(anio, mes, 0).getDate();
   const datosProductividad = new Array(diasDelMes).fill(null);
-  const tareasPorDiaOperario = {};
-  const jornadasPorDiaOperario = {};
+
+  // tareasPorDiaOperario[fechaStr][operarioNormalizado] = count
+  // jornadasPorDiaOperario[fechaStr] = { entradas: [{hora, numOperarios}], salidas: horaStr }
+  const tareasPorDia = {};       // fechaStr → count (total tareas del día)
+  const jornadasPorDia = {};     // fechaStr → { entradas, salidas }
+
+  // Helper: extrae operarios individuales de un string "A + B" o "A"
+  function operariosIndividuales(opStr) {
+    if (!opStr) return [];
+    return opStr.split('+').map(s => s.trim()).filter(Boolean);
+  }
 
   if (todasLasTareas) {
     Object.values(todasLasTareas).forEach(t => {
       if (t.tipo !== 'produccion' && t.tipo !== 'jornada') return;
       let fechaBase = t.fecha;
+
+      // Tarea de producción que cruza medianoche → contar 0.5 en cada día
       if (t.tipo === 'produccion' && t.fin && t.fin !== '--:--' && t.fin !== '---') {
         const hInicio = convertirHoraAMinutos(t.inicio);
         const hFin = convertirHoraAMinutos(t.fin);
         if (hFin < hInicio) {
           const fechaFin = sumarDiaAFecha(fechaBase, 1);
-          tareasPorDiaOperario[`${fechaBase}-${t.operario}`] = (tareasPorDiaOperario[`${fechaBase}-${t.operario}`] || 0) + 0.5;
-          tareasPorDiaOperario[`${fechaFin}-${t.operario}`] = (tareasPorDiaOperario[`${fechaFin}-${t.operario}`] || 0) + 0.5;
+          tareasPorDia[fechaBase] = (tareasPorDia[fechaBase] || 0) + 0.5;
+          tareasPorDia[fechaFin]  = (tareasPorDia[fechaFin]  || 0) + 0.5;
           return;
         }
       }
+
       const fechaObj = parsearFecha(fechaBase);
       if (!fechaObj || fechaObj.getFullYear() !== anio || fechaObj.getMonth() !== mes - 1) return;
-      const key = `${fechaBase}-${t.operario}`;
+
       if (t.tipo === 'produccion') {
-        tareasPorDiaOperario[key] = (tareasPorDiaOperario[key] || 0) + 1;
+        tareasPorDia[fechaBase] = (tareasPorDia[fechaBase] || 0) + 1;
       } else if (t.tipo === 'jornada') {
-        if (!jornadasPorDiaOperario[key]) jornadasPorDiaOperario[key] = { entradas: [], salidas: [] };
-        if (t.codigo && t.codigo.includes('ENTRADA')) jornadasPorDiaOperario[key].entradas.push({ hora: t.inicio, numOperarios: t.numOperarios || 1 });
-        else if (t.codigo && t.codigo.includes('SALIDA')) jornadasPorDiaOperario[key].salidas = t.inicio;
+        if (!jornadasPorDia[fechaBase]) jornadasPorDia[fechaBase] = { entradas: [], salidas: null };
+        if (t.codigo && t.codigo.includes('ENTRADA')) {
+          jornadasPorDia[fechaBase].entradas.push({ hora: t.inicio, numOperarios: t.numOperarios || 1 });
+        } else if (t.codigo && t.codigo.includes('SALIDA')) {
+          jornadasPorDia[fechaBase].salidas = t.inicio;
+        }
       }
     });
   }
 
   for (let dia = 1; dia <= diasDelMes; dia++) {
     const fechaStr = `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
-    const productividadesDia = [];
-    ['Adrian García', 'Aitor Bautista'].forEach(operario => {
-      const key = `${fechaStr}-${operario}`;
-      const countTareas = tareasPorDiaOperario[key] || 0;
-      const jornada = jornadasPorDiaOperario[key];
-      if (countTareas > 0 && jornada && jornada.entradas && jornada.entradas.length > 0 && jornada.salidas) {
-        const salidaMin = convertirHoraAMinutos(jornada.salidas);
-        let horas1Op = 0, horas2Op = 0;
-        jornada.entradas.forEach((entrada, index) => {
-          const entradaMin = convertirHoraAMinutos(entrada.hora);
-          const finPeriodoMin = index < jornada.entradas.length - 1 ? convertirHoraAMinutos(jornada.entradas[index + 1].hora) : salidaMin;
-          const horasPeriodo = (finPeriodoMin - entradaMin) / 60;
-          if (entrada.numOperarios === 1) horas1Op += horasPeriodo;
-          else if (entrada.numOperarios === 2) horas2Op += horasPeriodo;
-        });
-        const denominador = horas1Op + (horas2Op * 2);
-        if (denominador > 0) productividadesDia.push((countTareas * 7) / denominador);
+    const countTareas = tareasPorDia[fechaStr] || 0;
+    const jornada = jornadasPorDia[fechaStr];
+
+    if (countTareas > 0 && jornada && jornada.entradas && jornada.entradas.length > 0 && jornada.salidas) {
+      const salidaMin = convertirHoraAMinutos(jornada.salidas);
+      // Ordenar entradas cronológicamente
+      const entradasOrdenadas = [...jornada.entradas].sort((a, b) => convertirHoraAMinutos(a.hora) - convertirHoraAMinutos(b.hora));
+      let horasTotalesOp = 0; // suma de (horas_periodo × num_operarios_periodo)
+      entradasOrdenadas.forEach((entrada, index) => {
+        const entradaMin = convertirHoraAMinutos(entrada.hora);
+        const finPeriodoMin = index < entradasOrdenadas.length - 1
+          ? convertirHoraAMinutos(entradasOrdenadas[index + 1].hora)
+          : salidaMin;
+        const horasPeriodo = Math.max(0, (finPeriodoMin - entradaMin) / 60);
+        horasTotalesOp += horasPeriodo * (entrada.numOperarios || 1);
+      });
+      if (horasTotalesOp > 0) {
+        datosProductividad[dia - 1] = (countTareas * 7) / horasTotalesOp;
       }
-    });
-    if (productividadesDia.length > 0) datosProductividad[dia - 1] = productividadesDia.reduce((a, b) => a + b, 0) / productividadesDia.length;
+    }
   }
   return { datosProductividad, diasDelMes };
 }
@@ -801,98 +816,27 @@ window.toggleReposicion = async function() {
 
 window.toggleIncidencia = async function() {
   if (!lineaIniciada && !hayIncidenciaGlobal) { alert('⚠️ Debes registrar la ENTRADA antes de reportar incidencias'); return; }
-  if (hayIncidenciaGlobal) { await resolverIncidencia(); return; }
-  if (operariosEnLinea.length >= 2) { mostrarModalIncidencia(); } else { await iniciarIncidenciaGrave(); }
-};
-
-function mostrarModalIncidencia() {
-  document.getElementById('modalIncidencia').classList.remove('hidden');
-}
-window.cerrarModalIncidencia = function() {
-  document.getElementById('modalIncidencia').classList.add('hidden');
-};
-window.seleccionarTipoIncidencia = async function(tipo) {
-  cerrarModalIncidencia();
-  if (tipo === 'grave') { await iniciarIncidenciaGrave(); } else { await mostrarModalIncidenciaLeve(); }
-};
-
-async function iniciarIncidenciaGrave() {
-  const motivo = prompt("Motivo de la incidencia:");
-  if (!motivo) return;
   const ahora = Date.now();
   const snapTareas = await fbGet(tareasRef);
   const tareas = snapTareas.val() || {};
   const updates = {};
-  await fbPush(incidenciasTextoRef, { descripcion: motivo.trim(), fecha: obtenerFecha(), timestamp: Date.now() });
-  update(incidenciaRef, { activa: true, tipo: 'grave', inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual(), tareaLeve: null });
-  Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausa_incidencia"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
-  if (Object.keys(updates).length > 0) update(ref(db), updates);
-}
-
-async function mostrarModalIncidenciaLeve() {
-  const snapTareas = await fbGet(tareasRef);
-  const tareas = snapTareas.val() || {};
-  const tareasActivas = Object.entries(tareas).filter(([id, t]) => t.estado === "activo");
-  if (tareasActivas.length === 0) { alert('⚠️ No hay tareas activas para pausar'); return; }
-  const contenido = document.getElementById('listaTareasLeve');
-  contenido.innerHTML = '';
-  tareasActivas.forEach(([id, t]) => {
-    contenido.innerHTML += `
-      <label class="flex items-center gap-4 bg-slate-50 border-2 border-slate-200 p-4 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition-all">
-        <input type="radio" name="tareaLeve" value="${id}" class="w-5 h-5 accent-amber-500 cursor-pointer">
-        <div>
-          <p class="font-black text-slate-800">${t.numSerie} — ${t.codigo}</p>
-          <p class="text-xs text-slate-400 font-bold uppercase">${t.operario}</p>
-        </div>
-      </label>`;
-  });
-  document.getElementById('modalIncidenciaLeve').classList.remove('hidden');
-}
-window.cerrarModalIncidenciaLeve = function() {
-  document.getElementById('modalIncidenciaLeve').classList.add('hidden');
-};
-window.confirmarIncidenciaLeve = async function() {
-  const seleccionado = document.querySelector('input[name="tareaLeve"]:checked');
-  if (!seleccionado) { alert('⚠️ Selecciona una tarea para pausar'); return; }
-  const tareaId = seleccionado.value;
-  const motivo = prompt("Motivo de la incidencia leve:");
-  if (!motivo) return;
-  cerrarModalIncidenciaLeve();
-  const ahora = Date.now();
-  const snapTareas = await fbGet(tareasRef);
-  const tareas = snapTareas.val() || {};
-  const t = tareas[tareaId];
-  if (!t) { alert('❌ Tarea no encontrada'); return; }
-  await fbPush(incidenciasTextoRef, { descripcion: `[LEVE] ${motivo.trim()}`, fecha: obtenerFecha(), timestamp: Date.now() });
-  update(incidenciaRef, { activa: true, tipo: 'leve', inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual(), tareaLeve: tareaId });
-  const updates = {};
-  updates[`tareas/${tareaId}/estado`] = "pausa_incidencia";
-  updates[`tareas/${tareaId}/acumuladoMS`] = (t.acumuladoMS || 0) + (ahora - t.inicioMS);
-  update(ref(db), updates);
-};
-
-async function resolverIncidencia() {
-  const ahora = Date.now();
-  const snapI = await fbGet(incidenciaRef);
-  const infoInc = snapI.val();
-  const horaFin = new Date().toLocaleTimeString('es-ES');
-  const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
-  const etiqueta = infoInc.tipo === 'leve' ? '⚠️ INCIDENCIA LEVE' : '⚠️ INCIDENCIA';
-  await fbPush(tareasHistorialRef, { operario: infoInc.operario || "SISTEMA", numSerie: "---", codigo: `${etiqueta}: ${infoInc.motivo}`, fecha: infoInc.fecha, inicio: infoInc.horaTexto, inicioMS: infoInc.inicioMS, fin: horaFin, total: duracion, tipo: "incidencia", timestamp: Date.now() });
-  const snapTareas = await fbGet(tareasRef);
-  const tareas = snapTareas.val() || {};
-  const updates = {};
-  if (infoInc.tipo === 'leve' && infoInc.tareaLeve) {
-    if (tareas[infoInc.tareaLeve] && tareas[infoInc.tareaLeve].estado === "pausa_incidencia") {
-      updates[`tareas/${infoInc.tareaLeve}/estado`] = "activo";
-      updates[`tareas/${infoInc.tareaLeve}/inicioMS`] = ahora;
-    }
+  if (!hayIncidenciaGlobal) {
+    const motivo = prompt("Motivo de la incidencia:");
+    if (!motivo) return;
+    await fbPush(incidenciasTextoRef, { descripcion: motivo.trim(), fecha: obtenerFecha(), timestamp: Date.now() });
+    update(incidenciaRef, { activa: true, inicioMS: ahora, horaTexto: new Date().toLocaleTimeString('es-ES'), fecha: obtenerFecha(), motivo: motivo.trim(), operario: obtenerOperarioActual() });
+    Object.keys(tareas).forEach(id => { if (tareas[id].estado === "activo") { updates[`tareas/${id}/estado`] = "pausa_incidencia"; updates[`tareas/${id}/acumuladoMS`] = (tareas[id].acumuladoMS || 0) + (ahora - tareas[id].inicioMS); } });
   } else {
+    const snapI = await fbGet(incidenciaRef);
+    const infoInc = snapI.val();
+    const horaFin = new Date().toLocaleTimeString('es-ES');
+    const duracion = Math.round((ahora - infoInc.inicioMS) / 60000) || 1;
+    await fbPush(tareasHistorialRef, { operario: infoInc.operario || "SISTEMA", numSerie: "---", codigo: `⚠️ INCIDENCIA: ${infoInc.motivo}`, fecha: infoInc.fecha, inicio: infoInc.horaTexto, inicioMS: infoInc.inicioMS, fin: horaFin, total: duracion, tipo: "incidencia", timestamp: Date.now() });
     Object.keys(tareas).forEach(id => { if (tareas[id].estado === "pausa_incidencia") { updates[`tareas/${id}/estado`] = "activo"; updates[`tareas/${id}/inicioMS`] = ahora; } });
+    update(incidenciaRef, { activa: false, inicioMS: 0 });
   }
-  update(incidenciaRef, { activa: false, inicioMS: 0, tipo: null, tareaLeve: null });
   if (Object.keys(updates).length > 0) update(ref(db), updates);
-}
+};
 
 let pausaEnProceso = false; // evitar doble click
 
@@ -1474,8 +1418,7 @@ onValue(incidenciaRef, s => {
   const d = s.val();
   hayIncidenciaGlobal = d?.activa;
   inicioIncidenciaMS = d?.inicioMS;
-  const etiqueta = d?.tipo === 'leve' ? '🛠️ SOLUCIONAR (LEVE)' : (hayIncidenciaGlobal ? '🛠️ SOLUCIONAR' : '🚨 INCIDENCIA');
-  document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? etiqueta : '🚨 INCIDENCIA';
+  document.getElementById('btnIncidencia').innerHTML = hayIncidenciaGlobal ? "🛠️ SOLUCIONAR" : "🚨 INCIDENCIA";
   document.getElementById('cajaIncidencia').classList.toggle('hidden', !hayIncidenciaGlobal);
 });
 
@@ -1938,45 +1881,6 @@ window.exportarExcel = async () => {
           </tbody>
         </table>
       </div>
-    </div>
-  </div>
-</div>
-<!-- Modal Tipo Incidencia (Grave / Leve) -->
-<div id="modalIncidencia" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
-    <h3 class="text-2xl font-black uppercase italic text-slate-800 mb-2 text-center">🚨 Tipo de Incidencia</h3>
-    <p class="text-slate-600 text-center mb-8">Hay 2 operarios en línea. ¿Qué tipo de incidencia es?</p>
-    <div class="space-y-4 mb-8">
-      <button onclick="seleccionarTipoIncidencia('grave')" class="w-full flex items-center gap-4 bg-red-50 border-2 border-red-300 hover:bg-red-100 hover:border-red-500 p-5 rounded-2xl transition-all text-left group">
-        <div class="text-4xl">🛑</div>
-        <div>
-          <p class="font-black text-red-700 text-lg uppercase">Incidencia Grave</p>
-          <p class="text-sm text-red-400 font-bold">Hay que parar la línea. Se pausan <span class="underline">todas</span> las tareas activas.</p>
-        </div>
-      </button>
-      <button onclick="seleccionarTipoIncidencia('leve')" class="w-full flex items-center gap-4 bg-amber-50 border-2 border-amber-300 hover:bg-amber-100 hover:border-amber-500 p-5 rounded-2xl transition-all text-left group">
-        <div class="text-4xl">⚠️</div>
-        <div>
-          <p class="font-black text-amber-700 text-lg uppercase">Incidencia Leve</p>
-          <p class="text-sm text-amber-500 font-bold">Solo se pausa <span class="underline">una tarea</span>. El resto continúan activas.</p>
-        </div>
-      </button>
-    </div>
-    <div class="flex gap-3">
-      <button onclick="cerrarModalIncidencia()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Selección Tarea Incidencia Leve -->
-<div id="modalIncidenciaLeve" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 transform transition-all">
-    <h3 class="text-2xl font-black uppercase italic text-amber-600 mb-2 text-center">⚠️ Incidencia Leve</h3>
-    <p class="text-slate-600 text-center mb-6">Selecciona la tarea que se debe pausar:</p>
-    <div id="listaTareasLeve" class="space-y-3 mb-8 max-h-64 overflow-y-auto"></div>
-    <div class="flex gap-3">
-      <button onclick="cerrarModalIncidenciaLeve()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl font-bold uppercase transition-colors">Cancelar</button>
-      <button onclick="confirmarIncidenciaLeve()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-black uppercase transition-colors shadow-lg">⚠️ Confirmar Pausa</button>
     </div>
   </div>
 </div>
