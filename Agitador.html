@@ -1518,7 +1518,7 @@ document.getElementById('modalIniciarPedido').addEventListener('click', e => {
 });
 
 // ─── ESTADO MODAL INICIAR ───────────────────────────────────────────────────
-const _modalIniciar = { pedido: null, items: [] };
+const _modalIniciar = { pedido: null, items: [], grupos: {} };
 
 window.abrirModalIniciarPedido = (pedido, items) => {
     if (!state.operarios || state.operarios === 0) {
@@ -1528,13 +1528,80 @@ window.abrirModalIniciarPedido = (pedido, items) => {
     _modalIniciar.pedido = pedido;
     _modalIniciar.items  = items;
 
-    document.getElementById('modalIniciarTitulo').textContent = `Pedido: ${pedido}`;
-    document.getElementById('modalIniciarSub').textContent    = `${items[0]?.cliente || ''} · ${items.length} series`;
-    document.getElementById('modalIniciarCountLabel').textContent = `${items.length} serie${items.length !== 1 ? 's' : ''}`;
+    // Agrupar por código
+    const grupos = {};
+    items.forEach(item => {
+        if (!grupos[item.codigo]) grupos[item.codigo] = [];
+        grupos[item.codigo].push(item);
+    });
+    _modalIniciar.grupos = grupos;
 
-    // Reset: ocultar lista individual, mostrar opciones
+    const codigosUnicos = Object.keys(grupos);
+    const hayMultiplesCodigos = codigosUnicos.length > 1;
+    const cliente = items[0]?.cliente || '';
+
+    document.getElementById('modalIniciarTitulo').textContent = `Pedido: ${pedido}`;
+    document.getElementById('modalIniciarSub').textContent = `${cliente ? cliente + ' · ' : ''}${items.length} series · ${codigosUnicos.length} código${codigosUnicos.length !== 1 ? 's' : ''}`;
+
+    // Ocultar lista individual, mostrar opciones
     document.getElementById('modalIniciarOpciones').classList.remove('hidden');
     document.getElementById('modalIniciarLista').classList.add('hidden');
+
+    const opcionesDiv = document.getElementById('modalIniciarOpciones');
+
+    if (hayMultiplesCodigos) {
+        // Múltiples códigos: mostrar un botón por código + opción "todo" + individual
+        opcionesDiv.innerHTML = `
+            <p class="col-span-2 text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Este pedido tiene ${codigosUnicos.length} códigos distintos. Selecciona qué iniciar:</p>
+            ${codigosUnicos.map(cod => {
+                const g = grupos[cod];
+                const s0 = g[0].serie, sN = g[g.length-1].serie;
+                const rango = g.length > 1 ? `${s0} → ${sN}` : s0;
+                return `
+                <button onclick="iniciarGrupoCodigo('${cod}')"
+                    class="flex flex-col items-start gap-1 bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 rounded-2xl p-3.5 transition-all font-black text-xs uppercase group">
+                    <div class="flex items-center gap-2 w-full">
+                        <span class="text-lg">🚀</span>
+                        <span class="truncate">${cod}</span>
+                        <span class="ml-auto bg-emerald-100 group-hover:bg-white/20 text-emerald-700 group-hover:text-white px-1.5 py-0.5 rounded-full text-[10px]">${g.length} uds</span>
+                    </div>
+                    <span class="font-mono text-[10px] font-normal opacity-70 normal-case pl-7">${rango}</span>
+                </button>`;
+            }).join('')}
+            <button onclick="iniciarTodosLosCodigos()"
+                class="flex flex-col items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 text-white border-2 border-slate-700 rounded-2xl p-3.5 transition-all font-black text-xs uppercase">
+                <span class="text-lg">📦</span>
+                <span>Todo el pedido</span>
+                <span class="text-[10px] font-normal opacity-70">${items.length} series</span>
+            </button>
+            <button onclick="mostrarSeleccionIndividual()"
+                class="flex flex-col items-center justify-center gap-1 bg-blue-50 hover:bg-blue-500 text-blue-700 hover:text-white border-2 border-blue-200 hover:border-blue-500 rounded-2xl p-3.5 transition-all font-black text-xs uppercase">
+                <span class="text-lg">▶</span>
+                <span>Serie individual</span>
+                <span class="text-[10px] font-normal opacity-70">elegir una</span>
+            </button>
+        `;
+        // Ajustar grid a 2 cols
+        opcionesDiv.className = 'grid grid-cols-2 gap-3 mb-4';
+    } else {
+        // Un solo código: interfaz original simplificada
+        const g = grupos[codigosUnicos[0]];
+        opcionesDiv.innerHTML = `
+            <button onclick="iniciarTodosLosCodigos()"
+                class="flex flex-col items-center gap-2 bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 rounded-2xl p-4 transition-all font-black text-xs uppercase group">
+                <span class="text-3xl">🚀</span>
+                <span>Pedido completo</span>
+                <span class="text-[10px] font-normal opacity-70">${items.length} serie${items.length !== 1 ? 's' : ''}</span>
+            </button>
+            <button onclick="mostrarSeleccionIndividual()"
+                class="flex flex-col items-center gap-2 bg-blue-50 hover:bg-blue-500 text-blue-700 hover:text-white border-2 border-blue-200 hover:border-blue-500 rounded-2xl p-4 transition-all font-black text-xs uppercase group">
+                <span class="text-3xl">▶</span>
+                <span>Tarea individual</span>
+                <span class="text-[10px] font-normal opacity-70">seleccionar serie</span>
+            </button>
+        `;
+        opcionesDiv.className = 'grid grid-cols-2 gap-3 mb-4';
+    }
 
     const modal = document.getElementById('modalIniciarPedido');
     modal.classList.remove('hidden');
@@ -1547,32 +1614,42 @@ window.cerrarModalIniciar = () => {
     modal.classList.remove('flex');
 };
 
-window.iniciarPedidoCompleto = () => {
-    const { pedido, items } = _modalIniciar;
-    if (!items.length) return;
+// Inicia SOLO las series de un código concreto del pedido
+window.iniciarGrupoCodigo = (codigo) => {
+    const { pedido, grupos } = _modalIniciar;
+    const items = grupos[codigo];
+    if (!items || !items.length) return;
+    _lanzarGrupo(pedido, items, codigo);
+    cerrarModalIniciar();
+};
 
-    // Eliminar todas las series de planificación
+// Inicia TODOS los códigos del pedido (uno o varios grupos)
+window.iniciarTodosLosCodigos = () => {
+    const { pedido, grupos } = _modalIniciar;
+    Object.entries(grupos).forEach(([codigo, items]) => {
+        _lanzarGrupo(pedido, items, codigo);
+    });
+    cerrarModalIniciar();
+};
+
+// Función interna: crea una tarea agrupada en Firebase para un grupo de items del mismo código
+const _lanzarGrupo = (pedido, items, codigo) => {
     items.forEach(item => remove(ref(db, `planificacion/${item.id}`)));
-
-    // Calcular rango de series (primera y última)
-    const series = items.map(i => i.serie);
+    const series     = items.map(i => i.serie);
     const serieInicio = series[0];
     const serieFin    = series[series.length - 1];
-    const codigos     = [...new Set(items.map(i => i.codigo))].join(', ');
     const notas       = items.map(i => i.notas).filter(Boolean).join(' | ');
-
-    // Guardar UNA SOLA tarea agrupada en Firebase
     push(tareasRef, {
-        numSerie:   serieInicio,          // primera serie (para compatibilidad)
+        numSerie:   serieInicio,
         serieInicio,
         serieFin,
-        series:     series.join(','),     // todas las series separadas por coma
-        codigo:     codigos,
+        series:     series.join(','),
+        codigo,
         notas:      notas || '',
         pedido:     pedido || '',
         cliente:    items[0]?.cliente || '',
         unidades:   items.length,
-        esPedido:   true,                 // marca de tarea agrupada
+        esPedido:   true,
         operarios:  state.operarios,
         inicio:     new Date().toLocaleTimeString('es-ES'),
         inicioMS:   Date.now(),
@@ -1580,26 +1657,33 @@ window.iniciarPedidoCompleto = () => {
         total:      0,
         estado:     'activo'
     });
-
-    cerrarModalIniciar();
 };
+
+// Inicia UNA sola serie individual
+window.iniciarPedidoCompleto = () => iniciarTodosLosCodigos(); // alias por compatibilidad
 
 window.mostrarSeleccionIndividual = () => {
     const { items, pedido } = _modalIniciar;
     document.getElementById('modalIniciarOpciones').classList.add('hidden');
     document.getElementById('modalIniciarLista').classList.remove('hidden');
 
+    // Agrupar por código visualmente
+    const grupos = _modalIniciar.grupos;
     const lista = document.getElementById('modalIniciarSeriesList');
-    lista.innerHTML = items.map(item => `
-        <button onclick="iniciarSerieIndividual('${item.id}','${item.serie}','${item.codigo}','${(item.notas||'').replace(/'/g,"\\'")}','${pedido}','${item.cliente||''}')"
-            class="w-full flex items-center justify-between gap-3 bg-slate-50 hover:bg-blue-500 hover:text-white border border-slate-200 hover:border-blue-500 rounded-xl px-4 py-2.5 transition-all group text-left">
-            <div class="flex items-center gap-2">
-                <span class="text-xs">▶</span>
-                <span class="font-black text-sm font-mono">${item.serie}</span>
-                <span class="text-[10px] text-slate-400 group-hover:text-white/70">${item.codigo}</span>
-            </div>
-            ${item.notas && item.notas.trim() ? `<span class="text-[10px] bg-yellow-100 group-hover:bg-yellow-200 text-yellow-700 px-1.5 py-0.5 rounded">⚠️ Nota</span>` : ''}
-        </button>
+    lista.innerHTML = Object.entries(grupos).map(([cod, gitems]) => `
+        <div class="mb-3">
+            <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 px-1">${cod} · ${gitems.length} uds</p>
+            ${gitems.map(item => `
+                <button onclick="iniciarSerieIndividual('${item.id}','${item.serie}','${item.codigo}','${(item.notas||'').replace(/'/g,"\\'")}','${pedido}','${item.cliente||''}')"
+                    class="w-full flex items-center justify-between gap-3 bg-slate-50 hover:bg-blue-500 hover:text-white border border-slate-200 hover:border-blue-500 rounded-xl px-4 py-2 mb-1 transition-all group text-left">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs">▶</span>
+                        <span class="font-black text-sm font-mono">${item.serie}</span>
+                    </div>
+                    ${item.notas && item.notas.trim() ? `<span class="text-[10px] bg-yellow-100 group-hover:bg-yellow-200 text-yellow-700 px-1.5 py-0.5 rounded">⚠️ Nota</span>` : ''}
+                </button>
+            `).join('')}
+        </div>
     `).join('');
 };
 
@@ -2375,21 +2459,10 @@ window.addEventListener('load', async () => {
       <button onclick="cerrarModalIniciar()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-red-400 flex items-center justify-center font-black text-white text-lg transition-colors">✕</button>
     </div>
     <div class="p-5">
-      <div class="grid grid-cols-2 gap-3 mb-4" id="modalIniciarOpciones">
-        <button onclick="iniciarPedidoCompleto()" class="flex flex-col items-center gap-2 bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 rounded-2xl p-4 transition-all font-black text-xs uppercase tracking-wide group">
-          <span class="text-3xl">🚀</span>
-          <span>Pedido completo</span>
-          <span class="text-[10px] font-normal opacity-70 text-center" id="modalIniciarCountLabel">todas las series</span>
-        </button>
-        <button onclick="mostrarSeleccionIndividual()" class="flex flex-col items-center gap-2 bg-blue-50 hover:bg-blue-500 text-blue-700 hover:text-white border-2 border-blue-200 hover:border-blue-500 rounded-2xl p-4 transition-all font-black text-xs uppercase tracking-wide group">
-          <span class="text-3xl">▶</span>
-          <span>Tarea individual</span>
-          <span class="text-[10px] font-normal opacity-70">seleccionar serie</span>
-        </button>
-      </div>
+      <div class="grid grid-cols-2 gap-3 mb-4" id="modalIniciarOpciones"></div>
       <div id="modalIniciarLista" class="hidden">
         <p class="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">Selecciona una serie:</p>
-        <div id="modalIniciarSeriesList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1"></div>
+        <div id="modalIniciarSeriesList" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
         <button onclick="ocultarSeleccionIndividual()" class="mt-3 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">← Volver</button>
       </div>
     </div>
