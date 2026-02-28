@@ -569,7 +569,6 @@ window.cerrarModulo = () => {
   const modal = document.getElementById('modalModulo');
   modal.classList.add('hidden');
   modal.classList.remove('flex');
-  // Limpiar iframe al cerrar para liberar recursos
   document.getElementById('modalModuloFrame').src = '';
 };
 // Cerrar con click fuera
