@@ -513,6 +513,7 @@ function renderTabla(){
   document.getElementById('tablaPreview').innerHTML=filtrados.map(p=>{
     const gi=pedidos.indexOf(p), isDup=p.esDuplicado;
     const isExcluido = p.moduloKey && !isDup && !modulosActivos.has(p.moduloKey);
+    const isExcluidoIndividual = seriesExcluidas.has(gi);
     const fechaHtml=p.fecha?`<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`:'<span class="text-slate-300 text-[10px]">—</span>';
     const estadoHtml=isDup
       ?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>'
@@ -522,7 +523,6 @@ function renderTabla(){
           ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ EXCLUIDO</span>'
           :`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
     const rowBg = isDup?'bg-orange-50 opacity-60':isExcluido?'bg-slate-50 opacity-40':'';
-    const isExcluidoIndividual = seriesExcluidas.has(gi);
     const filaActiva = !isDup && !isExcluido && !isExcluidoIndividual;
     const toggleFila = isDup ? '' : `
       <td class="p-3 w-10">
