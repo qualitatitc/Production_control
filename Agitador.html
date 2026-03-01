@@ -731,15 +731,7 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
                 spanGaps: true,
                 borderColor: 'rgba(37, 99, 235, 1)',
                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                pointBackgroundColor: (ctx) => {
-                    if (ctx.raw === null) return 'transparent';
-                    const dia = dias[ctx.dataIndex];
-                    const val = ctx.raw;
-                    if (esFestivo(mesAMostrar.year, mesAMostrar.month, dia) || esFinDeSemana(mesAMostrar.year, mesAMostrar.month, dia)) {
-                        return 'rgba(180, 180, 180, 0.7)';
-                    }
-                    return val >= 19 ? 'rgba(16, 185, 129, 1)' : 'rgba(37, 99, 235, 1)';
-                },
+                pointBackgroundColor: (ctx) => ctx.raw === null ? 'transparent' : 'rgba(37, 99, 235, 1)',
                 pointBorderColor: '#fff',
                 pointBorderWidth: 2,
                 pointRadius: (ctx) => ctx.raw === null ? 0 : 5,
