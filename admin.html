@@ -335,7 +335,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, get, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const MODULOS = {
@@ -604,6 +604,24 @@ async function mostrarConfirm(movData){
   await aplicarCambioFecha(moduloKey, items, fechaDestino);
 }
 
+// Eliminar pedido completo del calendario (y de Firebase)
+window.eliminarPedidoCal = async (moduloKey, pedido, fecha, e) => {
+  if(e) e.stopPropagation();
+  const movData = buildDragData(moduloKey, pedido, fecha);
+  if(!movData.items.length) return;
+  const n = movData.items.length;
+  if(!confirm(`¿Eliminar este pedido (${n} serie${n>1?'s':''}) de las tareas pendientes?`)) return;
+  try {
+    for(const item of movData.items) {
+      await remove(ref(dbs[moduloKey], `planificacion/${item.fbId}`));
+    }
+    renderCalGrid();
+    renderGlobalCal();
+  } catch(err) {
+    alert('Error al eliminar: ' + err.message);
+  }
+};
+
 // ════════════════════════════════════════════════════════════════════
 // CALENDARIO INDIVIDUAL (modal) con drag & drop
 // ════════════════════════════════════════════════════════════════════
@@ -650,19 +668,23 @@ function renderCalGrid(){
       const cliente=items[0].cliente||'—';
       const codigo=items[0].codigo||'—';
       const uds=items.length;
+      const pedSafe=String(pedId).replace(/'/g,"\\'");
       return `
-      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight"
+      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
            draggable="true"
            data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
            ondragstart="onPillDragStart(event)"
            ondragend="onPillDragEnd(event)">
-        <div class="flex items-center gap-1.5 mb-1">
-          <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
-          <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
-          <span class="ml-auto text-[11px] font-black">${uds}u</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
+            <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
+            <span class="text-[11px] font-black">${uds}u</span>
+          </div>
+          <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
+          <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
         </div>
-        <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
-        <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+        <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100" title="Eliminar">🗑️</button>
       </div>`;
     }).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
@@ -714,18 +736,22 @@ function renderGlobalCal(){
         const cliente=items[0].cliente||'—';
         const codigo=items[0].codigo||'—';
         const uds=items.length;
-        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full"
+        const pedSafe=String(pedId).replace(/'/g,"\\'");
+        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
              draggable="true"
              data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
              ondragstart="onPillDragStart(event)"
              ondragend="onPillDragEnd(event)">
-          <div class="flex items-center gap-1 mb-0.5">
-            <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
-            <span class="font-black truncate">Ped.${pedId}</span>
-            <span class="ml-auto font-black">${uds}u</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1 mb-0.5">
+              <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
+              <span class="font-black truncate">Ped.${pedId}</span>
+              <span class="font-black">${uds}u</span>
+            </div>
+            <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
+            <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
           </div>
-          <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-          <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
+          <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">🗑️</button>
         </div>`;
       })
     ).join('');
