@@ -812,16 +812,22 @@ async function mostrarConfirm(movData){
 function buildPillHtml({ modulo, pedId, iso, items, isGlobal }) {
   const col = MOD_COLORS[modulo];
   const cliente = items[0].cliente || '—';
-  const codigo  = items[0].codigo  || '—';
   const uds     = items.length;
-  // La finalización viene de tareasCache, no del campo local
   const esFinalizada = esPedidoFinalizado(modulo, items);
-
   const finalizadaClass = esFinalizada ? ' finalizada' : '';
-  // Las tareas finalizadas no se pueden arrastrar
   const draggable = !esFinalizada ? 'draggable="true"' : 'draggable="false"';
 
+  // Agrupar por código → { codigo: count }
+  const porCodigo = {};
+  items.forEach(i => { const c = i.codigo || '—'; porCodigo[c] = (porCodigo[c] || 0) + 1; });
+  const codigosUnicos = Object.keys(porCodigo);
+
   if (isGlobal) {
+    // En la pill pequeña del calendario global: mostrar cada código con sus uds
+    const codigosHtml = codigosUnicos.map(c =>
+      `<div class="text-[8px] opacity-55 font-mono truncate">${c} <span class="font-black opacity-80">${porCodigo[c]}u</span></div>`
+    ).join('');
+
     return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full${finalizadaClass}"
          ${draggable}
          data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
@@ -838,9 +844,17 @@ function buildPillHtml({ modulo, pedId, iso, items, isGlobal }) {
         ${esFinalizada ? '<span style="color:#16a34a;font-size:9px;font-weight:900">✓</span>' : ''}
       </div>
       <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-      <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
+      ${codigosHtml}
     </div>`;
   } else {
+    // En la pill grande del calendario individual: mostrar cada código con sus uds
+    const codigosHtml = codigosUnicos.map(c =>
+      `<div class="flex items-center gap-1.5">
+        <span class="text-[10px] opacity-60 font-mono truncate">${c}</span>
+        <span class="text-[9px] font-black opacity-70">${porCodigo[c]}u</span>
+      </div>`
+    ).join('');
+
     return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight${finalizadaClass}"
          ${draggable}
          data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
@@ -856,8 +870,8 @@ function buildPillHtml({ modulo, pedId, iso, items, isGlobal }) {
         <span class="ml-auto text-[11px] font-black">${uds}u</span>
         ${esFinalizada ? '<span style="color:#16a34a;font-weight:900;font-size:11px;margin-left:4px">✓ Finalizado</span>' : ''}
       </div>
-      <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
-      <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+      <div class="text-[10px] opacity-80 font-semibold truncate mb-0.5">${cliente}</div>
+      ${codigosHtml}
     </div>`;
   }
 }
