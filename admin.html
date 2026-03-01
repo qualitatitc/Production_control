@@ -370,6 +370,20 @@
       </div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="resumenModulos"></div>
+
+    <!-- TOGGLES MÓDULOS -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest">🎛️ Módulos destino</h3>
+        <div class="flex gap-2">
+          <button onclick="toggleTodosModulos(true)"  class="text-[10px] font-black uppercase text-emerald-600 hover:text-emerald-700">Todos</button>
+          <span class="text-slate-300">·</span>
+          <button onclick="toggleTodosModulos(false)" class="text-[10px] font-black uppercase text-red-400 hover:text-red-600">Ninguno</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-3" id="moduloToggles"></div>
+    </div>
+
     <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
       <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest mb-4">📅 Filtrar por día de montaje</h3>
       <div id="tabsDias" class="flex flex-wrap gap-2"></div>
@@ -393,6 +407,7 @@
         <table class="w-full text-left text-xs">
           <thead class="bg-slate-100 text-slate-600 text-[11px] font-black uppercase sticky top-0">
             <tr>
+              <th class="p-3 th-switch w-12"><input type="checkbox" id="chkTodas" checked class="w-4 h-4 accent-emerald-500 cursor-pointer rounded" onchange="toggleTodasFilas(this.checked)" title="Seleccionar todas"></th>
               <th class="p-3">Módulo</th><th class="p-3">📅 Fecha</th><th class="p-3">Pedido</th>
               <th class="p-3">Código</th><th class="p-3">Serie</th><th class="p-3">Cliente</th>
               <th class="p-3">Notas</th><th class="p-3 text-center">Estado</th>
@@ -605,6 +620,50 @@ window.onDrop     = e=>{ e.preventDefault(); document.getElementById('dropZone')
 // ── ESTADO ───────────────────────────────────────────────────────────────────
 let pedidos=[], diaActivo=null;
 
+// Módulos activos para envío (todos activados por defecto)
+const modulosActivos = { agitador:true, dostec40:true, dostec50:true, restyling:true };
+
+const MOD_TOGGLE_CFG = {
+  agitador:  { label:'Agitador',      bg:'bg-emerald-50', text:'text-emerald-700', dot:'bg-emerald-500', ring:'ring-emerald-400' },
+  dostec40:  { label:'Dostec 40 OEM', bg:'bg-red-50',     text:'text-red-700',     dot:'bg-red-500',     ring:'ring-red-400'     },
+  dostec50:  { label:'Dostec 50',     bg:'bg-orange-50',  text:'text-orange-700',  dot:'bg-orange-500',  ring:'ring-orange-400'  },
+  restyling: { label:'Restyling',     bg:'bg-violet-50',  text:'text-violet-700',  dot:'bg-violet-500',  ring:'ring-violet-400'  },
+};
+
+function renderModuloToggles(){
+  const container = document.getElementById('moduloToggles');
+  if(!container) return;
+  container.innerHTML = Object.entries(MOD_TOGGLE_CFG).map(([key, cfg]) => {
+    const activo = modulosActivos[key];
+    const count  = pedidos.filter(p => p.moduloKey === key && !p.esDuplicado).length;
+    if(!count) return ''; // ocultar módulos sin series
+    return `
+      <button onclick="toggleModulo('${key}')" id="toggle-${key}"
+        class="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 transition-all font-black text-xs uppercase tracking-wide select-none
+               ${activo ? `${cfg.bg} ${cfg.text} border-current ring-2 ${cfg.ring}` : 'bg-slate-50 text-slate-400 border-slate-200'}">
+        <span class="relative flex-shrink-0 w-9 h-5 rounded-full transition-colors ${activo ? cfg.dot : 'bg-slate-300'}">
+          <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${activo ? 'left-4' : 'left-0.5'}"></span>
+        </span>
+        ${cfg.label}
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-black ${activo ? 'bg-white/60' : 'bg-slate-100'}">${count}</span>
+      </button>`;
+  }).join('');
+}
+
+window.toggleModulo = (key) => {
+  modulosActivos[key] = !modulosActivos[key];
+  renderModuloToggles();
+  renderTabla();
+  actualizarContadorEnvio();
+};
+
+window.toggleTodosModulos = (valor) => {
+  Object.keys(modulosActivos).forEach(k => modulosActivos[k] = valor);
+  renderModuloToggles();
+  renderTabla();
+  actualizarContadorEnvio();
+};
+
 const dragOp = { moduloKey:null, pedidoId:null, fechaOrigen:null, fechaDestino:null, items:[] };
 
 // ── ESTADO BORRADO ───────────────────────────────────────────────────────────
@@ -675,7 +734,7 @@ function procesarFile(file){
         if(ms){pref=ms[1];const n=ms[2];numBase=parseInt(n);pad=n.length;}
         for(let i=0;i<cantidad;i++){
           const serie=ms?pref+String(numBase+i).padStart(pad,'0'):(i===0?(serieBase||'--'):`${serieBase||'--'}-${i+1}`);
-          pedidos.push({moduloKey,pedido:pedido||'S/P',codigo:codigo||'--',serie,cliente,notas,fecha,esDuplicado:false});
+          pedidos.push({moduloKey,pedido:pedido||'S/P',codigo:codigo||'--',serie,cliente,notas,fecha,esDuplicado:false,activo:true});
         }
       });
       const errEl=document.getElementById('alertaErrores');
@@ -722,11 +781,63 @@ function renderResumen(){
     const lbl=MODULOS[k]?MODULOS[k].label:'⚠️ Sin módulo'; const cv=col[k]||'slate';
     return `<div class="bg-${cv}-50 border-2 border-${cv}-200 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-${cv}-600">${n}</p><p class="text-xs font-black uppercase text-${cv}-500 mt-1">${lbl}</p></div>`;
   }).join('');
+  renderModuloToggles();
+  actualizarContadorEnvio();
+}
+
+// Toggle individual de fila
+window.toggleFila = (gi) => {
+  if(pedidos[gi]) {
+    pedidos[gi].activo = !pedidos[gi].activo;
+    // Actualizar visualmente la fila sin re-renderizar toda la tabla
+    const row = document.getElementById(`row-${gi}`);
+    const sw  = document.getElementById(`sw-${gi}`);
+    const p   = pedidos[gi];
+    if(row && sw) {
+      const activo = p.activo;
+      row.classList.toggle('opacity-40', !activo);
+      row.classList.toggle('bg-slate-50', !activo);
+      // Switch visual
+      sw.innerHTML = switchHtml(gi, activo, p.esDuplicado);
+      // Estado
+      const estadoEl = document.getElementById(`estado-${gi}`);
+      if(estadoEl && !p.esDuplicado) {
+        estadoEl.textContent = activo ? 'PENDIENTE' : 'EXCLUIDO';
+        estadoEl.className = activo
+          ? 'bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold'
+          : 'bg-slate-200 text-slate-400 border border-slate-300 px-2 py-0.5 rounded-full text-[10px] font-black';
+      }
+    }
+    actualizarContadorEnvio();
+    actualizarCheckboxHeader();
+  }
+};
+
+window.toggleTodasFilas = (valor) => {
+  pedidos.filter(p=>!p.esDuplicado).forEach(p=>{ p.activo=valor; });
+  renderTabla();
+  actualizarContadorEnvio();
+};
+
+function actualizarCheckboxHeader(){
+  const cb = document.getElementById('chkTodas');
+  if(!cb) return;
+  const validas = pedidos.filter(p=>!p.esDuplicado);
+  const activas = validas.filter(p=>p.activo).length;
+  cb.indeterminate = activas > 0 && activas < validas.length;
+  cb.checked = activas === validas.length;
+}
+
+function switchHtml(gi, activo, isDup){
+  if(isDup) return '<span class="w-9 h-5 rounded-full bg-slate-200 flex-shrink-0 inline-block"></span>';
+  return `<button onclick="toggleFila(${gi})" class="relative flex-shrink-0 w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none ${activo?'bg-emerald-500':'bg-slate-300'}" title="${activo?'Excluir':'Incluir'}">
+    <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${activo?'left-4':'left-0.5'}"></span>
+  </button>`;
 }
 
 function renderTabla(){
   const filtrados=diaActivo==='todos'?pedidos:pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  const nuevos=filtrados.filter(p=>!p.esDuplicado).length;
+  const nuevos=filtrados.filter(p=>!p.esDuplicado&&p.activo).length;
   document.getElementById('totalFilasVisible').textContent=nuevos;
   document.getElementById('subtituloFiltro').textContent=diaActivo==='todos'?'(todos los días)':`(${formatLabel(diaActivo)})`;
   const btnDia=document.getElementById('btnEnviarDia');
@@ -734,19 +845,39 @@ function renderTabla(){
   else{ btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
   const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40 OEM</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
   const clsRow={agitador:'row-agitador',dostec40:'row-dostec40',dostec50:'row-dostec50',restyling:'row-restyling'};
+
+  // Actualizar cabecera
+  const thead = document.querySelector('#tablaPreview')?.closest('table')?.querySelector('thead tr');
+  if(thead && !thead.querySelector('th.th-switch')) {
+    thead.insertAdjacentHTML('afterbegin','<th class="p-3 th-switch w-12"><input type="checkbox" id="chkTodas" checked class="w-4 h-4 accent-emerald-500 cursor-pointer rounded" onchange="toggleTodasFilas(this.checked)" title="Seleccionar todas"></th>');
+  }
+
   document.getElementById('tablaPreview').innerHTML=filtrados.map(p=>{
-    const gi=pedidos.indexOf(p), isDup=p.esDuplicado;
+    const gi=pedidos.indexOf(p), isDup=p.esDuplicado, activo=p.activo!==false;
+    const excluido = !activo && !isDup;
     const fechaHtml=p.fecha?`<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`:'<span class="text-slate-300 text-[10px]">—</span>';
-    const estadoHtml=isDup?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>':`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
-    return `<tr class="${isDup?'bg-orange-50 opacity-60':''}${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${isDup?'':'hover:bg-slate-50'}" id="row-${gi}">
+    const estadoHtml=isDup
+      ?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>'
+      :`<span class="${activo?'bg-slate-100 text-slate-400':'bg-slate-200 text-slate-400 border border-slate-300'} px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">${activo?'PENDIENTE':'EXCLUIDO'}</span>`;
+    return `<tr class="${isDup||excluido?'opacity-40 bg-slate-50':''} ${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 hover:bg-slate-50 transition-opacity" id="row-${gi}">
+      <td class="p-3 text-center" id="sw-${gi}">${switchHtml(gi,activo,isDup)}</td>
       <td class="p-3">${p.moduloKey?badge[p.moduloKey]:'<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Sin módulo</span>'}</td>
-      <td class="p-3">${fechaHtml}</td><td class="p-3 font-bold text-slate-600 ${isDup?'line-through text-slate-400':''}">${p.pedido}</td>
+      <td class="p-3">${fechaHtml}</td>
+      <td class="p-3 font-bold text-slate-600 ${isDup?'line-through text-slate-400':''}">${p.pedido}</td>
       <td class="p-3 text-slate-500 font-mono text-[11px]">${p.codigo}</td>
       <td class="p-3"><span class="px-2 py-0.5 rounded font-mono font-black text-[11px] ${isDup?'bg-orange-100 text-orange-500':'bg-slate-100'}">${p.serie}</span></td>
       <td class="p-3 text-blue-600 font-bold text-[11px]">${p.cliente}</td>
       <td class="p-3 text-slate-400 text-[11px] max-w-xs truncate">${p.notas||'—'}</td>
       <td class="p-3 text-center">${estadoHtml}</td></tr>`;
   }).join('');
+  actualizarCheckboxHeader();
+}
+
+function actualizarContadorEnvio(){
+  const btn = document.getElementById('btnEnviarTodo');
+  if(!btn) return;
+  const n = pedidos.filter(p => p.moduloKey && !p.esDuplicado && p.activo).length;
+  btn.textContent = `🚀 Enviar (${n})`;
 }
 
 window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
@@ -754,13 +885,15 @@ window.enviarDiaActual=()=>{ if(!diaActivo||diaActivo==='todos') return; enviarL
 window.enviarTodo=()=>enviarLote(pedidos,'todos los días');
 
 async function enviarLote(lote,desc){
-  const validos=lote.filter(p=>p.moduloKey&&!p.esDuplicado), omitidos=lote.filter(p=>p.esDuplicado).length;
-  if(!validos.length){alert(omitidos>0?`⚠️ Todas las series ya están en Firebase (${omitidos} duplicadas).`:'No hay registros válidos');return;}
+  const validos=lote.filter(p=>p.moduloKey&&!p.esDuplicado&&p.activo);
+  const omitidos=lote.filter(p=>p.esDuplicado).length;
+  const excluidos=lote.filter(p=>!p.esDuplicado&&!p.activo).length;
+  if(!validos.length){alert(omitidos>0?`⚠️ Todas las series ya están en Firebase (${omitidos} duplicadas).`:excluidos>0?'No hay registros activos para enviar.':'No hay registros válidos');return;}
   ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=true; });
   document.getElementById('seccionLog').classList.remove('hidden');
   const log=document.getElementById('logContenido'); log.innerHTML=''; document.getElementById('resultadoFinal').classList.add('hidden');
   const addLog=(msg,cls='text-slate-300')=>{ log.innerHTML+=`<div class="${cls}">${msg}</div>`; log.scrollTop=log.scrollHeight; };
-  addLog(`📋 Enviando ${validos.length} series (${desc})${omitidos?` — ${omitidos} duplicadas omitidas`:''}...`,'text-yellow-400');
+  addLog(`📋 Enviando ${validos.length} series (${desc})${omitidos?` — ${omitidos} duplicadas omitidas`:''}${excluidos?` — ${excluidos} excluidas`:''}...`,'text-yellow-400');
   let ok=0,err=0;
   for(let i=0;i<pedidos.length;i++){
     const p=pedidos[i]; if(!validos.includes(p)) continue;
@@ -771,6 +904,7 @@ async function enviarLote(lote,desc){
     if((ok+err)%10===0) await new Promise(r=>setTimeout(r,80));
   }
   if(omitidos) addLog(`⚠️ ${omitidos} duplicadas omitidas`,'text-orange-400');
+  if(excluidos) addLog(`⏸ ${excluidos} excluidas manualmente`,'text-slate-400');
   addLog(`\n📊 ${ok} enviados — ${err} errores`,'text-white font-bold');
   const res=document.getElementById('resultadoFinal'); res.classList.remove('hidden');
   res.className=`mt-4 ${err===0?'bg-emerald-500':'bg-amber-500'} text-white rounded-2xl p-4 text-center font-black text-base`;
