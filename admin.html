@@ -257,6 +257,11 @@
         <table class="w-full text-left text-xs">
           <thead class="bg-slate-100 text-slate-600 text-[11px] font-black uppercase sticky top-0">
             <tr>
+              <th class="p-3 w-10">
+                <button onclick="toggleTodasFilas()" title="Activar/desactivar todas" class="w-8 h-5 rounded-full bg-emerald-500 flex items-center px-0.5 transition-colors" id="toggleMaestro">
+                  <div class="w-4 h-4 bg-white rounded-full shadow ml-auto transition-all"></div>
+                </button>
+              </th>
               <th class="p-3">Módulo</th><th class="p-3">📅 Fecha</th><th class="p-3">Pedido</th>
               <th class="p-3">Código</th><th class="p-3">Serie</th><th class="p-3">Cliente</th>
               <th class="p-3">Notas</th><th class="p-3 text-center">Estado</th>
@@ -359,6 +364,7 @@ window.onDrop     = e=>{ e.preventDefault(); document.getElementById('dropZone')
 
 // ── ESTADO ───────────────────────────────────────────────────────────────────
 let pedidos=[], diaActivo=null;
+let seriesExcluidas = new Set(); // índices globales de pedidos excluidos individualmente
 // Set de módulos activos para el envío (todos activos por defecto)
 let modulosActivos = new Set(['agitador','dostec40','dostec50','restyling']);
 
@@ -439,7 +445,7 @@ function renderResumen(){
 
 function renderTabla(){
   const filtrados=diaActivo==='todos'?pedidos:pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  const nuevos=filtrados.filter(p=>!p.esDuplicado&&modulosActivos.has(p.moduloKey)).length;
+  const nuevos=filtrados.filter((p,_i)=>{ const gi=pedidos.indexOf(p); return !p.esDuplicado&&modulosActivos.has(p.moduloKey)&&!seriesExcluidas.has(gi); }).length;
   document.getElementById('totalFilasVisible').textContent=nuevos;
   document.getElementById('subtituloFiltro').textContent=diaActivo==='todos'?'(todos los días)':`(${formatLabel(diaActivo)})`;
   const btnDia=document.getElementById('btnEnviarDia');
@@ -454,10 +460,21 @@ function renderTabla(){
     const estadoHtml=isDup
       ?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>'
       :isExcluido
-        ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ EXCLUIDO</span>'
-        :`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
+        ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ MÓDULO OFF</span>'
+        :isExcluidoIndividual
+          ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ EXCLUIDO</span>'
+          :`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
     const rowBg = isDup?'bg-orange-50 opacity-60':isExcluido?'bg-slate-50 opacity-40':'';
-    return `<tr class="${rowBg} ${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${(isDup||isExcluido)?'':'hover:bg-slate-50'}" id="row-${gi}">
+    const isExcluidoIndividual = seriesExcluidas.has(gi);
+    const filaActiva = !isDup && !isExcluido && !isExcluidoIndividual;
+    const toggleFila = isDup ? '' : `
+      <td class="p-3 w-10">
+        <button onclick="toggleFila(${gi})" class="w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${filaActiva ? 'bg-emerald-500' : 'bg-slate-300'}">
+          <div class="w-4 h-4 bg-white rounded-full shadow transition-all ${filaActiva ? 'ml-auto' : 'ml-0'}"></div>
+        </button>
+      </td>`;
+    return `<tr class="${isExcluidoIndividual?'opacity-40 bg-slate-50':rowBg} ${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${filaActiva?'hover:bg-slate-50':''}" id="row-${gi}">
+      ${isDup ? '<td class="p-3 w-10"></td>' : toggleFila}
       <td class="p-3">${p.moduloKey?badge[p.moduloKey]:'<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Sin módulo</span>'}</td>
       <td class="p-3">${fechaHtml}</td><td class="p-3 font-bold text-slate-600 ${isDup?'line-through text-slate-400':''}">${p.pedido}</td>
       <td class="p-3 text-slate-500 font-mono text-[11px]">${p.codigo}</td>
@@ -468,12 +485,12 @@ function renderTabla(){
   }).join('');
 }
 
-window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; modulosActivos=new Set(['agitador','dostec40','dostec50','restyling']); document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
+window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; seriesExcluidas=new Set(); modulosActivos=new Set(['agitador','dostec40','dostec50','restyling']); document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
 window.enviarDiaActual=()=>{ if(!diaActivo||diaActivo==='todos') return; enviarLote(pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo),formatLabel(diaActivo)); };
 window.enviarTodo=()=>enviarLote(pedidos,'todos los días');
 
 async function enviarLote(lote,desc){
-  const validos=lote.filter(p=>p.moduloKey&&!p.esDuplicado&&modulosActivos.has(p.moduloKey)), omitidos=lote.filter(p=>p.esDuplicado).length, excluidos=lote.filter(p=>p.moduloKey&&!p.esDuplicado&&!modulosActivos.has(p.moduloKey)).length;
+  const validos=lote.filter(p=>{ const gi=pedidos.indexOf(p); return p.moduloKey&&!p.esDuplicado&&modulosActivos.has(p.moduloKey)&&!seriesExcluidas.has(gi); }); const omitidos=lote.filter(p=>p.esDuplicado).length, excluidos=lote.filter(p=>{ const gi=pedidos.indexOf(p); return p.moduloKey&&!p.esDuplicado&&(!modulosActivos.has(p.moduloKey)||seriesExcluidas.has(gi)); }).length;
   if(!validos.length){alert(omitidos>0?`⚠️ Todas las series ya están en Firebase (${omitidos} duplicadas).`:'No hay registros válidos');return;}
   ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=true; });
   document.getElementById('seccionLog').classList.remove('hidden');
@@ -783,6 +800,35 @@ window.onCalCellDrop = (e, moduloContexto) => {
 
 // Inicializar
 renderGlobalCal();
+
+// ── TOGGLE POR FILA ──────────────────────────────────────────────────────────
+window.toggleFila = (gi) => {
+  if(seriesExcluidas.has(gi)) seriesExcluidas.delete(gi);
+  else seriesExcluidas.add(gi);
+  renderTabla();
+  actualizarToggleMaestro();
+};
+
+window.toggleTodasFilas = () => {
+  // Obtener índices de todas las filas visibles no duplicadas
+  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
+  const indices = filtrados.filter(p=>!p.esDuplicado).map(p=>pedidos.indexOf(p));
+  const todasActivas = indices.every(gi=>!seriesExcluidas.has(gi));
+  if(todasActivas) indices.forEach(gi=>seriesExcluidas.add(gi));
+  else indices.forEach(gi=>seriesExcluidas.delete(gi));
+  renderTabla();
+  actualizarToggleMaestro();
+};
+
+function actualizarToggleMaestro(){
+  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
+  const indices = filtrados.filter(p=>!p.esDuplicado).map(p=>pedidos.indexOf(p));
+  const todasActivas = indices.length > 0 && indices.every(gi=>!seriesExcluidas.has(gi));
+  const btn = document.getElementById('toggleMaestro');
+  if(!btn) return;
+  btn.className = `w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${todasActivas?'bg-emerald-500':'bg-slate-300'}`;
+  btn.querySelector('div').className = `w-4 h-4 bg-white rounded-full shadow transition-all ${todasActivas?'ml-auto':'ml-0'}`;
+}
 
 // ── TOGGLES MÓDULOS DESTINO ─────────────────────────────────────────────────
 const TOGGLE_COLORS = {
