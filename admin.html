@@ -141,55 +141,55 @@
 
   <!-- TARJETAS MÓDULOS -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('agitador')">
+    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-agitador"  class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
       <p class="text-base font-black text-emerald-600">Agitador</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pendientes</p>
       <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <span class="text-emerald-500 flex items-center gap-1">
-          <span>📅</span><span>Calendario</span>
-        </span>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('agitador')" class="text-slate-400 hover:text-slate-700 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline">Módulo</span>
+        <button type="button" onclick="abrirCal('agitador')" class="text-emerald-500 flex items-center gap-1">
+          <span>📅</span><span class="text-[11px]">Calendario</span>
+        </button>
+        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('agitador')" class="text-slate-400 flex items-center gap-1">
+          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-emerald-500">MÓDULO</span>
         </button>
       </p>
     </div>
-    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec40')">
+    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
       <p class="text-base font-black text-red-600">Dostec 40 OEM</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pendientes</p>
       <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <span class="text-red-400 flex items-center gap-1">
-          <span>📅</span><span>Calendario</span>
-        </span>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec40')" class="text-slate-400 hover:text-slate-700 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline">Módulo</span>
+        <button type="button" onclick="abrirCal('dostec40')" class="text-red-400 flex items-center gap-1">
+          <span>📅</span><span class="text-[11px]">Calendario</span>
+        </button>
+        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec40')" class="text-slate-400 flex items-center gap-1">
+          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-red-500">MÓDULO</span>
         </button>
       </p>
     </div>
-    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec50')">
+    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span></div>
       <p class="text-base font-black text-orange-500">Dostec 50</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pendientes</p>
       <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <span class="text-orange-400 flex items-center gap-1">
-          <span>📅</span><span>Calendario</span>
-        </span>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec50')" class="text-slate-400 hover:text-slate-700 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline">Módulo</span>
+        <button type="button" onclick="abrirCal('dostec50')" class="text-orange-400 flex items-center gap-1">
+          <span>📅</span><span class="text-[11px]">Calendario</span>
+        </button>
+        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec50')" class="text-slate-400 flex items-center gap-1">
+          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-orange-500">MÓDULO</span>
         </button>
       </p>
     </div>
-    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('restyling')">
+    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
       <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
       <p class="text-base font-black text-sky-500">Restyling</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pendientes</p>
       <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <span class="text-sky-400 flex items-center gap-1">
-          <span>📅</span><span>Calendario</span>
-        </span>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('restyling')" class="text-slate-400 hover:text-slate-700 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline">Módulo</span>
+        <button type="button" onclick="abrirCal('restyling')" class="text-sky-400 flex items-center gap-1">
+          <span>📅</span><span class="text-[11px]">Calendario</span>
+        </button>
+        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('restyling')" class="text-slate-400 flex items-center gap-1">
+          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-sky-500">MÓDULO</span>
         </button>
       </p>
     </div>
