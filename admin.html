@@ -20,7 +20,7 @@
   .row-agitador  { border-left:4px solid #10b981; }
   .row-dostec40  { border-left:4px solid #ef4444; }
   .row-dostec50  { border-left:4px solid #f97316; }
-  .row-restyling { border-left:4px solid #0ea5e9; }
+  .row-restyling { border-left:4px solid #8b5cf6; }
   .row-unknown   { border-left:4px solid #94a3b8; }
 
   /* ── DRAG & DROP CALENDARIOS ── */
@@ -43,7 +43,7 @@
   }
   .cal-cell.drop-target-red   { background:#fff1f2!important;box-shadow:inset 0 0 0 2px #ef4444; }
   .cal-cell.drop-target-orange{ background:#fff7ed!important;box-shadow:inset 0 0 0 2px #f97316; }
-  .cal-cell.drop-target-sky{ background:#f0f9ff!important;box-shadow:inset 0 0 0 2px #0ea5e9; }
+  .cal-cell.drop-target-violet{ background:#f5f3ff!important;box-shadow:inset 0 0 0 2px #8b5cf6; }
 
   #modalCal { backdrop-filter:blur(4px); }
 
@@ -116,82 +116,33 @@
   </div>
 </div>
 
-<!-- MODAL VISTA MÓDULO (IFRAME) -->
-<div id="modalModulo" class="fixed inset-0 bg-slate-900/80 z-50 hidden items-center justify-center p-2 md:p-4">
-  <div class="bg-slate-900 rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
-    <div class="px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-slate-800">
-      <div>
-        <h2 id="tituloModuloIframe" class="text-sm sm:text-base font-black text-white uppercase tracking-tight">Módulo</h2>
-        <p class="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">Vista embebida del módulo de producción</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <a id="linkModuloNuevaPestaña" href="#" target="_blank" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase text-slate-300 hover:text-white px-3 py-1.5 rounded-full border border-slate-600">
-          <span>↗ Abrir en pestaña</span>
-        </a>
-        <button onclick="cerrarModuloIframe()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-red-500 flex items-center justify-center text-white text-sm font-black">✕</button>
-      </div>
-    </div>
-    <div class="flex-1 bg-slate-950">
-      <iframe id="iframeModulo" class="w-full h-full border-0" src="about:blank"></iframe>
-    </div>
-  </div>
-</div>
-
 <div class="container mx-auto px-6 py-6">
 
   <!-- TARJETAS MÓDULOS -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-agitador"  class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('agitador')">
       <div class="flex items-center gap-2 mb-1"><div id="led-agitador"  class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-agitador">Conectando...</span></div>
       <p class="text-base font-black text-emerald-600">Agitador</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-agitador">— pendientes</p>
-      <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <button type="button" onclick="abrirCal('agitador')" class="text-emerald-500 flex items-center gap-1">
-          <span>📅</span><span class="text-[11px]">Calendario</span>
-        </button>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('agitador')" class="text-slate-400 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-emerald-500">MÓDULO</span>
-        </button>
-      </p>
+      <p class="text-[9px] text-emerald-500 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-dostec40" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec40')">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec40" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec40">Conectando...</span></div>
-      <p class="text-base font-black text-red-600">Dostec 40 OEM</p>
+      <p class="text-base font-black text-red-600">Dostec 40</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec40">— pendientes</p>
-      <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <button type="button" onclick="abrirCal('dostec40')" class="text-red-400 flex items-center gap-1">
-          <span>📅</span><span class="text-[11px]">Calendario</span>
-        </button>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec40')" class="text-slate-400 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-red-500">MÓDULO</span>
-        </button>
-      </p>
+      <p class="text-[9px] text-red-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-dostec50" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('dostec50')">
       <div class="flex items-center gap-2 mb-1"><div id="led-dostec50" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-dostec50">Conectando...</span></div>
       <p class="text-base font-black text-orange-500">Dostec 50</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-dostec50">— pendientes</p>
-      <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <button type="button" onclick="abrirCal('dostec50')" class="text-orange-400 flex items-center gap-1">
-          <span>📅</span><span class="text-[11px]">Calendario</span>
-        </button>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('dostec50')" class="text-slate-400 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-orange-500">MÓDULO</span>
-        </button>
-      </p>
+      <p class="text-[9px] text-orange-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
-    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm">
+    <div id="card-restyling" class="mod-card bg-white rounded-2xl p-4 border-2 border-slate-200 shadow-sm" onclick="abrirCal('restyling')">
       <div class="flex items-center gap-2 mb-1"><div id="led-restyling" class="w-3 h-3 rounded-full bg-slate-300"></div><span class="text-[10px] font-black uppercase text-slate-500" id="txt-restyling">Conectando...</span></div>
-      <p class="text-base font-black text-sky-500">Restyling</p>
+      <p class="text-base font-black text-violet-600">Restyling</p>
       <p class="text-[10px] text-slate-400 mt-0.5" id="count-restyling">— pendientes</p>
-      <p class="text-[9px] mt-1 font-bold uppercase flex items-center justify-between">
-        <button type="button" onclick="abrirCal('restyling')" class="text-sky-400 flex items-center gap-1">
-          <span>📅</span><span class="text-[11px]">Calendario</span>
-        </button>
-        <button type="button" onclick="event.stopPropagation(); abrirModuloIframe('restyling')" class="text-slate-400 flex items-center gap-1">
-          <span class="text-xs">🖥</span><span class="hidden sm:inline text-[11px] text-sky-500">MÓDULO</span>
-        </button>
-      </p>
+      <p class="text-[9px] text-violet-400 mt-1 font-bold uppercase">📅 Ver calendario →</p>
     </div>
   </div>
 
@@ -205,9 +156,9 @@
       <div class="flex items-center gap-3 flex-wrap">
         <div class="hidden md:flex items-center gap-3 mr-2">
           <span class="flex items-center gap-1 text-[10px] font-black text-emerald-400"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>Agitador</span>
-          <span class="flex items-center gap-1 text-[10px] font-black text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Dostec 40 OEM</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-red-400"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>Dostec 40</span>
           <span class="flex items-center gap-1 text-[10px] font-black text-orange-400"><span class="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>Dostec 50</span>
-          <span class="flex items-center gap-1 text-[10px] font-black text-sky-400"><span class="w-2 h-2 rounded-full bg-sky-500 inline-block"></span>Restyling</span>
+          <span class="flex items-center gap-1 text-[10px] font-black text-violet-400"><span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span>Restyling</span>
         </div>
         <button onclick="cambiarMesGlobal(-1)" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center font-black text-white text-lg">‹</button>
         <span id="globalCalMes" class="text-sm font-black text-white min-w-[130px] text-center"></span>
@@ -270,19 +221,6 @@
       </div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="resumenModulos"></div>
-    <!-- MÓDULOS DESTINO -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-4 shadow-sm">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest">📦 Módulos destino</h3>
-        <div class="flex gap-3 text-xs font-black uppercase">
-          <button onclick="selTodosModulos()" class="text-emerald-600 hover:text-emerald-800">Todos</button>
-          <span class="text-slate-300">·</span>
-          <button onclick="selNingunoModulos()" class="text-slate-400 hover:text-slate-600">Ninguno</button>
-        </div>
-      </div>
-      <div id="togglesModulos" class="flex flex-wrap gap-3"></div>
-    </div>
-
     <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
       <h3 class="text-sm font-black uppercase text-slate-600 tracking-widest mb-4">📅 Filtrar por día de montaje</h3>
       <div id="tabsDias" class="flex flex-wrap gap-2"></div>
@@ -306,11 +244,6 @@
         <table class="w-full text-left text-xs">
           <thead class="bg-slate-100 text-slate-600 text-[11px] font-black uppercase sticky top-0">
             <tr>
-              <th class="p-3 w-10">
-                <button onclick="toggleTodasFilas()" title="Activar/desactivar todas" class="w-8 h-5 rounded-full bg-emerald-500 flex items-center px-0.5 transition-colors" id="toggleMaestro">
-                  <div class="w-4 h-4 bg-white rounded-full shadow ml-auto transition-all"></div>
-                </button>
-              </th>
               <th class="p-3">Módulo</th><th class="p-3">📅 Fecha</th><th class="p-3">Pedido</th>
               <th class="p-3">Código</th><th class="p-3">Serie</th><th class="p-3">Cliente</th>
               <th class="p-3">Notas</th><th class="p-3 text-center">Estado</th>
@@ -335,40 +268,33 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, push, get, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const MODULOS = {
   agitador:  { label:"Agitador",  color:"emerald", aliases:["agitador"],
     config:{ apiKey:"AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain:"agitador-e6584.firebaseapp.com", databaseURL:"https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId:"agitador-e6584", storageBucket:"agitador-e6584.firebasestorage.app", messagingSenderId:"295479175763", appId:"1:295479175763:web:4d22a9b7a05744fe78b4a6" }},
-  dostec40:  { label:"Dostec 40 OEM", color:"red",     aliases:["dostec40","dostec 40","d40"],
+  dostec40:  { label:"Dostec 40", color:"red",     aliases:["dostec40","dostec 40","d40"],
     config:{ apiKey:"AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain:"tempprod-2ecad.firebaseapp.com", databaseURL:"https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId:"tempprod-2ecad", storageBucket:"tempprod-2ecad.firebasestorage.app", messagingSenderId:"791527902001", appId:"1:791527902001:web:75d104fba52a0dbfc33e10" }},
   dostec50:  { label:"Dostec 50", color:"orange",  aliases:["dostec50","dostec 50","d50"],
     config:{ apiKey:"AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain:"dostec-50.firebaseapp.com", databaseURL:"https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId:"dostec-50", storageBucket:"dostec-50.firebasestorage.app", messagingSenderId:"581863827285", appId:"1:581863827285:web:b360b2f59cb95b6055b1dc" }},
-  restyling: { label:"Restyling", color:"sky",  aliases:["restyling"],
+  restyling: { label:"Restyling", color:"violet",  aliases:["restyling"],
     config:{ apiKey:"AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain:"d40restyling.firebaseapp.com", databaseURL:"https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId:"d40restyling", storageBucket:"d40restyling.appspot.com", appId:"1:1085425091704:web:4ce5ab8af47546035b998d" }}
-};
-
-// Rutas locales de cada módulo para la vista embebida
-const MOD_URLS = {
-  agitador: 'Agitador.html',
-  dostec40: 'Dostec 40.html',
-  dostec50: 'Dostec 50.html',
-  restyling: 'Restyling.html'
 };
 
 const MOD_COLORS = {
   agitador:  { dot:'bg-emerald-500', pill:'bg-emerald-100 text-emerald-800', border:'border-emerald-300', dropCls:'drop-target',         label:'Agitador' },
-  dostec40:  { dot:'bg-red-500',     pill:'bg-red-100 text-red-800',         border:'border-red-300',     dropCls:'drop-target-red',      label:'Dostec 40 OEM' },
+  dostec40:  { dot:'bg-red-500',     pill:'bg-red-100 text-red-800',         border:'border-red-300',     dropCls:'drop-target-red',      label:'Dostec 40' },
   dostec50:  { dot:'bg-orange-500',  pill:'bg-orange-100 text-orange-800',   border:'border-orange-300',  dropCls:'drop-target-orange',   label:'Dostec 50' },
-  restyling: { dot:'bg-sky-500',  pill:'bg-sky-100 text-sky-800',   border:'border-sky-300',  dropCls:'drop-target-sky',   label:'Restyling' }
+  restyling: { dot:'bg-violet-500',  pill:'bg-violet-100 text-violet-800',   border:'border-violet-300',  dropCls:'drop-target-violet',   label:'Restyling' }
 };
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
-const planCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} }; // solo finalizadas con fecha
 
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
@@ -387,6 +313,15 @@ for (const [key, mod] of Object.entries(MODULOS)) {
       planCache[key]=Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==null));
       const el=document.getElementById(`count-${key}`);
       if(el) el.textContent=`${Object.keys(planCache[key]).length} pendientes`;
+      if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
+      renderGlobalCal();
+    });
+    onValue(ref(dbs[key],'tareas'), snap=>{
+      const raw=snap.val()||{};
+      // Solo guardar las finalizadas que tienen fecha de montaje
+      tareasCache[key]=Object.fromEntries(
+        Object.entries(raw).filter(([,v])=>v!==null && v.estado==='finalizado' && v.fecha)
+      );
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
@@ -421,9 +356,6 @@ window.onDrop     = e=>{ e.preventDefault(); document.getElementById('dropZone')
 
 // ── ESTADO ───────────────────────────────────────────────────────────────────
 let pedidos=[], diaActivo=null;
-let seriesExcluidas = new Set(); // índices globales de pedidos excluidos individualmente
-// Set de módulos activos para el envío (todos activos por defecto)
-let modulosActivos = new Set(['agitador','dostec40','dostec50','restyling']);
 
 // Estado de la operación drag de pedido (replanificación)
 const dragOp = { moduloKey:null, pedidoId:null, fechaOrigen:null, fechaDestino:null, items:[] };
@@ -460,7 +392,7 @@ function procesarFile(file){
       await comprobarDuplicados();
       const dias=[...new Set(pedidos.map(p=>p.fecha||'sin-fecha'))].sort();
       diaActivo=dias[0]||'todos';
-      renderTogglesModulos(); renderTabs(dias); renderResumen(); renderTabla();
+      renderTabs(dias); renderResumen(); renderTabla();
       document.getElementById('seccionPreview').classList.remove('hidden');
     }catch(e){alert('❌ Error: '+e.message);}
   };
@@ -493,7 +425,7 @@ window.selDia=dia=>{ diaActivo=dia; actualizarTabActivo(); renderTabla(); };
 
 function renderResumen(){
   const c={}; pedidos.filter(p=>!p.esDuplicado).forEach(p=>{ const k=p.moduloKey||'error'; c[k]=(c[k]||0)+1; });
-  const col={agitador:'emerald',dostec40:'red',dostec50:'orange',restyling:'sky',error:'slate'};
+  const col={agitador:'emerald',dostec40:'red',dostec50:'orange',restyling:'violet',error:'slate'};
   document.getElementById('resumenModulos').innerHTML=Object.entries(c).map(([k,n])=>{
     const lbl=MODULOS[k]?MODULOS[k].label:'⚠️ Sin módulo'; const cv=col[k]||'slate';
     return `<div class="bg-${cv}-50 border-2 border-${cv}-200 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-${cv}-600">${n}</p><p class="text-xs font-black uppercase text-${cv}-500 mt-1">${lbl}</p></div>`;
@@ -502,36 +434,19 @@ function renderResumen(){
 
 function renderTabla(){
   const filtrados=diaActivo==='todos'?pedidos:pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  const nuevos=filtrados.filter((p,_i)=>{ const gi=pedidos.indexOf(p); return !p.esDuplicado&&modulosActivos.has(p.moduloKey)&&!seriesExcluidas.has(gi); }).length;
+  const nuevos=filtrados.filter(p=>!p.esDuplicado).length;
   document.getElementById('totalFilasVisible').textContent=nuevos;
   document.getElementById('subtituloFiltro').textContent=diaActivo==='todos'?'(todos los días)':`(${formatLabel(diaActivo)})`;
   const btnDia=document.getElementById('btnEnviarDia');
   if(diaActivo==='todos') btnDia.classList.add('hidden');
   else{ btnDia.classList.remove('hidden'); btnDia.textContent=`📅 Enviar ${formatLabel(diaActivo)}`; }
-  const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40 OEM</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
+  const badge={ agitador:'<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black text-[10px]">Agitador</span>', dostec40:'<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 40</span>', dostec50:'<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black text-[10px]">Dostec 50</span>', restyling:'<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black text-[10px]">Restyling</span>' };
   const clsRow={agitador:'row-agitador',dostec40:'row-dostec40',dostec50:'row-dostec50',restyling:'row-restyling'};
   document.getElementById('tablaPreview').innerHTML=filtrados.map(p=>{
     const gi=pedidos.indexOf(p), isDup=p.esDuplicado;
-    const isExcluido = p.moduloKey && !isDup && !modulosActivos.has(p.moduloKey);
-    const isExcluidoIndividual = seriesExcluidas.has(gi);
     const fechaHtml=p.fecha?`<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold text-[10px]">${formatLabel(p.fecha)}</span>`:'<span class="text-slate-300 text-[10px]">—</span>';
-    const estadoHtml=isDup
-      ?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>'
-      :isExcluido
-        ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ MÓDULO OFF</span>'
-        :isExcluidoIndividual
-          ?'<span class="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-black">⛔ EXCLUIDO</span>'
-          :`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
-    const rowBg = isDup?'bg-orange-50 opacity-60':isExcluido?'bg-slate-50 opacity-40':'';
-    const filaActiva = !isDup && !isExcluido && !isExcluidoIndividual;
-    const toggleFila = isDup ? '' : `
-      <td class="p-3 w-10">
-        <button onclick="toggleFila(${gi})" class="w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${filaActiva ? 'bg-emerald-500' : 'bg-slate-300'}">
-          <div class="w-4 h-4 bg-white rounded-full shadow transition-all ${filaActiva ? 'ml-auto' : 'ml-0'}"></div>
-        </button>
-      </td>`;
-    return `<tr class="${isExcluidoIndividual?'opacity-40 bg-slate-50':rowBg} ${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${filaActiva?'hover:bg-slate-50':''}" id="row-${gi}">
-      ${isDup ? '<td class="p-3 w-10"></td>' : toggleFila}
+    const estadoHtml=isDup?'<span class="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 rounded-full text-[10px] font-black">⚠️ YA EXISTE</span>':`<span class="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold" id="estado-${gi}">PENDIENTE</span>`;
+    return `<tr class="${isDup?'bg-orange-50 opacity-60':''}${clsRow[p.moduloKey]||'row-unknown'} border-b border-slate-100 ${isDup?'':'hover:bg-slate-50'}" id="row-${gi}">
       <td class="p-3">${p.moduloKey?badge[p.moduloKey]:'<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black text-[10px]">⚠️ Sin módulo</span>'}</td>
       <td class="p-3">${fechaHtml}</td><td class="p-3 font-bold text-slate-600 ${isDup?'line-through text-slate-400':''}">${p.pedido}</td>
       <td class="p-3 text-slate-500 font-mono text-[11px]">${p.codigo}</td>
@@ -542,18 +457,17 @@ function renderTabla(){
   }).join('');
 }
 
-window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; seriesExcluidas=new Set(); modulosActivos=new Set(['agitador','dostec40','dostec50','restyling']); document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
+window.limpiarPreview=()=>{ pedidos=[];diaActivo=null; document.getElementById('seccionPreview').classList.add('hidden'); document.getElementById('seccionLog').classList.add('hidden'); document.getElementById('alertaDuplicados').classList.add('hidden'); };
 window.enviarDiaActual=()=>{ if(!diaActivo||diaActivo==='todos') return; enviarLote(pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo),formatLabel(diaActivo)); };
 window.enviarTodo=()=>enviarLote(pedidos,'todos los días');
 
 async function enviarLote(lote,desc){
-  const validos=lote.filter(p=>{ const gi=pedidos.indexOf(p); return p.moduloKey&&!p.esDuplicado&&modulosActivos.has(p.moduloKey)&&!seriesExcluidas.has(gi); }); const omitidos=lote.filter(p=>p.esDuplicado).length, excluidos=lote.filter(p=>{ const gi=pedidos.indexOf(p); return p.moduloKey&&!p.esDuplicado&&(!modulosActivos.has(p.moduloKey)||seriesExcluidas.has(gi)); }).length;
+  const validos=lote.filter(p=>p.moduloKey&&!p.esDuplicado), omitidos=lote.filter(p=>p.esDuplicado).length;
   if(!validos.length){alert(omitidos>0?`⚠️ Todas las series ya están en Firebase (${omitidos} duplicadas).`:'No hay registros válidos');return;}
   ['btnEnviarTodo','btnEnviarDia'].forEach(id=>{ const b=document.getElementById(id); if(b) b.disabled=true; });
   document.getElementById('seccionLog').classList.remove('hidden');
   const log=document.getElementById('logContenido'); log.innerHTML=''; document.getElementById('resultadoFinal').classList.add('hidden');
   const addLog=(msg,cls='text-slate-300')=>{ log.innerHTML+=`<div class="${cls}">${msg}</div>`; log.scrollTop=log.scrollHeight; };
-  if(excluidos) addLog(`ℹ️ ${excluidos} series excluidas por módulo desactivado`,'text-slate-400');
   addLog(`📋 Enviando ${validos.length} series (${desc})${omitidos?` — ${omitidos} duplicadas omitidas`:''}...`,'text-yellow-400');
   let ok=0,err=0;
   for(let i=0;i<pedidos.length;i++){
@@ -604,24 +518,6 @@ async function mostrarConfirm(movData){
   await aplicarCambioFecha(moduloKey, items, fechaDestino);
 }
 
-// Eliminar pedido completo del calendario (y de Firebase)
-window.eliminarPedidoCal = async (moduloKey, pedido, fecha, e) => {
-  if(e) e.stopPropagation();
-  const movData = buildDragData(moduloKey, pedido, fecha);
-  if(!movData.items.length) return;
-  const n = movData.items.length;
-  if(!confirm(`¿Eliminar este pedido (${n} serie${n>1?'s':''}) de las tareas pendientes?`)) return;
-  try {
-    for(const item of movData.items) {
-      await remove(ref(dbs[moduloKey], `planificacion/${item.fbId}`));
-    }
-    renderCalGrid();
-    renderGlobalCal();
-  } catch(err) {
-    alert('Error al eliminar: ' + err.message);
-  }
-};
-
 // ════════════════════════════════════════════════════════════════════
 // CALENDARIO INDIVIDUAL (modal) con drag & drop
 // ════════════════════════════════════════════════════════════════════
@@ -630,7 +526,7 @@ const calState = { modulo:null, year:new Date().getFullYear(), month:new Date().
 window.abrirCal = (moduloKey) => {
   calState.modulo=moduloKey; calState.year=new Date().getFullYear(); calState.month=new Date().getMonth(); calState.dragData=null;
   const mod=MODULOS[moduloKey], col=MOD_COLORS[moduloKey];
-  const bgMap={emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',sky:'bg-sky-500'};
+  const bgMap={emerald:'bg-emerald-600',red:'bg-red-600',orange:'bg-orange-500',violet:'bg-violet-600'};
   document.getElementById('modalCalHeader').className=`px-6 py-4 flex items-center justify-between ${bgMap[mod.color]} text-white`;
   document.getElementById('modalCalTitulo').textContent=`${mod.label} — Planificación`;
   renderCalGrid();
@@ -668,25 +564,35 @@ function renderCalGrid(){
       const cliente=items[0].cliente||'—';
       const codigo=items[0].codigo||'—';
       const uds=items.length;
-      const pedSafe=String(pedId).replace(/'/g,"\\'");
       return `
-      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
+      <div class="pedido-pill ${col.pill} border ${col.border} rounded-xl px-3 py-2 mb-1.5 leading-tight"
            draggable="true"
            data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
            ondragstart="onPillDragStart(event)"
            ondragend="onPillDragEnd(event)">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1.5 mb-1">
-            <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
-            <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
-            <span class="text-[11px] font-black">${uds}u</span>
-          </div>
-          <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
-          <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="w-2 h-2 rounded-full ${col.dot} flex-shrink-0"></span>
+          <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
+          <span class="ml-auto text-[11px] font-black">${uds}u</span>
         </div>
-        <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100" title="Eliminar">🗑️</button>
+        <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
+        <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
       </div>`;
     }).join('');
+    // Tareas finalizadas de este módulo en este día
+    const tareasFinDia = Object.values(tareasCache[modulo]||{}).filter(t=>t.fecha===iso);
+    // Agrupar finalizadas por pedido
+    const gruposFin={};
+    tareasFinDia.forEach(t=>{ const p=t.pedido||'S/P'; if(!gruposFin[p]) gruposFin[p]=[]; gruposFin[p].push(t); });
+    const pillsFinHtml=Object.entries(gruposFin).map(([pedId,items])=>`
+      <div class="border border-slate-200 rounded-xl px-3 py-1.5 mb-1 opacity-60 bg-slate-50 leading-tight">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px]">✅</span>
+          <span class="text-[10px] font-black text-slate-500 line-through">Ped.${pedId}</span>
+          <span class="text-[10px] font-black text-slate-400">${items.length}u</span>
+        </div>
+        <div class="text-[9px] text-slate-400 font-mono truncate">${items[0].codigo||'—'}</div>
+      </div>`).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,'${modulo}')"
@@ -694,6 +600,7 @@ function renderCalGrid(){
                ondrop="onCalCellDrop(event,'${modulo}')">
       <div class="text-[11px] font-black mb-1 ${esHoy?'text-blue-600':esFinSem?'text-slate-300':'text-slate-600'}">${d}</div>
       ${pillsHtml}
+      ${pillsFinHtml}
     </div>`;
   }
   const resto=(offset+diasMes)%7; if(resto>0) for(let i=0;i<7-resto;i++) html+=`<div class="cal-cell bg-slate-50/50 border border-slate-50"></div>`;
@@ -736,25 +643,37 @@ function renderGlobalCal(){
         const cliente=items[0].cliente||'—';
         const codigo=items[0].codigo||'—';
         const uds=items.length;
-        const pedSafe=String(pedId).replace(/'/g,"\\'");
-        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
+        return `<div class="pedido-pill ${col.pill} border ${col.border} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full"
              draggable="true"
              data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
              ondragstart="onPillDragStart(event)"
              ondragend="onPillDragEnd(event)">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1 mb-0.5">
-              <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
-              <span class="font-black truncate">Ped.${pedId}</span>
-              <span class="font-black">${uds}u</span>
-            </div>
-            <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-            <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
+          <div class="flex items-center gap-1 mb-0.5">
+            <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
+            <span class="font-black truncate">Ped.${pedId}</span>
+            <span class="ml-auto font-black">${uds}u</span>
           </div>
-          <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">🗑️</button>
+          <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
+          <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
         </div>`;
       })
     ).join('');
+    // Finalizadas de todos los módulos en este día
+    const finPillsGlobal = Object.entries(tareasCache).flatMap(([key,data])=>{
+      const porPedido={};
+      Object.values(data).filter(t=>t.fecha===iso).forEach(t=>{ const p=t.pedido||'S/P'; if(!porPedido[p]) porPedido[p]=[]; porPedido[p].push(t); });
+      return Object.entries(porPedido).map(([pedId,items])=>{
+        const col=MOD_COLORS[key];
+        return `<div class="border ${col.border} rounded-md px-1.5 py-0.5 mb-0.5 opacity-50 bg-white w-full leading-tight">
+          <div class="flex items-center gap-1">
+            <span class="text-[8px]">✅</span>
+            <span class="w-1.5 h-1.5 rounded-full ${col.dot} flex-shrink-0"></span>
+            <span class="text-[9px] font-black text-slate-400 line-through truncate">${pedId}</span>
+            <span class="text-[9px] text-slate-400 ml-auto">${items.length}u</span>
+          </div>
+        </div>`;
+      });
+    }).join('');
     html+=`<div class="cal-cell ${bgCls} border-b border-r border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,null)"
@@ -765,6 +684,7 @@ function renderGlobalCal(){
         ${totalDia?`<span class="text-[9px] font-black text-slate-400">${totalDia}</span>`:''}
       </div>
       ${pillsHtml}
+      ${finPillsGlobal}
     </div>`;
   }
   const resto=(offset+diasMes)%7; if(resto>0) for(let i=0;i<7-resto;i++) html+=`<div class="cal-cell bg-slate-50/30 border-b border-r border-slate-50"></div>`;
@@ -842,7 +762,7 @@ window.onPillDragEnd = (e) => {
   if(activeDragEl){ try{ activeDragEl.classList.remove('dragging'); }catch(_){} }
   activeDragEl = null;
   document.querySelectorAll('.cal-cell').forEach(c=>
-    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-sky'));
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
 };
 
 window.onCalCellDragOver = (e, moduloContexto) => {
@@ -852,17 +772,17 @@ window.onCalCellDragOver = (e, moduloContexto) => {
   const m = activeDragState.modulo;
   const colorCls = (m && MOD_COLORS[m]?.dropCls) || 'drop-target';
   document.querySelectorAll('.cal-cell').forEach(c=>
-    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-sky'));
+    c.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet'));
   cell.classList.add(colorCls);
 };
 
 window.onCalCellDragLeave = (e) => {
-  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-sky');
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
 };
 
 window.onCalCellDrop = (e, moduloContexto) => {
   e.preventDefault();
-  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-sky');
+  e.currentTarget.classList.remove('drop-target','drop-target-red','drop-target-orange','drop-target-violet');
   clearMonthNavTimer();
   const fechaDestino = e.currentTarget.dataset.iso;
   if(!fechaDestino) return;
@@ -884,129 +804,8 @@ window.onCalCellDrop = (e, moduloContexto) => {
 // Inicializar
 renderGlobalCal();
 
-// ── TOGGLE POR FILA ──────────────────────────────────────────────────────────
-window.toggleFila = (gi) => {
-  if(seriesExcluidas.has(gi)) seriesExcluidas.delete(gi);
-  else seriesExcluidas.add(gi);
-  renderTabla();
-  actualizarToggleMaestro();
-};
-
-window.toggleTodasFilas = () => {
-  // Obtener índices de todas las filas visibles no duplicadas
-  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  const indices = filtrados.filter(p=>!p.esDuplicado).map(p=>pedidos.indexOf(p));
-  const todasActivas = indices.every(gi=>!seriesExcluidas.has(gi));
-  if(todasActivas) indices.forEach(gi=>seriesExcluidas.add(gi));
-  else indices.forEach(gi=>seriesExcluidas.delete(gi));
-  renderTabla();
-  actualizarToggleMaestro();
-};
-
-function actualizarToggleMaestro(){
-  const filtrados = diaActivo==='todos' ? pedidos : pedidos.filter(p=>(p.fecha||'sin-fecha')===diaActivo);
-  const indices = filtrados.filter(p=>!p.esDuplicado).map(p=>pedidos.indexOf(p));
-  const todasActivas = indices.length > 0 && indices.every(gi=>!seriesExcluidas.has(gi));
-  const btn = document.getElementById('toggleMaestro');
-  if(!btn) return;
-  btn.className = `w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${todasActivas?'bg-emerald-500':'bg-slate-300'}`;
-  btn.querySelector('div').className = `w-4 h-4 bg-white rounded-full shadow transition-all ${todasActivas?'ml-auto':'ml-0'}`;
-}
-
-// ── TOGGLES MÓDULOS DESTINO ─────────────────────────────────────────────────
-const TOGGLE_COLORS = {
-  agitador:  { on:'bg-emerald-500', ring:'ring-emerald-300', text:'text-emerald-700', border:'border-emerald-300' },
-  dostec40:  { on:'bg-red-500',     ring:'ring-red-300',     text:'text-red-700',     border:'border-red-300' },
-  dostec50:  { on:'bg-orange-500',  ring:'ring-orange-300',  text:'text-orange-700',  border:'border-orange-300' },
-  restyling: { on:'bg-sky-500',  ring:'ring-sky-300',  text:'text-sky-700',  border:'border-sky-300' }
-};
-
-function renderTogglesModulos(){
-  // Calcular cuántas series hay por módulo (no duplicadas)
-  const conteo={};
-  pedidos.filter(p=>p.moduloKey&&!p.esDuplicado).forEach(p=>{ conteo[p.moduloKey]=(conteo[p.moduloKey]||0)+1; });
-
-  const container = document.getElementById('togglesModulos');
-  if(!container) return;
-
-  container.innerHTML = Object.entries(MODULOS).map(([key, mod])=>{
-    const n = conteo[key]||0;
-    if(!n) return ''; // no mostrar módulos sin tareas
-    const activo = modulosActivos.has(key);
-    const col = TOGGLE_COLORS[key];
-    return `<button id="toggle-mod-${key}"
-      onclick="toggleModulo('${key}')"
-      class="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border-2 font-black text-xs uppercase transition-all ${activo ? `${col.border} ${col.text} bg-white ring-2 ${col.ring}` : 'border-slate-200 text-slate-400 bg-slate-50'}">
-      <!-- Toggle pill -->
-      <div class="relative w-9 h-5 rounded-full transition-colors ${activo ? col.on : 'bg-slate-300'}">
-        <div class="absolute top-0.5 ${activo ? 'left-5' : 'left-0.5'} w-4 h-4 bg-white rounded-full shadow transition-all"></div>
-      </div>
-      <span>${mod.label}</span>
-      <span class="ml-1 ${activo ? 'opacity-100' : 'opacity-40'} font-black">${n}</span>
-    </button>`;
-  }).join('');
-}
-
-window.toggleModulo = (key) => {
-  if(modulosActivos.has(key)) modulosActivos.delete(key);
-  else modulosActivos.add(key);
-  renderTogglesModulos();
-  renderTabla(); // actualizar tabla (filas excluidas se marcan)
-  actualizarBotonesEnvio();
-};
-
-window.selTodosModulos = () => {
-  modulosActivos = new Set(Object.keys(MODULOS));
-  renderTogglesModulos(); renderTabla(); actualizarBotonesEnvio();
-};
-
-window.selNingunoModulos = () => {
-  modulosActivos = new Set();
-  renderTogglesModulos(); renderTabla(); actualizarBotonesEnvio();
-};
-
-function actualizarBotonesEnvio(){
-  const hayActivos = modulosActivos.size > 0;
-  const btnTodo = document.getElementById('btnEnviarTodo');
-  const btnDia  = document.getElementById('btnEnviarDia');
-  if(btnTodo) btnTodo.disabled = !hayActivos;
-  if(btnDia)  btnDia.disabled  = !hayActivos;
-}
-
 // Cerrar modal individual al clic fuera
 document.getElementById('modalCal').addEventListener('click', e=>{ if(e.target===document.getElementById('modalCal')) cerrarCal(); });
-
-// ── MODAL VISTA MÓDULO (IFRAME) ─────────────────────────────────────────────
-window.abrirModuloIframe = (moduloKey) => {
-  const url = MOD_URLS[moduloKey];
-  if(!url) return;
-  const modal  = document.getElementById('modalModulo');
-  const iframe = document.getElementById('iframeModulo');
-  const titulo = document.getElementById('tituloModuloIframe');
-  const link   = document.getElementById('linkModuloNuevaPestaña');
-  const mod    = MODULOS[moduloKey];
-  if(titulo) titulo.textContent = mod ? `${mod.label} — Módulo` : 'Módulo';
-  if(iframe) iframe.src = url;
-  if(link)   link.href  = url;
-  if(modal){
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-  }
-};
-
-window.cerrarModuloIframe = () => {
-  const modal  = document.getElementById('modalModulo');
-  const iframe = document.getElementById('iframeModulo');
-  if(iframe) iframe.src = 'about:blank';
-  if(modal){
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-  }
-};
-
-document.getElementById('modalModulo').addEventListener('click', e=>{
-  if(e.target===document.getElementById('modalModulo')) cerrarModuloIframe();
-});
 </script>
 </body>
 </html>

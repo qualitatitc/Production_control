@@ -58,8 +58,6 @@ const state = {
     filtroFechaTareas: null,
     firebaseConectado: false,
     modoPrueba: false,
-    filtroPlanFecha: 'hoy',
-    planDataCache: {},
 };
 
 // Listener para estado de conexión con Firebase
@@ -232,11 +230,11 @@ window.recalcularProductividadHoy = async () => {
         horasPonderadas += horasSesion * operariosSesion;
         resumenSesiones += `\nSesión ${operariosSesion} op: ${horasSesion.toFixed(2)}h × ${operariosSesion} = ${(horasSesion * operariosSesion).toFixed(2)}h`;
 
-        // Contar tareas finalizadas en esta sesión (sumar unidades/códigos por tarea)
+        // Contar tareas finalizadas en esta sesión
         tareas.forEach(t => {
             if (t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0
                 && t.finMS && t.finMS >= entrada.inicioMS && t.finMS <= hastaMS) {
-                totalTareas += (t.unidades || 1);
+                totalTareas++;
             }
         });
     });
@@ -731,7 +729,15 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
                 spanGaps: true,
                 borderColor: 'rgba(37, 99, 235, 1)',
                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                pointBackgroundColor: (ctx) => ctx.raw === null ? 'transparent' : 'rgba(37, 99, 235, 1)',
+                pointBackgroundColor: (ctx) => {
+                    if (ctx.raw === null) return 'transparent';
+                    const dia = dias[ctx.dataIndex];
+                    const val = ctx.raw;
+                    if (esFestivo(mesAMostrar.year, mesAMostrar.month, dia) || esFinDeSemana(mesAMostrar.year, mesAMostrar.month, dia)) {
+                        return 'rgba(180, 180, 180, 0.7)';
+                    }
+                    return val >= 19 ? 'rgba(16, 185, 129, 1)' : 'rgba(37, 99, 235, 1)';
+                },
                 pointBorderColor: '#fff',
                 pointBorderWidth: 2,
                 pointRadius: (ctx) => ctx.raw === null ? 0 : 5,
@@ -740,6 +746,15 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
                 fill: true,
                 tension: 0.4,
                 order: 2
+            }, {
+                label: 'Objetivo (19)',
+                data: Array(31).fill(19),
+                borderColor: 'rgba(239, 68, 68, 1)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false,
+                order: 3
             }, {
                 label: `Media (${media.toFixed(1)})`,
                 data: Array(31).fill(media),
@@ -841,6 +856,16 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
             tension: 0.4,
             order: 2
         },
+        {
+            label: 'Objetivo (19)',
+            data: Array(12).fill(19),
+            borderColor: 'rgba(239, 68, 68, 1)',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false,
+            order: 3
+        }
     ];
     
     if (tendencia) {
@@ -1129,7 +1154,7 @@ window.registrarSalida = async () => {
             // Contar tareas finalizadas en esta sesión (entre entradaMS y ahoraMSTime)
             if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0
                 && t.finMS && t.finMS >= entradaMS && t.finMS <= ahoraMSTime) {
-                tareasEnSesion += (t.unidades || 1);
+                tareasEnSesion++;
             }
         });
     }
@@ -1485,209 +1510,14 @@ window.borrarPedidoCompleto = (ids, e) => {
     }
 };
 
-// Cerrar modal iniciar al clic fuera
-document.getElementById('modalIniciarPedido').addEventListener('click', e => {
-    if (e.target === document.getElementById('modalIniciarPedido')) cerrarModalIniciar();
-});
-
-// ─── ESTADO MODAL INICIAR ───────────────────────────────────────────────────
-const _modalIniciar = { pedido: null, items: [], grupos: {} };
-
-window.abrirModalIniciarPedido = (pedido, items) => {
-    if (!state.operarios || state.operarios === 0) {
-        alert("⚠️ ATENCIÓN: Debes pulsar 'ENTRADA LÍNEA' primero.");
-        return;
-    }
-    _modalIniciar.pedido = pedido;
-    _modalIniciar.items  = items;
-
-    // Agrupar por código
-    const grupos = {};
-    items.forEach(item => {
-        if (!grupos[item.codigo]) grupos[item.codigo] = [];
-        grupos[item.codigo].push(item);
-    });
-    _modalIniciar.grupos = grupos;
-
-    const codigosUnicos = Object.keys(grupos);
-    const hayMultiplesCodigos = codigosUnicos.length > 1;
-    const cliente = items[0]?.cliente || '';
-
-    document.getElementById('modalIniciarTitulo').textContent = `Pedido: ${pedido}`;
-    document.getElementById('modalIniciarSub').textContent = `${cliente ? cliente + ' · ' : ''}${items.length} series · ${codigosUnicos.length} código${codigosUnicos.length !== 1 ? 's' : ''}`;
-
-    // Ocultar lista individual, mostrar opciones
-    document.getElementById('modalIniciarOpciones').classList.remove('hidden');
-    document.getElementById('modalIniciarLista').classList.add('hidden');
-
-    const opcionesDiv = document.getElementById('modalIniciarOpciones');
-
-    if (hayMultiplesCodigos) {
-        // Múltiples códigos: mostrar un botón por código + opción "todo" + individual
-        opcionesDiv.innerHTML = `
-            <p class="col-span-2 text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1">Este pedido tiene ${codigosUnicos.length} códigos distintos. Selecciona qué iniciar:</p>
-            ${codigosUnicos.map(cod => {
-                const g = grupos[cod];
-                const s0 = g[0].serie, sN = g[g.length-1].serie;
-                const rango = g.length > 1 ? `${s0} → ${sN}` : s0;
-                return `
-                <button onclick="iniciarGrupoCodigo('${cod}')"
-                    class="flex flex-col items-start gap-1 bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 rounded-2xl p-3.5 transition-all font-black text-xs uppercase group">
-                    <div class="flex items-center gap-2 w-full">
-                        <span class="text-lg">🚀</span>
-                        <span class="truncate">${cod}</span>
-                        <span class="ml-auto bg-emerald-100 group-hover:bg-white/20 text-emerald-700 group-hover:text-white px-1.5 py-0.5 rounded-full text-[10px]">${g.length} uds</span>
-                    </div>
-                    <span class="font-mono text-[10px] font-normal opacity-70 normal-case pl-7">${rango}</span>
-                </button>`;
-            }).join('')}
-            <button onclick="iniciarTodosLosCodigos()"
-                class="flex flex-col items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 text-white border-2 border-slate-700 rounded-2xl p-3.5 transition-all font-black text-xs uppercase">
-                <span class="text-lg">📦</span>
-                <span>Todo el pedido</span>
-                <span class="text-[10px] font-normal opacity-70">${items.length} series</span>
-            </button>
-            <button onclick="mostrarSeleccionIndividual()"
-                class="flex flex-col items-center justify-center gap-1 bg-blue-50 hover:bg-blue-500 text-blue-700 hover:text-white border-2 border-blue-200 hover:border-blue-500 rounded-2xl p-3.5 transition-all font-black text-xs uppercase">
-                <span class="text-lg">▶</span>
-                <span>Serie individual</span>
-                <span class="text-[10px] font-normal opacity-70">elegir una</span>
-            </button>
-        `;
-        // Ajustar grid a 2 cols
-        opcionesDiv.className = 'grid grid-cols-2 gap-3 mb-4';
-    } else {
-        // Un solo código: interfaz original simplificada
-        const g = grupos[codigosUnicos[0]];
-        opcionesDiv.innerHTML = `
-            <button onclick="iniciarTodosLosCodigos()"
-                class="flex flex-col items-center gap-2 bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 rounded-2xl p-4 transition-all font-black text-xs uppercase group">
-                <span class="text-3xl">🚀</span>
-                <span>Pedido completo</span>
-                <span class="text-[10px] font-normal opacity-70">${items.length} serie${items.length !== 1 ? 's' : ''}</span>
-            </button>
-            <button onclick="mostrarSeleccionIndividual()"
-                class="flex flex-col items-center gap-2 bg-blue-50 hover:bg-blue-500 text-blue-700 hover:text-white border-2 border-blue-200 hover:border-blue-500 rounded-2xl p-4 transition-all font-black text-xs uppercase group">
-                <span class="text-3xl">▶</span>
-                <span>Tarea individual</span>
-                <span class="text-[10px] font-normal opacity-70">seleccionar serie</span>
-            </button>
-        `;
-        opcionesDiv.className = 'grid grid-cols-2 gap-3 mb-4';
-    }
-
-    const modal = document.getElementById('modalIniciarPedido');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-};
-
-window.cerrarModalIniciar = () => {
-    const modal = document.getElementById('modalIniciarPedido');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-};
-
-// Inicia SOLO las series de un código concreto del pedido
-window.iniciarGrupoCodigo = (codigo) => {
-    const { pedido, grupos } = _modalIniciar;
-    const items = grupos[codigo];
-    if (!items || !items.length) return;
-    _lanzarGrupo(pedido, items, codigo);
-    cerrarModalIniciar();
-};
-
-// Inicia TODOS los códigos del pedido (uno o varios grupos)
-window.iniciarTodosLosCodigos = () => {
-    const { pedido, grupos } = _modalIniciar;
-    Object.entries(grupos).forEach(([codigo, items]) => {
-        _lanzarGrupo(pedido, items, codigo);
-    });
-    cerrarModalIniciar();
-};
-
-// Función interna: crea una tarea agrupada en Firebase para un grupo de items del mismo código
-const _lanzarGrupo = (pedido, items, codigo) => {
-    items.forEach(item => remove(ref(db, `planificacion/${item.id}`)));
-    const series     = items.map(i => i.serie);
-    const serieInicio = series[0];
-    const serieFin    = series[series.length - 1];
-    const notas       = items.map(i => i.notas).filter(Boolean).join(' | ');
-    push(tareasRef, {
-        numSerie:   serieInicio,
-        serieInicio,
-        serieFin,
-        series:     series.join(','),
-        codigo,
-        notas:      notas || '',
-        pedido:     pedido || '',
-        cliente:    items[0]?.cliente || '',
-        unidades:   items.length,
-        esPedido:   true,
-        operarios:  state.operarios,
-        inicio:     new Date().toLocaleTimeString('es-ES'),
-        inicioMS:   Date.now(),
-        fin:        '--:--',
-        total:      0,
-        estado:     'activo'
-    });
-};
-
-// Inicia UNA sola serie individual
-window.iniciarPedidoCompleto = () => iniciarTodosLosCodigos(); // alias por compatibilidad
-
-window.mostrarSeleccionIndividual = () => {
-    const { items, pedido } = _modalIniciar;
-    document.getElementById('modalIniciarOpciones').classList.add('hidden');
-    document.getElementById('modalIniciarLista').classList.remove('hidden');
-
-    // Agrupar por código visualmente
-    const grupos = _modalIniciar.grupos;
-    const lista = document.getElementById('modalIniciarSeriesList');
-    lista.innerHTML = Object.entries(grupos).map(([cod, gitems]) => `
-        <div class="mb-3">
-            <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 px-1">${cod} · ${gitems.length} uds</p>
-            ${gitems.map(item => `
-                <button onclick="iniciarSerieIndividual('${item.id}','${item.serie}','${item.codigo}','${(item.notas||'').replace(/'/g,"\\'")}','${pedido}','${item.cliente||''}')"
-                    class="w-full flex items-center justify-between gap-3 bg-slate-50 hover:bg-blue-500 hover:text-white border border-slate-200 hover:border-blue-500 rounded-xl px-4 py-2 mb-1 transition-all group text-left">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs">▶</span>
-                        <span class="font-black text-sm font-mono">${item.serie}</span>
-                    </div>
-                    ${item.notas && item.notas.trim() ? `<span class="text-[10px] bg-yellow-100 group-hover:bg-yellow-200 text-yellow-700 px-1.5 py-0.5 rounded">⚠️ Nota</span>` : ''}
-                </button>
-            `).join('')}
-        </div>
-    `).join('');
-};
-
-window.ocultarSeleccionIndividual = () => {
-    document.getElementById('modalIniciarOpciones').classList.remove('hidden');
-    document.getElementById('modalIniciarLista').classList.add('hidden');
-};
-
-window.iniciarSerieIndividual = (id, serie, cod, notas, pedido, cliente) => {
-    remove(ref(db, `planificacion/${id}`));
-    push(tareasRef, {
-        numSerie: serie,
-        codigo: cod,
-        notas: notas || '',
-        pedido: pedido || '',
-        cliente: cliente || '',
-        operarios: state.operarios,
-        inicio: new Date().toLocaleTimeString('es-ES'),
-        inicioMS: Date.now(),
-        fin: '--:--',
-        total: 0,
-        estado: 'activo'
-    });
-    cerrarModalIniciar();
-};
-
 window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
     if (!state.operarios || state.operarios === 0) {
         alert("⚠️ ATENCIÓN: Debes pulsar 'ENTRADA LÍNEA' primero.");
         return;
     }
+    // Recuperar fecha de planificacion antes de borrar
+    const _snapPlan = await get(ref(db, `planificacion/${id}`));
+    const _fechaPlan = _snapPlan.exists() ? (_snapPlan.val().fecha || null) : null;
     remove(ref(db, `planificacion/${id}`));
     push(tareasRef, {
         numSerie: serie,
@@ -1695,6 +1525,7 @@ window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
         notas: notas,
         pedido: pedido || "",
         cliente: cliente || "",
+        fecha: _fechaPlan,
         operarios: state.operarios,
         inicio: new Date().toLocaleTimeString('es-ES'),
         inicioMS: Date.now(),
@@ -1873,61 +1704,7 @@ const renderizarTablaTareas = async () => {
         const esPausado = t.estado === "pausa" || t.estado === "incidencia_pausa";
         const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
         const esHito = t.codigo === "SISTEMA";
-
-        // ── FILA PEDIDO COMPLETO AGRUPADO ──────────────────────────────────
-        if (t.esPedido) {
-            const filaClase = esActivo ? "bg-emerald-50 border-emerald-200" :
-                esPausado ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
-
-            let tiempoTexto = esActivo
-                ? `<span class="animate-pulse font-mono text-emerald-700">0m 0s</span>`
-                : esPausado
-                    ? (() => { const m=Math.floor((t.tiempoAcumuladoMS||0)/60000),s=Math.floor(((t.tiempoAcumuladoMS||0)%60000)/1000); return `${m}m ${s}s <span class="text-[9px] text-blue-600">(PAUSA)</span>`; })()
-                    : `${t.total}m`;
-
-            const prodHtml = (!esHito && t.total > 0)
-                ? `<span class="${(420/t.total)>=19?'bg-emerald-100 text-emerald-700':'bg-indigo-100 text-indigo-700'} px-2 py-1 rounded font-black text-sm">${(420/t.total).toFixed(1)}</span>`
-                : '<span class="text-stone-300">—</span>';
-
-            let accionHtml = esActivo
-                ? `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="flex items-center gap-1.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-full border border-red-200 hover:border-red-500 transition-all font-black text-[10px] uppercase tracking-wide"><span class="text-xs">■</span> Fin</button>`
-                : esPausado ? '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>'
-                : '<span class="text-[10px] font-black text-emerald-600 uppercase">✅ HECHO</span>';
-
-            const serieRango = t.serieInicio && t.serieFin && t.serieInicio !== t.serieFin
-                ? `${t.serieInicio} → ${t.serieFin}`
-                : (t.serieInicio || t.numSerie);
-
-            const clienteHtml = t.cliente && t.cliente !== 'Sin cliente'
-                ? `<span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">👤 ${t.cliente}</span>` : '';
-
-            cuerpo.innerHTML += `
-                <tr class="${filaClase} border-b border-l-4 ${esActivo ? 'border-l-emerald-500' : 'border-l-slate-200'}">
-                    <td class="p-3" colspan="2">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] font-black uppercase">📦 Pedido</span>
-                            <span class="font-black text-slate-700 text-sm">${t.pedido || '—'}</span>
-                            <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-black">${t.unidades} uds</span>
-                            ${clienteHtml}
-                        </div>
-                        <div class="mt-1.5 flex items-center gap-2 flex-wrap">
-                            <span class="text-[11px] font-black text-slate-500 uppercase">${t.codigo}</span>
-                            <span class="text-slate-300">·</span>
-                            <span class="font-mono text-[11px] font-bold text-slate-600">Series: ${serieRango}</span>
-                        </div>
-                        ${t.notas && t.notas.trim() ? `<div class="mt-1 bg-yellow-100 border-l-2 border-yellow-500 px-2 py-1 rounded text-[11px] font-black text-yellow-800">⚠️ ${t.notas}</div>` : ''}
-                    </td>
-                    <td class="p-3 text-center"><span class="bg-slate-100 px-2 py-1 rounded font-black text-xs">${t.operarios || 0}</span></td>
-                    <td class="p-3 text-center text-slate-400 text-[10px]">—</td>
-                    <td class="p-3 font-[1000] text-lg ${esActivo ? 'text-emerald-600' : esPausado ? 'text-blue-600' : ''}" ${esActivo ? `data-inicio-ms="${t.inicioMS}"` : ''}>${tiempoTexto}</td>
-                    <td class="p-3 text-center">${prodHtml}</td>
-                    <td class="p-3 text-right flex gap-2 items-center justify-end">${accionHtml} <button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg">🗑️</button></td>
-                </tr>
-            `;
-            return;
-        }
-        // ── FIN FILA PEDIDO AGRUPADO ────────────────────────────────────────
-
+        
         let tiempoTexto = "";
         if (esActivo) {
             tiempoTexto = '<span class="animate-pulse">0m 0s</span>';
@@ -2003,163 +1780,73 @@ onValue(tareasRef, () => {
     renderizarTablaTareas();
 });
 
-// ═══════════════════════════════════════════════════
-// PLANIFICACIÓN CON FILTRO POR FECHA DE MONTAJE
-// ═══════════════════════════════════════════════════
-
-const hoyISO = () => new Date().toISOString().slice(0, 10);
-
-const formatFechaTab = (iso) => {
-    if (!iso) return '—';
-    const hoy    = hoyISO();
-    const manana = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    const d = new Date(iso + 'T12:00:00');
-    const base = d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-    if (iso === hoy)    return `🟢 Hoy`;
-    if (iso === manana) return `🔵 Mañana`;
-    return `📅 ${base}`;
-};
-
-const renderTabsFecha = (data) => {
-    const container = document.getElementById('tabsFechaPlan');
-    if (!container) return;
-    const dias = [...new Set(Object.values(data).map(i => i.fecha || 'sin-fecha'))].sort();
-    const hoy  = hoyISO();
-    const fAct = state.filtroPlanFecha;
-
-    let html = `<button onclick="selFiltroPlan('todos')" class="plan-tab ${fAct==='todos'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
-        📋 Todos <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${Object.keys(data).length}</span>
-    </button>`;
-
-    // Tab "Hoy" siempre visible si hay pedidos hoy o si filtroPlanFecha es 'hoy'
-    const countHoy = Object.values(data).filter(i => (i.fecha || 'sin-fecha') === hoy).length;
-    html += `<button onclick="selFiltroPlan('hoy')" class="plan-tab ${fAct==='hoy'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
-        🟢 Hoy <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${countHoy}</span>
-    </button>`;
-
-    dias.filter(d => d !== hoy && d !== 'sin-fecha').forEach(d => {
-        const n = Object.values(data).filter(i => i.fecha === d).length;
-        if (!n) return;
-        const label = formatFechaTab(d);
-        html += `<button onclick="selFiltroPlan('${d}')" class="plan-tab ${fAct===d?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
-            ${label} <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${n}</span>
-        </button>`;
-    });
-
-    // Sin fecha
-    const sinFecha = Object.values(data).filter(i => !i.fecha).length;
-    if (sinFecha > 0) {
-        html += `<button onclick="selFiltroPlan('sin-fecha')" class="plan-tab ${fAct==='sin-fecha'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-500 transition-all">
-            ⚠️ Sin fecha <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${sinFecha}</span>
-        </button>`;
-    }
-
-    container.innerHTML = html;
-
-    // Aplicar estilos active
-    container.querySelectorAll('.plan-tab.active').forEach(b => {
-        b.style.background = '#1e293b';
-        b.style.color = 'white';
-        b.style.borderColor = '#1e293b';
-    });
-};
-
-window.selFiltroPlan = (filtro) => {
-    state.filtroPlanFecha = filtro;
-    renderPlanificacion(state.planDataCache);
-};
-
-const renderPlanificacion = (data) => {
-    state.planDataCache = data;
+// Listener para planificación
+onValue(planRef, (snap) => {
+    const rawData = snap.val() || {};
+    // Filtrar entradas nulas que Firebase puede dejar al borrar
+    const data = Object.fromEntries(Object.entries(rawData).filter(([, v]) => v !== null));
     const cuerpo = document.getElementById('cuerpoPlan');
     document.getElementById('sec-plan').classList.remove('hidden');
-
-    // Actualizar tabs
-    renderTabsFecha(data);
-
-    // Aplicar filtro
-    const hoy = hoyISO();
-    let dataFiltrada = {};
-    if (state.filtroPlanFecha === 'todos') {
-        dataFiltrada = data;
-    } else if (state.filtroPlanFecha === 'hoy') {
-        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => (v.fecha || 'sin-fecha') === hoy));
-    } else if (state.filtroPlanFecha === 'sin-fecha') {
-        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => !v.fecha));
-    } else {
-        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => v.fecha === state.filtroPlanFecha));
-    }
-
-    // Actualizar título con conteo
-    const tituloPlan = document.getElementById('tituloPlanPendientes');
-    if (tituloPlan) {
-        const n = Object.keys(dataFiltrada).length;
-        tituloPlan.textContent = `📋 Pedidos pendientes — ${n} serie${n!==1?'s':''}`;
-    }
-
     cuerpo.innerHTML = "";
 
-    if (Object.keys(dataFiltrada).length === 0) {
-        const msgFiltro = state.filtroPlanFecha === 'hoy' ? 'No hay pedidos para hoy' : 'Sin pedidos para este día';
+    if (Object.keys(data).length === 0) {
         cuerpo.innerHTML = `
             <tr>
                 <td colspan="5" class="p-8 text-center">
                     <p class="text-2xl mb-2">📋</p>
-                    <p class="font-black text-sm text-slate-400 uppercase tracking-wide">${msgFiltro}</p>
+                    <p class="font-black text-sm text-slate-400 uppercase tracking-wide">Sin pedidos pendientes</p>
                 </td>
             </tr>`;
         setTimeout(inicializarDragDrop, 100);
         return;
     }
-
-    if (state.sortable) { state.sortable.destroy(); state.sortable = null; }
-
+    
+    if (state.sortable) {
+        state.sortable.destroy();
+        state.sortable = null;
+    }
+    
     const grupos = {}, ordenMap = {};
-    Object.keys(dataFiltrada).forEach(id => {
-        const item = dataFiltrada[id];
-        if (!grupos[item.pedido]) { grupos[item.pedido] = []; ordenMap[item.pedido] = item.orden || 999999; }
+    Object.keys(data).forEach(id => {
+        const item = data[id];
+        if (!grupos[item.pedido]) {
+            grupos[item.pedido] = [];
+            ordenMap[item.pedido] = item.orden || 999999;
+        }
         grupos[item.pedido].push({ ...item, id });
     });
-
+    
     const pedidosOrdenadosKeys = Object.keys(grupos).sort((a, b) => (ordenMap[a] || 999999) - (ordenMap[b] || 999999));
     state.pedidosOrdenados = pedidosOrdenadosKeys;
-
+    
     pedidosOrdenadosKeys.forEach((pedido, index) => {
         const pedidoId = `pedido-${index}`;
         const items = grupos[pedido];
         const cliente = items[0].cliente || "Sin cliente";
-        const fechaItem = items[0].fecha;
-        const fechaBadge = fechaItem
-            ? `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-black ml-2">📅 ${formatFechaTab(fechaItem)}</span>`
-            : '';
-
+        
         cuerpo.innerHTML += `
             <tr class="pedido-header bg-stone-50 cursor-pointer" data-pedido-key="${items[0].id}">
-                <td class="p-3 flex items-center gap-3 flex-wrap" onclick="toggleGrupo('${pedidoId}')">
-                    <svg class="drag-handle w-5 h-5 text-slate-400 cursor-grab flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <td class="p-3 flex items-center gap-3" onclick="toggleGrupo('${pedidoId}')">
+                    <svg class="drag-handle w-5 h-5 text-slate-400 cursor-grab" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"></path>
                     </svg>
-                    <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
                     </svg>
-                    <div class="flex items-center gap-2 flex-wrap">
+                    <div class="flex items-center gap-2">
                         <span class="text-xs uppercase tracking-tighter text-slate-700">PEDIDO: ${pedido}</span>
+                        <span class="text-xs text-slate-400">—</span>
                         <span class="text-xs text-blue-700 font-black bg-blue-100 px-2 py-0.5 rounded">👤 ${cliente}</span>
-                        ${fechaBadge}
                     </div>
                     <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-bold">${items.length} UNID.</span>
                 </td>
                 <td colspan="3"></td>
-                <td class="p-3 text-right flex items-center justify-end gap-2">
-                    <button onclick='event.stopPropagation();abrirModalIniciarPedido(${JSON.stringify(pedido)}, ${JSON.stringify(items.map(i=>({id:i.id,serie:i.serie,codigo:i.codigo,notas:i.notas||"",cliente:i.cliente||""})))})' 
-                        class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-full font-black text-[10px] uppercase tracking-wide transition-all flex items-center gap-1">
-                        <span>▶</span> Iniciar
-                    </button>
+                <td class="p-3 text-right">
                     <button onclick='borrarPedidoCompleto(${JSON.stringify(items.map(i => i.id))}, event)' class="text-stone-400 hover:text-red-600 p-1">🗑️</button>
                 </td>
             </tr>
         `;
-
+        
         items.forEach(item => {
             const tieneNota = item.notas && item.notas.trim() !== "";
             cuerpo.innerHTML += `
@@ -2189,15 +1876,8 @@ const renderPlanificacion = (data) => {
             `;
         });
     });
-
+    
     setTimeout(inicializarDragDrop, 100);
-};
-
-// Listener para planificación
-onValue(planRef, (snap) => {
-    const rawData = snap.val() || {};
-    const data = Object.fromEntries(Object.entries(rawData).filter(([, v]) => v !== null));
-    renderPlanificacion(data);
 });
 
 // Listener para estado de sesión
@@ -2421,27 +2101,6 @@ window.addEventListener('load', async () => {
     </div>
 </div>
 
-<!-- Modal Iniciar Pedido / Tarea -->
-<div id="modalIniciarPedido" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-4" style="backdrop-filter:blur(4px)">
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
-    <div class="bg-emerald-600 px-6 py-4 flex items-center justify-between">
-      <div>
-        <h2 class="text-white font-black text-base uppercase tracking-tight" id="modalIniciarTitulo">Iniciar pedido</h2>
-        <p class="text-white/70 text-[10px] font-bold mt-0.5 uppercase tracking-wider" id="modalIniciarSub"></p>
-      </div>
-      <button onclick="cerrarModalIniciar()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-red-400 flex items-center justify-center font-black text-white text-lg transition-colors">✕</button>
-    </div>
-    <div class="p-5">
-      <div class="grid grid-cols-2 gap-3 mb-4" id="modalIniciarOpciones"></div>
-      <div id="modalIniciarLista" class="hidden">
-        <p class="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">Selecciona una serie:</p>
-        <div id="modalIniciarSeriesList" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
-        <button onclick="ocultarSeleccionIndividual()" class="mt-3 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">← Volver</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="max-w-6xl mx-auto space-y-6">
     <!-- Fila superior: Volver + EN LÍNEA -->
     <div class="flex items-center justify-between">
@@ -2463,7 +2122,7 @@ window.addEventListener('load', async () => {
     <!-- Header Principal -->
     <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
         <div class="flex items-center gap-4">
-            <h1 class="text-4xl font-[1000] uppercase italic leading-none"><span class="text-black">Agitador</span> <span class="text-green-600">Production</span></h1>
+            <h1 class="text-4xl font-[1000] uppercase italic leading-none"><span class="text-black">Agitador</span> <span class="text-red-600">Production</span></h1>
             <p class="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-1">Cloud MES System v2.1</p>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
@@ -2484,11 +2143,7 @@ window.addEventListener('load', async () => {
     
     <!-- Pedidos Pendientes -->
     <div id="sec-plan" class="hidden">
-        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <h2 id="tituloPlanPendientes" class="text-base font-black uppercase tracking-widest text-red-600">📋 Pedidos pendientes</h2>
-        </div>
-        <!-- Filtro por fecha de montaje -->
-        <div class="flex flex-wrap gap-2 mb-3" id="tabsFechaPlan"></div>
+        <h2 class="text-base font-black uppercase tracking-widest text-red-600 mb-3">📋 Pedidos pendientes</h2>
         <div class="bg-white rounded-3xl shadow-sm overflow-hidden border">
             <table class="w-full text-left text-xs">
                 <tbody id="cuerpoPlan"></tbody>
@@ -2527,6 +2182,42 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
+    <!-- Gráfico Tiempo por Bomba -->
+    <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">⏱️ Tiempo por Bomba</h3>
+            <div class="flex items-center gap-3">
+                <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border">✏️ Editar puntos</button>
+                <button onclick="mostrarSelectorFechaProd()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-black text-xs border-2 border-indigo-300">📅 <span id="tituloFechaProd">Hoy</span></button>
+                <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)">
+            </div>
+        </div>
+        <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
+            <canvas id="graficoProd"></canvas>
+        </div>
+        <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
+    </div>
+    
+    <!-- Gráfico Tiempo Medio por Día (Mensual) -->
+    <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">📅 Tiempo Medio por Bomba Diario</h3>
+            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-300 rounded-xl px-2 py-1.5">
+                <div class="flex items-center gap-2">
+                    <button onclick="cambiarMesTiempoMensual(-1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">◀</button>
+                    <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1">
+                        <span class="text-sm font-black text-indigo-900 uppercase" id="nombreMesTiempoMensual">Febrero</span>
+                        <span class="text-sm font-black text-indigo-900" id="anioMesTiempoMensual">2026</span>
+                    </div>
+                    <button onclick="cambiarMesTiempoMensual(1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">▶</button>
+                </div>
+            </div>
+        </div>
+        <div class="relative h-64 bg-slate-50 rounded-xl p-2">
+            <canvas id="graficoTiempoMensual"></canvas>
+        </div>
+    </div>
+
     <!-- Gráfico Productividad Diaria -->
     <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
