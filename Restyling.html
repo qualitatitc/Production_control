@@ -56,6 +56,8 @@ const state = {
     filtroFechaTareas: null,
     firebaseConectado: false,
     modoPrueba: false,
+    filtroPlanFecha: 'hoy',
+    planDataCache: {},
 };
 
 // Listener para estado de conexión con Firebase
@@ -1513,9 +1515,6 @@ window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
         alert("⚠️ ATENCIÓN: Debes pulsar 'ENTRADA LÍNEA' primero.");
         return;
     }
-    // Recuperar fecha de planificacion antes de borrar
-    const _snapPlan = await get(ref(db, `planificacion/${id}`));
-    const _fechaPlan = _snapPlan.exists() ? (_snapPlan.val().fecha || null) : null;
     remove(ref(db, `planificacion/${id}`));
     push(tareasRef, {
         numSerie: serie,
@@ -1523,7 +1522,6 @@ window.iniciarDesdePlan = (id, serie, cod, notas, pedido, cliente) => {
         notas: notas,
         pedido: pedido || "",
         cliente: cliente || "",
-        fecha: _fechaPlan,
         operarios: state.operarios,
         inicio: new Date().toLocaleTimeString('es-ES'),
         inicioMS: Date.now(),
@@ -1778,63 +1776,149 @@ onValue(tareasRef, () => {
     renderizarTablaTareas();
 });
 
-// Listener para planificación
-onValue(planRef, (snap) => {
-    const rawData = snap.val() || {};
-    // Filtrar entradas nulas que Firebase puede dejar al borrar
-    const data = Object.fromEntries(Object.entries(rawData).filter(([, v]) => v !== null));
+// ═══════════════════════════════════════════════════
+// PLANIFICACIÓN CON FILTRO POR FECHA DE MONTAJE
+// ═══════════════════════════════════════════════════
+
+const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+const formatFechaTab = (iso) => {
+    if (!iso) return '—';
+    const hoy    = hoyISO();
+    const manana = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const d = new Date(iso + 'T12:00:00');
+    const base = d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+    if (iso === hoy)    return `🟢 Hoy`;
+    if (iso === manana) return `🔵 Mañana`;
+    return `📅 ${base}`;
+};
+
+const renderTabsFecha = (data) => {
+    const container = document.getElementById('tabsFechaPlan');
+    if (!container) return;
+    const dias = [...new Set(Object.values(data).map(i => i.fecha || 'sin-fecha'))].sort();
+    const hoy  = hoyISO();
+    const fAct = state.filtroPlanFecha;
+
+    let html = `<button onclick="selFiltroPlan('todos')" class="plan-tab ${fAct==='todos'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
+        📋 Todos <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${Object.keys(data).length}</span>
+    </button>`;
+
+    // Tab "Hoy" siempre visible si hay pedidos hoy o si filtroPlanFecha es 'hoy'
+    const countHoy = Object.values(data).filter(i => (i.fecha || 'sin-fecha') === hoy).length;
+    html += `<button onclick="selFiltroPlan('hoy')" class="plan-tab ${fAct==='hoy'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
+        🟢 Hoy <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${countHoy}</span>
+    </button>`;
+
+    dias.filter(d => d !== hoy && d !== 'sin-fecha').forEach(d => {
+        const n = Object.values(data).filter(i => i.fecha === d).length;
+        if (!n) return;
+        const label = formatFechaTab(d);
+        html += `<button onclick="selFiltroPlan('${d}')" class="plan-tab ${fAct===d?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-600 transition-all">
+            ${label} <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${n}</span>
+        </button>`;
+    });
+
+    // Sin fecha
+    const sinFecha = Object.values(data).filter(i => !i.fecha).length;
+    if (sinFecha > 0) {
+        html += `<button onclick="selFiltroPlan('sin-fecha')" class="plan-tab ${fAct==='sin-fecha'?'active':''} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-slate-200 bg-white text-slate-500 transition-all">
+            ⚠️ Sin fecha <span class="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${sinFecha}</span>
+        </button>`;
+    }
+
+    container.innerHTML = html;
+
+    // Aplicar estilos active
+    container.querySelectorAll('.plan-tab.active').forEach(b => {
+        b.style.background = '#1e293b';
+        b.style.color = 'white';
+        b.style.borderColor = '#1e293b';
+    });
+};
+
+window.selFiltroPlan = (filtro) => {
+    state.filtroPlanFecha = filtro;
+    renderPlanificacion(state.planDataCache);
+};
+
+const renderPlanificacion = (data) => {
+    state.planDataCache = data;
     const cuerpo = document.getElementById('cuerpoPlan');
     document.getElementById('sec-plan').classList.remove('hidden');
+
+    // Actualizar tabs
+    renderTabsFecha(data);
+
+    // Aplicar filtro
+    const hoy = hoyISO();
+    let dataFiltrada = {};
+    if (state.filtroPlanFecha === 'todos') {
+        dataFiltrada = data;
+    } else if (state.filtroPlanFecha === 'hoy') {
+        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => (v.fecha || 'sin-fecha') === hoy));
+    } else if (state.filtroPlanFecha === 'sin-fecha') {
+        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => !v.fecha));
+    } else {
+        dataFiltrada = Object.fromEntries(Object.entries(data).filter(([,v]) => v.fecha === state.filtroPlanFecha));
+    }
+
+    // Actualizar título con conteo
+    const tituloPlan = document.getElementById('tituloPlanPendientes');
+    if (tituloPlan) {
+        const n = Object.keys(dataFiltrada).length;
+        tituloPlan.textContent = `📋 Pedidos pendientes — ${n} serie${n!==1?'s':''}`;
+    }
+
     cuerpo.innerHTML = "";
 
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(dataFiltrada).length === 0) {
+        const msgFiltro = state.filtroPlanFecha === 'hoy' ? 'No hay pedidos para hoy' : 'Sin pedidos para este día';
         cuerpo.innerHTML = `
             <tr>
                 <td colspan="5" class="p-8 text-center">
                     <p class="text-2xl mb-2">📋</p>
-                    <p class="font-black text-sm text-slate-400 uppercase tracking-wide">Sin pedidos pendientes</p>
+                    <p class="font-black text-sm text-slate-400 uppercase tracking-wide">${msgFiltro}</p>
                 </td>
             </tr>`;
         setTimeout(inicializarDragDrop, 100);
         return;
     }
-    
-    if (state.sortable) {
-        state.sortable.destroy();
-        state.sortable = null;
-    }
-    
+
+    if (state.sortable) { state.sortable.destroy(); state.sortable = null; }
+
     const grupos = {}, ordenMap = {};
-    Object.keys(data).forEach(id => {
-        const item = data[id];
-        if (!grupos[item.pedido]) {
-            grupos[item.pedido] = [];
-            ordenMap[item.pedido] = item.orden || 999999;
-        }
+    Object.keys(dataFiltrada).forEach(id => {
+        const item = dataFiltrada[id];
+        if (!grupos[item.pedido]) { grupos[item.pedido] = []; ordenMap[item.pedido] = item.orden || 999999; }
         grupos[item.pedido].push({ ...item, id });
     });
-    
+
     const pedidosOrdenadosKeys = Object.keys(grupos).sort((a, b) => (ordenMap[a] || 999999) - (ordenMap[b] || 999999));
     state.pedidosOrdenados = pedidosOrdenadosKeys;
-    
+
     pedidosOrdenadosKeys.forEach((pedido, index) => {
         const pedidoId = `pedido-${index}`;
         const items = grupos[pedido];
         const cliente = items[0].cliente || "Sin cliente";
-        
+        const fechaItem = items[0].fecha;
+        const fechaBadge = fechaItem
+            ? `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-black ml-2">📅 ${formatFechaTab(fechaItem)}</span>`
+            : '';
+
         cuerpo.innerHTML += `
             <tr class="pedido-header bg-stone-50 cursor-pointer" data-pedido-key="${items[0].id}">
-                <td class="p-3 flex items-center gap-3" onclick="toggleGrupo('${pedidoId}')">
-                    <svg class="drag-handle w-5 h-5 text-slate-400 cursor-grab" fill="currentColor" viewBox="0 0 20 20">
+                <td class="p-3 flex items-center gap-3 flex-wrap" onclick="toggleGrupo('${pedidoId}')">
+                    <svg class="drag-handle w-5 h-5 text-slate-400 cursor-grab flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"></path>
                     </svg>
-                    <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
                     </svg>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-xs uppercase tracking-tighter text-slate-700">PEDIDO: ${pedido}</span>
-                        <span class="text-xs text-slate-400">—</span>
                         <span class="text-xs text-blue-700 font-black bg-blue-100 px-2 py-0.5 rounded">👤 ${cliente}</span>
+                        ${fechaBadge}
                     </div>
                     <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-bold">${items.length} UNID.</span>
                 </td>
@@ -1844,7 +1928,7 @@ onValue(planRef, (snap) => {
                 </td>
             </tr>
         `;
-        
+
         items.forEach(item => {
             const tieneNota = item.notas && item.notas.trim() !== "";
             cuerpo.innerHTML += `
@@ -1874,8 +1958,15 @@ onValue(planRef, (snap) => {
             `;
         });
     });
-    
+
     setTimeout(inicializarDragDrop, 100);
+};
+
+// Listener para planificación
+onValue(planRef, (snap) => {
+    const rawData = snap.val() || {};
+    const data = Object.fromEntries(Object.entries(rawData).filter(([, v]) => v !== null));
+    renderPlanificacion(data);
 });
 
 // Listener para estado de sesión
@@ -2141,7 +2232,11 @@ window.addEventListener('load', async () => {
     
     <!-- Pedidos Pendientes -->
     <div id="sec-plan" class="hidden">
-        <h2 class="text-base font-black uppercase tracking-widest text-red-600 mb-3">📋 Pedidos pendientes</h2>
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 id="tituloPlanPendientes" class="text-base font-black uppercase tracking-widest text-red-600">📋 Pedidos pendientes</h2>
+        </div>
+        <!-- Filtro por fecha de montaje -->
+        <div class="flex flex-wrap gap-2 mb-3" id="tabsFechaPlan"></div>
         <div class="bg-white rounded-3xl shadow-sm overflow-hidden border">
             <table class="w-full text-left text-xs">
                 <tbody id="cuerpoPlan"></tbody>
