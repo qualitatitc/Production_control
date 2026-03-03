@@ -790,15 +790,24 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
 };
 
 const calcularTendencia = (valores) => {
-    const n = valores.length;
-    const indices = valores.map((_, i) => i);
-    const sumaX = indices.reduce((a, b) => a + b, 0);
-    const sumaY = valores.reduce((a, b) => a + b, 0);
-    const sumaXY = indices.reduce((sum, x, i) => sum + x * valores[i], 0);
-    const sumaX2 = indices.reduce((sum, x) => sum + x * x, 0);
+    // Usar solo los meses con datos reales (> 0) para calcular la regresión
+    const puntos = valores
+        .map((v, i) => ({ x: i, y: v }))
+        .filter(p => p.y > 0);
+
+    const n = puntos.length;
+    if (n < 2) return null;
+
+    const sumaX = puntos.reduce((a, p) => a + p.x, 0);
+    const sumaY = puntos.reduce((a, p) => a + p.y, 0);
+    const sumaXY = puntos.reduce((sum, p) => sum + p.x * p.y, 0);
+    const sumaX2 = puntos.reduce((sum, p) => sum + p.x * p.x, 0);
     const pendiente = (n * sumaXY - sumaX * sumaY) / (n * sumaX2 - sumaX * sumaX);
     const intercept = (sumaY - pendiente * sumaX) / n;
-    return { pendiente, datos: indices.map(x => pendiente * x + intercept) };
+
+    // Generar valores de tendencia para todos los meses (incluidos los sin datos)
+    const datos = valores.map((_, x) => pendiente * x + intercept);
+    return { pendiente, datos };
 };
 
 // ✅ CORREGIDO: Sintaxis correcta para Chart.js
@@ -826,6 +835,10 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
     }
     
     const mesesConDatos = valoresMensuales.filter(v => v > 0);
+
+    // Reemplazar meses sin datos (0) por null para que Chart.js no pinte punto ni influya en la línea
+    const valoresMensualesConNull = valoresMensuales.map(v => v === 0 ? null : v);
+
     const tendencia = mesesConDatos.length >= 2 ? calcularTendencia(valoresMensuales) : null;
     const esTendenciaPositiva = tendencia && tendencia.pendiente >= 0;
     
@@ -844,7 +857,7 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
     const datasets = [
         {
             label: `Media Mensual (${mesesConDatos.length > 0 ? (mesesConDatos.reduce((a,b)=>a+b,0)/mesesConDatos.length).toFixed(1) : '--'})`,
-            data: valoresMensuales,
+            data: valoresMensualesConNull,
             borderColor: 'rgba(37, 99, 235, 1)',
             backgroundColor: 'rgba(37, 99, 235, 0.1)',
             borderWidth: 3,
@@ -854,6 +867,7 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
             pointBorderWidth: 2,
             fill: true,
             tension: 0.4,
+            spanGaps: true,
             order: 2
         },
         {
