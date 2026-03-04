@@ -370,7 +370,7 @@ const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
                 pointHoverRadius: 8,
                 borderWidth: 2,
                 fill: true,
-                tension: 0.4,
+                tension: 0.5,
                 order: 2
             }, {
                 label: `Media (${media.toFixed(1)} min)`,
@@ -499,7 +499,7 @@ const actualizarGraficoTiempoMensual = async (mesObj = null) => {
             pointHoverRadius: 7,
             borderWidth: 2,
             fill: true,
-            tension: 0.4,
+            tension: 0.5,
             order: 2
         },
         {
@@ -744,7 +744,7 @@ const actualizarGraficoDiario = async (mesSeleccionado = null) => {
                 pointHoverRadius: 7,
                 borderWidth: 2,
                 fill: true,
-                tension: 0.4,
+                tension: 0.5,
                 order: 2
             }, {
                 label: 'Objetivo (19)',
@@ -866,7 +866,7 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
             pointBorderColor: '#fff',
             pointBorderWidth: 2,
             fill: true,
-            tension: 0.4,
+            tension: 0.5,
             spanGaps: true,
             order: 2
         },
@@ -1715,6 +1715,13 @@ const renderizarTablaTareas = async () => {
         const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
         const esHito = t.codigo === "SISTEMA";
         
+        // Declarar estas variables primero para usarlas en tiempoTexto
+        const esIncidencia = t.numSerie === "INCIDENCIA";
+        const esDesayuno = t.numSerie === "PAUSA DESAYUNO";
+        const esReposicion = t.numSerie === "REPOSICIÓN";
+        const esEntrada = t.numSerie === "ENTRADA LÍNEA";
+        const esSalida = t.numSerie === "SALIDA LÍNEA";
+        
         let tiempoTexto = "";
         if (esActivo) {
             tiempoTexto = '<span class="animate-pulse">0m 0s</span>';
@@ -1725,16 +1732,15 @@ const renderizarTablaTareas = async () => {
         } else if (esPausaSistema) {
             tiempoTexto = "EN CURSO...";
         } else if (esHito) {
-            tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
+            // Mostrar tiempo total para INCIDENCIA y PAUSA DESAYUNO, hora para otros
+            if (esIncidencia || esDesayuno) {
+                tiempoTexto = `${t.total}m`;
+            } else {
+                tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
+            }
         } else {
             tiempoTexto = `${t.total}m`;
         }
-        
-        const esIncidencia = t.numSerie === "INCIDENCIA";
-        const esDesayuno = t.numSerie === "PAUSA DESAYUNO";
-        const esReposicion = t.numSerie === "REPOSICIÓN";
-        const esEntrada = t.numSerie === "ENTRADA LÍNEA";
-        const esSalida = t.numSerie === "SALIDA LÍNEA";
         
         const filaClase = esEntrada ? "bg-emerald-50 border-emerald-200" :
             esSalida ? "bg-red-50 border-red-200" :
