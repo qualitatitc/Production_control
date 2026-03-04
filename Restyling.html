@@ -1935,12 +1935,10 @@ const renderPlanificacion = (data) => {
                     <svg id="icon-${pedidoId}" class="w-4 h-4 transition-transform transform text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
                     </svg>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-xs uppercase tracking-tighter text-slate-700">PEDIDO: ${pedido}</span>
-                        <span class="text-xs text-blue-700 font-black bg-blue-100 px-2 py-0.5 rounded">👤 ${cliente}</span>
-                        ${fechaBadge}
-                    </div>
+                    <span class="text-xs uppercase tracking-tighter text-slate-700 font-black">PEDIDO: ${pedido}</span>
+                    <span class="text-xs text-blue-700 font-black bg-blue-100 px-2 py-0.5 rounded">👤 ${cliente}</span>
                     <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[10px] font-bold">${items.length} UNID.</span>
+                    ${fechaBadge}
                 </td>
                 <td colspan="3"></td>
                 <td class="p-3 text-right">
@@ -1953,25 +1951,27 @@ const renderPlanificacion = (data) => {
             const tieneNota = item.notas && item.notas.trim() !== "";
             cuerpo.innerHTML += `
                 <tr class="grupo-${pedidoId} grupo-item hidden border-b border-stone-100 bg-white hover:bg-stone-50">
-                    <td class="p-2 pl-12 font-bold text-slate-500 text-base">↳ ${item.codigo}</td>
-                    <td class="p-2">
-                        <span class="bg-red-100 text-red-600 px-2 py-0.5 rounded font-mono font-black text-[15px]">${item.serie}</span>
-                    </td>
-                    <td class="p-2 w-1/2">
-                        ${tieneNota
-                            ? `<div class="bg-yellow-100 border-l-4 border-yellow-500 p-2 rounded">
-                                <p class="text-[10px] font-black uppercase text-yellow-700">⚠️ NOTA:</p>
-                                <p class="text-sm font-bold">${item.notas}</p>
-                            </div>`
-                            : '<span class="text-stone-300 italic text-[10px]">Sin observaciones</span>'}
-                    </td>
-                    <td class="p-2 text-right" colspan="2">
-                        <div class="flex items-center justify-end gap-3">
-                            <button onclick="iniciarDesdePlan('${item.id}', '${item.serie}', '${item.codigo}', '${item.notas}', '${pedido}', '${item.cliente}')"
-                                class="group flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white px-3 py-1.5 rounded-full border border-emerald-200 hover:border-emerald-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Iniciar">
-                                <span class="text-xs">▶</span> Iniciar
-                            </button>
-                            <button onclick="borrarSeriePendiente('${item.id}', event)" class="text-stone-300 hover:text-red-500">🗑️</button>
+                    <td class="p-3 pl-12" colspan="5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-sm font-black text-slate-700">Modelo:</span>
+                                    <span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-black text-xs">${item.codigo}</span>
+                                    <span class="bg-red-100 text-red-600 px-2 py-1 rounded font-mono font-black text-sm">${item.serie}</span>
+                                    ${tieneNota
+                                        ? `<div class="bg-yellow-100 border-l-2 border-yellow-500 px-2 py-1 rounded">
+                                            <p class="text-[10px] font-black text-yellow-700">${item.notas}</p>
+                                        </div>`
+                                        : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <button onclick="iniciarDesdePlan('${item.id}', '${item.serie}', '${item.codigo}', '${item.notas}', '${pedido}', '${item.cliente}')"
+                                    class="group flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white px-3 py-1.5 rounded-full border border-emerald-200 hover:border-emerald-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Iniciar">
+                                    <span class="text-xs">▶</span> Iniciar
+                                </button>
+                                <button onclick="borrarSeriePendiente('${item.id}', event)" class="text-stone-300 hover:text-red-500">🗑️</button>
+                            </div>
                         </div>
                     </td>
                 </tr>
