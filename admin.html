@@ -414,8 +414,9 @@ for (const [key, mod] of Object.entries(MODULOS)) {
         if (t.codigo)  agrupado[fecha][pid].codigo  = t.codigo;
       });
       tareasCache[key] = agrupado;
-      console.log(`[tareasCache] ${key}:`, JSON.stringify(agrupado, null, 2));
-      if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
+      console.log(`[tareasCache] ${key}:`, JSON.stringify(agrupado));
+      console.log(`[calState] modulo=${calState.modulo}, key=${key}, modalOculto=${document.getElementById('modalCal').classList.contains('hidden')}`);
+      renderCalGrid();
       renderGlobalCal();
     });
   } catch(e){ console.error(key,e); }
@@ -694,7 +695,7 @@ function renderCalGrid(){
     // Pills arrastrables por pedido — merge planificacion + tareas
     // tareasCache[modulo][iso][pedido] = {series,estados,cliente,codigo}
     const tareasHoy = (tareasCache[modulo][iso]) || {};
-    if(Object.keys(tareasHoy).length > 0) console.log(`[render] ${iso} tareasHoy:`, tareasHoy);
+    if(Object.keys(tareasHoy).length > 0) console.log(`[render cal] ${iso} tareasHoy:`, JSON.stringify(tareasHoy));
     // Unir pedidos de planCache + tareasCache para este dia
     const todosPedidos = {};
     Object.entries(grupos).forEach(([pid, items]) => {
@@ -703,9 +704,9 @@ function renderCalGrid(){
     // Pedidos que ya no estan en planificacion (iniciados) pero si en tareas
     Object.entries(tareasHoy).forEach(([pid, info]) => {
       if (!todosPedidos[pid]) {
-        // Reconstruir items virtuales con las series de la tarea
         const items = [...new Set(info.series)].map(s => ({ serie:s, codigo:info.codigo, cliente:info.cliente }));
         todosPedidos[pid] = { items, tarea: info };
+        console.log(`[render cal] añadiendo pill virtual para Ped.${pid} en ${iso}`);
       }
     });
     const pillsHtml = Object.entries(todosPedidos).map(([pedId, { items, tarea }]) => {
