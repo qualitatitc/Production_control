@@ -804,10 +804,11 @@ function renderGlobalCal(){
     const totalPlan = Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
     const totalTareas = Object.keys(tareasCache).reduce((s,key)=>{ const t=tareasCache[key][iso]||{}; return s+Object.values(t).reduce((s2,info)=>s2+info.series.length,0); },0);
     const totalDia = totalPlan + (totalTareas > totalPlan ? totalTareas - totalPlan : 0);
-    // Pills por m\u00f3dulo \u2192 pedido (merge planificacion + tareas)
+    // Pills por módulo → pedido (merge planificacion + tareas)
     const pillsHtml = Object.entries(modsDia).flatMap(([key, grupos]) => {
       const col = MOD_COLORS[key];
       const tareasHoyG = (tareasCache[key][iso]) || {};
+      console.log(`[globalRender] iso=${iso} key=${key} grupos=${JSON.stringify(Object.keys(grupos))} tareasHoyG=${JSON.stringify(Object.keys(tareasHoyG))}`);
       const todosPG = {};
       Object.entries(grupos).forEach(([pid, items]) => {
         todosPG[pid] = { items, tarea: tareasHoyG[pid] || null };
