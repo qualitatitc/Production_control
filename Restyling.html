@@ -1045,11 +1045,12 @@ window.mostrarSelectorOperarios = async (modo = "entrada") => {
         let entradaSinSalida = false;
         if (snapshot.exists()) {
             const tareas = snapshot.val();
+            const hoyFecha = tsToFechaLocal(Date.now());
             const entradas = Object.entries(tareas)
-                .filter(([id, t]) => t.numSerie === "ENTRADA LÍNEA")
+                .filter(([id, t]) => t.numSerie === "ENTRADA LÍNEA" && tsToFechaLocal(t.inicioMS) === hoyFecha)
                 .sort((a, b) => a[1].inicioMS - b[1].inicioMS);
             const salidas = Object.entries(tareas)
-                .filter(([id, t]) => t.numSerie === "SALIDA LÍNEA")
+                .filter(([id, t]) => t.numSerie === "SALIDA LÍNEA" && tsToFechaLocal(t.inicioMS) === hoyFecha)
                 .sort((a, b) => a[1].inicioMS - b[1].inicioMS);
             
             if (entradas.length > salidas.length) {
@@ -1100,7 +1101,12 @@ window.cerrarSelector = () => {
     document.getElementById('modalOperarios').classList.remove('flex');
 };
 
+let _registrandoEntrada = false;
+
 window.seleccionarOperarios = async (num) => {
+    if (_registrandoEntrada) return; // Bloquear doble clic
+    _registrandoEntrada = true;
+    try {
     if (state.modo === "entrada") {
         state.operarios = num;
         const ahoraMSTime = Date.now();
@@ -1131,6 +1137,9 @@ window.seleccionarOperarios = async (num) => {
         });
         state.ids.reposicion = nuevaRep.key;
         state.reposicion = true;
+    }
+    } finally {
+        _registrandoEntrada = false;
     }
     actualizarEstadoLineaUI();
     cerrarSelector();
