@@ -1258,7 +1258,7 @@ document.getElementById('modalModulo').addEventListener('click', e=>{
 // ════════════════════════════════════════════════════════════════════
 // BUSCADOR POR NÚMERO DE SERIE
 // ════════════════════════════════════════════════════════════════════
-function buscarSerie(query) {
+window.buscarSerie = function(query) {
   const q = query.trim().toUpperCase();
   const results = document.getElementById('searchResults');
   const inner   = document.getElementById('searchResultsInner');
@@ -1273,6 +1273,7 @@ function buscarSerie(query) {
   }
 
   const encontrados = [];
+
 
   // Buscar en planCache (pendientes)
   for (const [modKey, data] of Object.entries(planCache)) {
@@ -1341,7 +1342,7 @@ function buscarSerie(query) {
   window._searchResultados = encontrados;
 }
 
-window.imprimirEtiquetaBuscador = async (idx) => {
+window.imprimirEtiquetaBuscador = async function(idx) {
   const r = window._searchResultados?.[idx];
   if (!r) return;
   const modal = document.getElementById('modalEtiqCal');
