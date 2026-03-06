@@ -16,23 +16,34 @@
             height: 55mm;
             background: white;
             border: 1px solid #000;
-            display: none; 
+            display: none;
             flex-direction: column;
-            padding: 2mm 3mm; /* Márgenes laterales reducidos para evitar cortes */
+            padding: 1.5mm 2.5mm;
             box-sizing: border-box;
             overflow: hidden;
         }
 
-        .section-title { font-size: 7pt; font-weight: bold; text-align: left; margin-top: 1mm; }
-        
+        /* Fila superior: título CODE + logo */
+        .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0mm;
+        }
+        .logo-itc {
+            height: 10mm;
+            width: auto;
+            flex-shrink: 0;
+        }
+
+        .section-title { font-size: 7pt; font-weight: bold; text-align: left; margin-top: 0.5mm; }
+
         .barcode-area { text-align: center; width: 100%; margin: 0; padding: 0; }
-        /* Forzamos que el SVG no se salga del ancho del contenedor */
         .barcode-svg { max-width: 100%; height: auto; }
 
-        .divider { border-top: 1px solid #000; margin: 1mm 0; width: 100%; }
+        .divider { border-top: 1px solid #000; margin: 0.8mm 0; width: 100%; }
 
-        /* Descripciones: Letra más pequeña (7pt) para ganar espacio */
-        .desc-text { font-size: 7pt; line-height: 1.1; text-align: left; word-wrap: break-word; }
+        .desc-text { font-size: 6.5pt; line-height: 1.1; text-align: left; word-wrap: break-word; }
         .desc-es { font-weight: normal; text-transform: lowercase; color: #000; }
         .desc-en { font-style: italic; color: #444; }
 
@@ -56,7 +67,11 @@
     </div>
 
     <div id="etiqueta-itc">
-        <div class="section-title">CODE</div>
+        <!-- Fila superior: CODE a la izquierda, logo a la derecha -->
+        <div class="header-row">
+            <div class="section-title">CODE</div>
+            <img class="logo-itc" src="Logo_itc.png" alt="ITC">
+        </div>
         <div class="barcode-area">
             <svg id="barcode-code" class="barcode-svg"></svg>
         </div>
