@@ -490,7 +490,7 @@ function actualizarGraficoProductividadDiaria() {
     data: {
       labels,
       datasets: [
-        { label: 'Productividad', data: datosProductividad, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 3, pointRadius: 6, pointBackgroundColor: '#3b82f6', fill: true, tension: 0.3, spanGaps: true, order: 2 },
+        { label: 'Productividad', data: datosProductividad, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: '#3b82f6', fill: true, tension: 0.3, spanGaps: true, order: 2 },
         { label: 'Media', data: lineaMedia, borderColor: '#fbbf24', backgroundColor: 'rgba(251, 191, 36, 0.1)', borderWidth: 3, borderDash: [5, 5], pointRadius: 0, fill: false, tension: 0, order: 1 }
       ]
     },
@@ -1175,10 +1175,10 @@ function actualizarTablaTareas() {
     todasLasTareasCombinadas[id] = { ...t, id, _nodo: 'historial_tareas' };
   });
   
-  // Luego añadir activas SOLO si no están ya en historial,
-  // NO están finalizadas, y NO están en pausa_salida_linea (estado interno)
+  // Luego añadir activas SOLO si no están ya en historial y NO están finalizadas
+  // Las tareas en pausa_salida_linea SÍ se muestran (quedan en pausa hasta reactivar línea)
   Object.entries(tareasActivasTemp || {}).forEach(([id, t]) => {
-    if (!idsHistorial.has(id) && t.estado !== 'finalizado' && t.estado !== 'pausa_salida_linea') {
+    if (!idsHistorial.has(id) && t.estado !== 'finalizado') {
       todasLasTareasCombinadas[id] = { ...t, id, _nodo: 'tareas' };
     }
   });
@@ -1224,8 +1224,8 @@ function actualizarTablaTareas() {
       rowClass = "bg-blue-50";
       tiempoMostrado = `<span class="text-blue-500 italic">⏸️ ${formatTime(t.acumuladoMS)}</span>`;
     } else if (t.estado === "pausa_salida_linea") {
-      rowClass = "bg-purple-50";
-      tiempoMostrado = `<span class="text-purple-500 italic">🚪 Línea Parada</span>`;
+      rowClass = "bg-purple-50 border-l-4 border-purple-400";
+      tiempoMostrado = `<span class="text-purple-600 font-black uppercase text-xs animate-pulse">⏸️ EN PAUSA</span>`;
     } else if (t.estado === "pausado_desayuno") {
       rowClass = "bg-orange-50 border-l-4 border-orange-400";
       tiempoMostrado = `<span class="text-orange-600 font-bold uppercase">☕ DESAYUNO</span>`;
@@ -1249,6 +1249,7 @@ function actualizarTablaTareas() {
     }
 
     const estaEnPausa = t.estado && t.estado.startsWith('pausa_');
+    const pausaSalidaLinea = t.estado === 'pausa_salida_linea';
 
     cuerpo.innerHTML += `
       <tr class="${rowClass} border-b border-slate-100 transition-all">
@@ -1258,9 +1259,12 @@ function actualizarTablaTareas() {
         <td class="p-4 font-bold text-slate-800">${t.codigo}</td>
         <td class="p-4 font-mono text-[10px] text-slate-400">${t.inicio}</td>
         <td class="p-4 font-mono text-[10px] text-slate-400">${t.fin || '--:--'}</td>
-        <td class="p-4 font-black text-center">${tiempoMostrado}</td>
+        <td class="p-4 font-black text-center">
+          ${tiempoMostrado}
+          ${pausaSalidaLinea && t.acumuladoMS ? `<div class="text-[10px] text-purple-400 font-bold mt-1">${formatTime(t.acumuladoMS)}</div>` : ''}
+        </td>
         <td class="p-4 text-right flex justify-end gap-2">
-          ${activo ? `<button onclick="finalizarTarea('${t.id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>` : (estaEnPausa ? '⏸️' : '✓')}
+          ${(activo || pausaSalidaLinea) ? `<button onclick="finalizarTarea('${t.id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>` : (estaEnPausa ? '⏸️' : '✓')}
           <button onclick="borrarTarea('${t.id}', '${t._nodo}')" class="text-slate-300 hover:text-red-500 ml-2" title="Borrar tarea">🗑️</button>
         </td>
       </tr>`;
@@ -1761,58 +1765,57 @@ window.exportarExcel = async () => {
     <button onclick="forzarParadaLinea()" id="btnForzarParada" class="bg-slate-700 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase shadow flex items-center gap-2 transition-colors">⛔ Forzar Parada de Línea</button>
   </div>
 
-  <!-- GRÁFICO 1: Tiempo por Tarea -->
-  <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-      <div>
-        <h2 class="text-2xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
-        <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+  <!-- GRÁFICOS 1 y 2: Lado a lado -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+
+    <!-- GRÁFICO 1: Tiempo por Tarea -->
+    <div class="bg-white rounded-2xl shadow-xl p-6 border border-slate-200">
+      <div class="flex flex-col gap-3 mb-6">
+        <div>
+          <h2 class="text-xl font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
+          <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos</p>
+        </div>
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl w-fit">
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
           <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
-
+      </div>
+      <div class="h-72 w-full"><canvas id="graficoTareas"></canvas></div>
+      <div class="flex justify-between items-center mt-4">
+        <div class="flex flex-wrap gap-4">
+          <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-blue-500"></div><span class="font-bold text-slate-700 text-sm">Adrian García</span></div>
+          <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-red-500"></div><span class="font-bold text-slate-700 text-sm">Aitor Bautista</span></div>
+          <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full" style="background:linear-gradient(90deg, #3b82f6 50%, #ef4444 50%)"></div><span class="font-bold text-slate-700 text-sm">Ambos</span></div>
+        </div>
+        <div id="contadorTareas" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">Cargando...</div>
       </div>
     </div>
-    <div class="h-96 w-full"><canvas id="graficoTareas"></canvas></div>
-    <div class="flex justify-between items-center mt-4">
-      <div class="flex justify-center gap-8">
-        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-blue-500"></div><span class="font-bold text-slate-700">Adrian García</span></div>
-        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-red-500"></div><span class="font-bold text-slate-700">Aitor Bautista</span></div>
-        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full" style="background:linear-gradient(90deg, #3b82f6 50%, #ef4444 50%)"></div><span class="font-bold text-slate-700">Ambos</span></div>
-      </div>
-      <div id="contadorTareas" class="text-sm font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">Cargando...</div>
-    </div>
-  </div>
 
-  <!-- GRÁFICO 2: Productividad Diaria -->
-  <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-      <div>
-        <h2 class="text-2xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
-        <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Horas × Nº Operarios)</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+    <!-- GRÁFICO 2: Productividad Diaria -->
+    <div class="bg-white rounded-2xl shadow-xl p-6 border border-slate-200">
+      <div class="flex flex-col gap-3 mb-6">
+        <div>
+          <h2 class="text-xl font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
+          <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Horas × Nº Operarios)</p>
+        </div>
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl w-fit">
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
           <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
+      </div>
+      <div class="h-72 w-full"><canvas id="graficoProductividadDiaria"></canvas></div>
+      <div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
+        <div class="flex flex-wrap gap-4">
+          <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-blue-500"></div><span class="font-bold text-slate-700 text-sm">Productividad</span></div>
+          <div class="flex items-center gap-2"><div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div><span class="font-bold text-slate-700 text-sm">Media</span></div>
+        </div>
+        <div class="text-right">
+          <div id="mediaProductividadDiaria" class="text-base font-black text-amber-500">Media del mes: 0.00</div>
+          <div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">Días con datos: 0</div>
+        </div>
+      </div>
+    </div>
 
-      </div>
-    </div>
-    <div class="h-96 w-full"><canvas id="graficoProductividadDiaria"></canvas></div>
-    <div class="flex justify-between items-center mt-4 bg-slate-50 p-4 rounded-xl">
-      <div class="flex justify-center gap-8">
-        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-blue-500"></div><span class="font-bold text-slate-700">Productividad</span></div>
-        <div class="flex items-center gap-2"><div class="w-8 h-1 bg-yellow-400 border-2 border-yellow-400 border-dashed"></div><span class="font-bold text-slate-700">Media</span></div>
-      </div>
-      <div class="text-right">
-        <div id="mediaProductividadDiaria" class="text-lg font-black text-amber-500">Media del mes: 0.00</div>
-        <div id="diasConDatosDiaria" class="text-xs font-bold text-slate-500">Días con datos: 0</div>
-      </div>
-    </div>
   </div>
 
   <!-- GRÁFICO 3: Productividad Mensual -->
