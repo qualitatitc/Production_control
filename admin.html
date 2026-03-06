@@ -414,8 +414,6 @@ for (const [key, mod] of Object.entries(MODULOS)) {
         if (t.codigo)  agrupado[fecha][pid].codigo  = t.codigo;
       });
       tareasCache[key] = agrupado;
-      console.log(`[tareasCache] ${key}:`, JSON.stringify(agrupado));
-      console.log(`[calState] modulo=${calState.modulo}, key=${key}, modalOculto=${document.getElementById('modalCal').classList.contains('hidden')}`);
       renderCalGrid();
       renderGlobalCal();
     });
@@ -695,7 +693,6 @@ function renderCalGrid(){
     // Pills arrastrables por pedido — merge planificacion + tareas
     // tareasCache[modulo][iso][pedido] = {series,estados,cliente,codigo}
     const tareasHoy = (tareasCache[modulo][iso]) || {};
-    if(Object.keys(tareasHoy).length > 0) console.log(`[render cal] ${iso} tareasHoy:`, JSON.stringify(tareasHoy));
     // Unir pedidos de planCache + tareasCache para este dia
     const todosPedidos = {};
     Object.entries(grupos).forEach(([pid, items]) => {
@@ -706,7 +703,6 @@ function renderCalGrid(){
       if (!todosPedidos[pid]) {
         const items = [...new Set(info.series)].map(s => ({ serie:s, codigo:info.codigo, cliente:info.cliente }));
         todosPedidos[pid] = { items, tarea: info };
-        console.log(`[render cal] añadiendo pill virtual para Ped.${pid} en ${iso}`);
       }
     });
     const pillsHtml = Object.entries(todosPedidos).map(([pedId, { items, tarea }]) => {
@@ -808,7 +804,6 @@ function renderGlobalCal(){
     const pillsHtml = Object.entries(modsDia).flatMap(([key, grupos]) => {
       const col = MOD_COLORS[key];
       const tareasHoyG = (tareasCache[key][iso]) || {};
-      console.log(`[globalRender] iso=${iso} key=${key} grupos=${JSON.stringify(Object.keys(grupos))} tareasHoyG=${JSON.stringify(Object.keys(tareasHoyG))}`);
       const todosPG = {};
       Object.entries(grupos).forEach(([pid, items]) => {
         todosPG[pid] = { items, tarea: tareasHoyG[pid] || null };
