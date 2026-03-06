@@ -768,7 +768,7 @@ const globalCal = { year:new Date().getFullYear(), month:new Date().getMonth(), 
 function renderGlobalCal(){
   const { year, month } = globalCal;
   document.getElementById('globalCalMes').textContent=`${MESES[month]} ${year}`;
-  // Mapa fecha → modulo → grupos de pedido
+  // Mapa fecha → modulo → grupos de pedido (solo desde planCache — tareas se mezclan después)
   const porFecha={};
   for(const [key,data] of Object.entries(planCache)){
     Object.entries(data).forEach(([fbId,item])=>{
@@ -778,6 +778,15 @@ function renderGlobalCal(){
       porFecha[f][key][p].push({fbId,...item});
     });
   }
+  // AÑADIR fechas de tareasCache que no estén ya en porFecha
+  for(const [key, porFechaTareas] of Object.entries(tareasCache)){
+    for(const [fecha, pedidos] of Object.entries(porFechaTareas)){
+      if(!porFecha[fecha]) porFecha[fecha]={};
+      if(!porFecha[fecha][key]) porFecha[fecha][key]={};
+      // Los pedidos de tareas ya se mezclan dentro del render — solo necesitamos
+      // que el módulo aparezca en modsDia para que se itere
+    }
+  }
   const hoy=hoyISO();
   const primerDia=new Date(year,month,1).getDay(); const offset=primerDia===0?6:primerDia-1;
   const diasMes=new Date(year,month+1,0).getDate();
@@ -786,9 +795,15 @@ function renderGlobalCal(){
   for(let d=1;d<=diasMes;d++){
     const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const modsDia=porFecha[iso]||{};
+    // Añadir módulos que tienen tareas en tareasCache para este día pero no en planCache
+    for(const [key, porFechaTareas] of Object.entries(tareasCache)){
+      if(porFechaTareas[iso] && !modsDia[key]) modsDia[key]={};
+    }
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
-    const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
+    const totalPlan = Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
+    const totalTareas = Object.keys(tareasCache).reduce((s,key)=>{ const t=tareasCache[key][iso]||{}; return s+Object.values(t).reduce((s2,info)=>s2+info.series.length,0); },0);
+    const totalDia = totalPlan + (totalTareas > totalPlan ? totalTareas - totalPlan : 0);
     // Pills por m\u00f3dulo \u2192 pedido (merge planificacion + tareas)
     const pillsHtml = Object.entries(modsDia).flatMap(([key, grupos]) => {
       const col = MOD_COLORS[key];
