@@ -369,7 +369,8 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
 const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
-const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} }; // activo+finalizado, excluye SISTEMA
+// tareasCache: pedidos agrupados por moduloKey → fecha(ISO) → pedidoId → {series,estados,cliente,codigo}
+const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
 
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
@@ -391,19 +392,28 @@ for (const [key, mod] of Object.entries(MODULOS)) {
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
-    // Escuchar tareas (activo + finalizado) para mostrar en calendario
+    // Escuchar tareas para mostrar estado en curso / finalizado en calendario
     onValue(ref(dbs[key],'tareas'), snap=>{
-      const raw=snap.val()||{};
-      const ESTADOS_VALIDOS=['activo','pausa','finalizado','en_pausa_sistema','en_incidencia_sistema','en_reposicion_sistema'];
-      const SERIES_SISTEMA=['ENTRADA LÍNEA','SALIDA LÍNEA','ENTRADA LINEA','SALIDA LINEA'];
-      tareasCache[key]=Object.fromEntries(
-        Object.entries(raw).filter(([,v])=>
-          v!==null && v.pedido && v.inicioMS &&
-          v.codigo!=='SISTEMA' &&
-          !SERIES_SISTEMA.includes(v.numSerie) &&
-          ESTADOS_VALIDOS.includes(v.estado)
-        )
-      );
+      const raw = snap.val()||{};
+      const SKIP = ['ENTRADA LÍNEA','SALIDA LÍNEA','ENTRADA LINEA','SALIDA LINEA'];
+      // Reconstruir fecha local desde inicioMS (igual que tsToFechaLocal en los modulos)
+      const msToISO = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+      // Agrupar por fecha → pedido, conservando series y estado mas avanzado
+      const agrupado = {};
+      Object.values(raw).forEach(t => {
+        if (!t || t.codigo==='SISTEMA' || SKIP.includes(t.numSerie)) return;
+        if (!t.pedido || !t.inicioMS) return;
+        const fecha = msToISO(t.inicioMS);
+        if (!agrupado[fecha]) agrupado[fecha] = {};
+        const pid = String(t.pedido);
+        if (!agrupado[fecha][pid]) agrupado[fecha][pid] = { series:[], estados:[], cliente:t.cliente||'', codigo:t.codigo||'' };
+        const ss = String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
+        agrupado[fecha][pid].series.push(...ss);
+        agrupado[fecha][pid].estados.push(t.estado||'');
+        if (t.cliente) agrupado[fecha][pid].cliente = t.cliente;
+        if (t.codigo)  agrupado[fecha][pid].codigo  = t.codigo;
+      });
+      tareasCache[key] = agrupado;
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
@@ -681,48 +691,41 @@ function renderCalGrid(){
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     // Pills arrastrables por pedido — merge planificacion + tareas
-    const tsToISO = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-    // Agrupar tareas de este modulo y fecha por pedido
-    const tareasGrupos={};
-    Object.values(tareasCache[modulo]).forEach(t=>{
-      if(tsToISO(t.inicioMS)!==iso) return;
-      if(!tareasGrupos[t.pedido]) tareasGrupos[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[],estados:[]};
-      const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
-      tareasGrupos[t.pedido].series.push(...ss);
-      tareasGrupos[t.pedido].estados.push(t.estado);
+    // tareasCache[modulo][iso][pedido] = {series,estados,cliente,codigo}
+    const tareasHoy = (tareasCache[modulo][iso]) || {};
+    // Unir pedidos de planCache + tareasCache para este dia
+    const todosPedidos = {};
+    Object.entries(grupos).forEach(([pid, items]) => {
+      todosPedidos[pid] = { items, tarea: tareasHoy[pid] || null };
     });
-    // Fusionar: pendientes de planCache + en curso/finalizados de tareasCache
-    const todosPedidos={};
-    Object.entries(grupos).forEach(([pid,items])=>{ todosPedidos[pid]={items,tarea:null}; });
-    Object.entries(tareasGrupos).forEach(([pid,info])=>{
-      if(!todosPedidos[pid]) todosPedidos[pid]={items:[],tarea:null};
-      todosPedidos[pid].tarea=info;
-      // Si ya no hay items en planCache, crear items virtuales con los S/N de tareas
-      if(!todosPedidos[pid].items.length){
-        todosPedidos[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente}));
+    // Pedidos que ya no estan en planificacion (iniciados) pero si en tareas
+    Object.entries(tareasHoy).forEach(([pid, info]) => {
+      if (!todosPedidos[pid]) {
+        // Reconstruir items virtuales con las series de la tarea
+        const items = [...new Set(info.series)].map(s => ({ serie:s, codigo:info.codigo, cliente:info.cliente }));
+        todosPedidos[pid] = { items, tarea: info };
       }
     });
-    const pillsHtml=Object.entries(todosPedidos).map(([pedId,{items,tarea}])=>{
-      const cliente=items[0]?.cliente||'\u2014';
-      const codigo=items[0]?.codigo||'\u2014';
-      const uds=items.length;
-      const pedSafe=String(pedId).replace(/'/g,"\\'");
-      // Determinar estado visual
-      const esFinalizado = tarea && tarea.estados.length>0 && tarea.estados.every(e=>e==='finalizado');
-      const esEnCurso   = tarea && !esFinalizado;
-      const pillCls = esFinalizado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-                    : esEnCurso   ? `bg-blue-50 border-blue-300`
-                    : `${col.pill} border ${col.border}`;
-      const dotCls  = esFinalizado ? 'bg-slate-400'
-                    : esEnCurso   ? 'bg-blue-400 animate-pulse'
-                    : col.dot;
-      const draggable = (esFinalizado||esEnCurso) ? 'draggable="false"'
-                      : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-      const badge = esFinalizado ? '<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>'
-                  : esEnCurso   ? '<span class="text-[9px] font-black text-blue-600 bg-blue-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>'
+    const pillsHtml = Object.entries(todosPedidos).map(([pedId, { items, tarea }]) => {
+      const cliente = items[0]?.cliente || '\u2014';
+      const codigo  = items[0]?.codigo  || '\u2014';
+      const uds     = items.length;
+      const pedSafe = String(pedId).replace(/'/g, "\\'");
+      const esFin    = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
+      const esCurso  = tarea && !esFin;
+      const pillCls  = esFin   ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
+                     : esCurso ? 'bg-blue-50 border-blue-300'
+                     : `${col.pill} border ${col.border}`;
+      const dotCls   = esFin   ? 'bg-slate-400'
+                     : esCurso ? 'bg-blue-400 animate-pulse'
+                     : col.dot;
+      const draggable = (esFin || esCurso) ? 'draggable="false"'
+        : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+      const badge = esFin   ? '<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>'
+                  : esCurso ? '<span class="text-[9px] font-black text-blue-600 bg-blue-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>'
                   : '';
-      const botones = (esFinalizado||esEnCurso)
-        ? `<span class="text-slate-300 text-lg leading-none select-none">${esFinalizado?'\u2713':'\u25b6'}</span>`
+      const botones = (esFin || esCurso)
+        ? `<span class="text-slate-300 text-lg leading-none select-none">${esFin ? '\u2713' : '\u25b6'}</span>`
         : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
           <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
       return `
@@ -784,46 +787,39 @@ function renderGlobalCal(){
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
     // Pills por m\u00f3dulo \u2192 pedido (merge planificacion + tareas)
-    const tsToISO2 = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-    const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>{
-      const col=MOD_COLORS[key];
-      const tareasGruposG={};
-      Object.values(tareasCache[key]).forEach(t=>{
-        if(tsToISO2(t.inicioMS)!==iso) return;
-        if(!tareasGruposG[t.pedido]) tareasGruposG[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[],estados:[]};
-        const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
-        tareasGruposG[t.pedido].series.push(...ss);
-        tareasGruposG[t.pedido].estados.push(t.estado);
+    const pillsHtml = Object.entries(modsDia).flatMap(([key, grupos]) => {
+      const col = MOD_COLORS[key];
+      const tareasHoyG = (tareasCache[key][iso]) || {};
+      const todosPG = {};
+      Object.entries(grupos).forEach(([pid, items]) => {
+        todosPG[pid] = { items, tarea: tareasHoyG[pid] || null };
       });
-      const todosPG={};
-      Object.entries(grupos).forEach(([pid,items])=>{ todosPG[pid]={items,tarea:null}; });
-      Object.entries(tareasGruposG).forEach(([pid,info])=>{
-        if(!todosPG[pid]) todosPG[pid]={items:[],tarea:null};
-        todosPG[pid].tarea=info;
-        if(!todosPG[pid].items.length){
-          todosPG[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente}));
+      Object.entries(tareasHoyG).forEach(([pid, info]) => {
+        if (!todosPG[pid]) {
+          const items = [...new Set(info.series)].map(s => ({ serie:s, codigo:info.codigo, cliente:info.cliente }));
+          todosPG[pid] = { items, tarea: info };
         }
       });
-      return Object.entries(todosPG).map(([pedId,{items,tarea}])=>{
-        const cliente=items[0]?.cliente||'\u2014';
-        const codigo=items[0]?.codigo||'\u2014';
-        const uds=items.length;
-        const pedSafe=String(pedId).replace(/'/g,"\\'");
-        const esFinalizado = tarea && tarea.estados.length>0 && tarea.estados.every(e=>e==='finalizado');
-        const esEnCurso   = tarea && !esFinalizado;
-        const pillCls = esFinalizado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-                      : esEnCurso   ? 'bg-blue-50 border-blue-300'
-                      : `${col.pill} border ${col.border}`;
-        const dotCls  = esFinalizado ? 'bg-slate-400'
-                      : esEnCurso   ? 'bg-blue-400 animate-pulse'
-                      : col.dot;
-        const draggable = (esFinalizado||esEnCurso) ? 'draggable="false"'
-                        : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-        const badge = esFinalizado ? '<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>'
-                    : esEnCurso   ? '<span class="text-[8px] font-black text-blue-600 bg-blue-100 rounded px-1">\u25b6</span>'
+      return Object.entries(todosPG).map(([pedId, { items, tarea }]) => {
+        const cliente = items[0]?.cliente || '\u2014';
+        const codigo  = items[0]?.codigo  || '\u2014';
+        const uds     = items.length;
+        const pedSafe = String(pedId).replace(/'/g, "\\'");
+        const esFin   = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
+        const esCurso = tarea && !esFin;
+        const pillCls  = esFin   ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
+                       : esCurso ? 'bg-blue-50 border-blue-300'
+                       : `${col.pill} border ${col.border}`;
+        const dotCls   = esFin   ? 'bg-slate-400'
+                       : esCurso ? 'bg-blue-400 animate-pulse'
+                       : col.dot;
+        const draggable = (esFin || esCurso) ? 'draggable="false"'
+          : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+        const badge = esFin   ? '<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>'
+                    : esCurso ? '<span class="text-[8px] font-black text-blue-600 bg-blue-100 rounded px-1">\u25b6</span>'
                     : '';
-        const botones = (esFinalizado||esEnCurso)
-          ? `<span class="text-slate-300 text-sm leading-none select-none">${esFinalizado?'\u2713':'\u25b6'}</span>`
+        const botones = (esFin || esCurso)
+          ? `<span class="text-slate-300 text-sm leading-none select-none">${esFin ? '\u2713' : '\u25b6'}</span>`
           : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
             <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
         return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
@@ -1092,19 +1088,17 @@ function corregirTexto(t) {
 
 window.imprimirEtiquetasPedidoCal = async (moduloKey, pedidoId, fecha, e) => {
   if (e) e.stopPropagation();
-  const tsToISOP = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-  // Buscar en planCache primero, luego en tareasCache
+  const msToISOP = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  // 1. Buscar en planCache (pendientes)
   let items = Object.entries(planCache[moduloKey])
-    .filter(([,v]) => v.pedido === pedidoId && v.fecha === fecha)
-    .map(([,v]) => v);
+    .filter(([,v]) => v.pedido === pedidoId && (v.fecha||'sin-fecha') === fecha)
+    .map(([,v]) => ({ serie:v.serie, codigo:v.codigo, cliente:v.cliente, fecha }));
+  // 2. Si no hay en planCache, buscar en tareasCache (en curso o finalizadas)
   if (!items.length) {
-    // Ya fue iniciada — reconstruir series desde tareasCache
-    Object.values(tareasCache[moduloKey])
-      .filter(t => t.pedido === pedidoId && tsToISOP(t.inicioMS) === fecha)
-      .forEach(t => {
-        const ss = String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
-        ss.forEach(s => items.push({ serie:s, codigo:t.codigo, cliente:t.cliente, fecha }));
-      });
+    const tareasPed = (tareasCache[moduloKey][fecha] || {})[pedidoId];
+    if (tareasPed) {
+      items = [...new Set(tareasPed.series)].map(s => ({ serie:s, codigo:tareasPed.codigo, cliente:tareasPed.cliente, fecha }));
+    }
   }
   if (!items.length) { alert('No se encontraron series para este pedido.'); return; }
   const modal = document.getElementById('modalEtiqCal');
@@ -1169,7 +1163,8 @@ window.lanzarImpresionCal = () => {
     '.desc-text { font-size:6.5pt; line-height:1.15; word-wrap:break-word; }',
     '.desc-es { color:#000; }',
     '.desc-en { font-style:italic; color:#444; }',
-    '@media print { html,body{width:75mm;height:55mm;margin:0;padding:0;background:white;} .toolbar{display:none!important;} .preview-wrap{margin:0;padding:0;gap:0;display:block;} .etiqueta-itc{width:75mm!important;height:55mm!important;box-shadow:none;border:none;page-break-after:always;break-after:page;} .etiqueta-itc:last-child{page-break-after:avoid;break-after:avoid;} @page{size:75mm 55mm;margin:0;} }'  ].join('\n');
+    '@media print { html,body{width:75mm;height:55mm;margin:0;padding:0;background:white;} .toolbar{display:none!important;} .preview-wrap{margin:0;padding:0;gap:0;display:block;} .etiqueta-itc{width:75mm!important;height:55mm!important;box-shadow:none;border:none;page-break-after:always;break-after:page;} .etiqueta-itc:last-child{page-break-after:avoid;break-after:avoid;} @page{size:75mm 55mm;margin:0;} }'
+  ].join('\n');
   const SCRIPT=['window.onload=function(){',
     '  document.querySelectorAll(".barcode-svg").forEach(function(svg){',
     '    var val=svg.dataset.val||"ERROR"; var type=svg.dataset.type||"sn";',
