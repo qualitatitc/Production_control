@@ -195,6 +195,27 @@
     </div>
   </div>
 
+  <!-- BUSCADOR DISCRETO -->
+  <div class="mb-6">
+    <div class="flex items-center gap-2">
+      <div class="relative">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+        <input id="searchSerieInput" type="text" placeholder="Buscar serie o pedido…"
+          class="pl-8 pr-8 py-2 rounded-xl border border-slate-200 focus:border-slate-400 focus:outline-none text-xs font-semibold transition-colors bg-white text-slate-600 w-56"
+          oninput="buscarSerie(this.value)" onkeydown="if(event.key==='Escape'){this.value='';buscarSerie('');}">
+        <button id="searchClearBtn" onclick="document.getElementById('searchSerieInput').value='';buscarSerie('');"
+          class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 text-xs font-black">✕</button>
+      </div>
+    </div>
+    <!-- Resultados flotantes -->
+    <div id="searchResults" class="hidden relative z-40 mt-1 w-96 max-w-[90vw]">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+        <div id="searchResultsInner" class="divide-y divide-slate-100 max-h-72 overflow-y-auto"></div>
+        <div id="searchEmpty" class="hidden py-4 text-center text-slate-400 text-xs font-semibold">Sin resultados</div>
+      </div>
+    </div>
+  </div>
+
   <!-- CALENDARIO GLOBAL -->
   <div class="bg-white rounded-3xl border border-slate-200 shadow-sm mb-8 overflow-hidden">
     <div class="bg-slate-900 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
@@ -1233,6 +1254,120 @@ window.cerrarModuloIframe = () => {
 document.getElementById('modalModulo').addEventListener('click', e=>{
   if(e.target===document.getElementById('modalModulo')) cerrarModuloIframe();
 });
+
+// ════════════════════════════════════════════════════════════════════
+// BUSCADOR POR NÚMERO DE SERIE
+// ════════════════════════════════════════════════════════════════════
+function buscarSerie(query) {
+  const q = query.trim().toUpperCase();
+  const results = document.getElementById('searchResults');
+  const inner   = document.getElementById('searchResultsInner');
+  const empty   = document.getElementById('searchEmpty');
+  const clearBtn= document.getElementById('searchClearBtn');
+
+  clearBtn.classList.toggle('hidden', q.length === 0);
+
+  if (q.length < 2) {
+    results.classList.add('hidden');
+    return;
+  }
+
+  const encontrados = [];
+
+  // Buscar en planCache (pendientes)
+  for (const [modKey, data] of Object.entries(planCache)) {
+    for (const [fbId, item] of Object.entries(data)) {
+      const serie  = String(item.serie  || '').toUpperCase();
+      const pedido = String(item.pedido || '').toUpperCase();
+      if (serie.includes(q) || pedido.includes(q)) {
+        encontrados.push({ modKey, serie: item.serie||'—', pedido: item.pedido||'—', codigo: item.codigo||'—', cliente: item.cliente||'—', fecha: item.fecha||null, estado: 'pendiente' });
+      }
+    }
+  }
+
+  // Buscar en tareasCache (en curso / finalizadas)
+  for (const [modKey, porFecha] of Object.entries(tareasCache)) {
+    for (const [fecha, pedidos] of Object.entries(porFecha)) {
+      for (const [pid, info] of Object.entries(pedidos)) {
+        const pedidoMatch = String(pid).toUpperCase().includes(q);
+        const seriesMatch = info.series.filter(s => String(s).toUpperCase().includes(q));
+        if (seriesMatch.length || pedidoMatch) {
+          const series = pedidoMatch ? info.series : seriesMatch;
+          const estado = info.estados.every(e => e==='finalizado') ? 'finalizado' : 'en_curso';
+          series.forEach(serie => {
+            encontrados.push({ modKey, serie, pedido: pid, codigo: info.codigo||'—', cliente: info.cliente||'—', fecha, estado });
+          });
+        }
+      }
+    }
+  }
+
+  if (!encontrados.length) {
+    inner.innerHTML = '';
+    empty.classList.remove('hidden');
+    results.classList.remove('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  results.classList.remove('hidden');
+
+  const MOD_DOT   = { agitador:'bg-emerald-500', dostec40:'bg-red-500', dostec50:'bg-orange-500', restyling:'bg-sky-500' };
+  const MOD_LABEL = { agitador:'Agitador', dostec40:'D40', dostec50:'D50', restyling:'Restyling' };
+  const MOD_TEXT  = { agitador:'text-emerald-600', dostec40:'text-red-600', dostec50:'text-orange-600', restyling:'text-sky-600' };
+
+  inner.innerHTML = encontrados.slice(0, 12).map((r, idx) => {
+    const estadoIcon = r.estado==='finalizado' ? '<span class="text-slate-400">✓</span>'
+                     : r.estado==='en_curso'    ? '<span class="text-blue-500">▶</span>'
+                     : '<span class="text-amber-500">⏳</span>';
+    return `
+    <div class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors">
+      <span class="w-2 h-2 rounded-full ${MOD_DOT[r.modKey]} flex-shrink-0"></span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1.5">
+          <span class="font-black text-xs text-slate-800 font-mono">${r.serie}</span>
+          <span class="text-[10px] text-slate-400">Ped.${r.pedido}</span>
+          ${estadoIcon}
+        </div>
+        <div class="text-[10px] text-slate-400 truncate">${MOD_LABEL[r.modKey]} · ${r.codigo}</div>
+      </div>
+      <button onclick="imprimirEtiquetaBuscador(${idx})"
+        class="flex-shrink-0 bg-purple-500 hover:bg-purple-600 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-colors">
+        🏷️
+      </button>
+    </div>`;
+  }).join('');
+
+  window._searchResultados = encontrados;
+}
+
+window.imprimirEtiquetaBuscador = async (idx) => {
+  const r = window._searchResultados?.[idx];
+  if (!r) return;
+  const modal = document.getElementById('modalEtiqCal');
+  const info  = document.getElementById('etiqCalInfo');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  info.innerHTML = 'Cargando descripción...';
+  try {
+    const descripciones = await getDescripciones();
+    const cod = String(r.codigo || '').trim().toUpperCase();
+    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === cod);
+    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : cod;
+    const descEn = itemDesc ? (itemDesc['Nombre extranjero'] || '') : '';
+    info.innerHTML = `<b class="text-slate-700">1 etiqueta</b> &mdash; S/N <b>${r.serie}</b><br><span class="text-[11px] text-slate-400 font-mono">Ped.${r.pedido} · ${r.codigo}</span>`;
+    window._calEtiqData = {
+      items: [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }],
+      descEs, descEn,
+      pedidoId: r.pedido
+    };
+  } catch(err) {
+    info.textContent = 'Sin conexión. Se imprimirá sin descripción.';
+    window._calEtiqData = {
+      items: [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }],
+      descEs: r.codigo, descEn: '', pedidoId: r.pedido
+    };
+  }
+};
 </script>
 
 <!-- MODAL ETIQUETAS DESDE CALENDARIO -->
