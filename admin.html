@@ -368,7 +368,8 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
-const planCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
 
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
@@ -387,6 +388,15 @@ for (const [key, mod] of Object.entries(MODULOS)) {
       planCache[key]=Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==null));
       const el=document.getElementById(`count-${key}`);
       if(el) el.textContent=`${Object.keys(planCache[key]).length} pendientes`;
+      if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
+      renderGlobalCal();
+    });
+    onValue(ref(dbs[key],'tareas'), snap=>{
+      const raw=snap.val()||{};
+      // Guardar solo tareas finalizadas que tengan pedido y fecha
+      tareasCache[key]=Object.fromEntries(
+        Object.entries(raw).filter(([,v])=>v!==null && v.estado==='finalizado' && v.pedido && v.inicioMS)
+      );
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
@@ -663,25 +673,40 @@ function renderCalGrid(){
     const grupos=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
-    // Pills arrastrables por pedido
-    const pillsHtml=Object.entries(grupos).map(([pedId,items])=>{
-      const cliente=items[0].cliente||'—';
-      const codigo=items[0].codigo||'—';
+    // Pills arrastrables por pedido — incluye finalizadas desde tareasCache
+    const gruposFinalizados={};
+    Object.values(tareasCache[modulo]).forEach(t=>{
+      if(!t.pedido||!t.inicioMS) return;
+      const f=new Date(t.inicioMS).toLocaleDateString('sv-SE');
+      if(f!==iso) return;
+      if(!gruposFinalizados[t.pedido]) gruposFinalizados[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[]};
+      const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
+      gruposFinalizados[t.pedido].series.push(...ss);
+    });
+    const todosPedidos={};
+    Object.entries(grupos).forEach(([pid,items])=>{ todosPedidos[pid]={items,fin:false}; });
+    Object.entries(gruposFinalizados).forEach(([pid,info])=>{
+      if(!todosPedidos[pid]) todosPedidos[pid]={items:[],fin:false};
+      todosPedidos[pid].fin=true;
+      if(!todosPedidos[pid].items.length){
+        todosPedidos[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente,estado:'finalizado'}));
+      }
+    });
+    const pillsHtml=Object.entries(todosPedidos).map(([pedId,{items,fin}])=>{
+      const cliente=items[0]?.cliente||'\u2014';
+      const codigo=items[0]?.codigo||'\u2014';
       const uds=items.length;
       const pedSafe=String(pedId).replace(/'/g,"\\'");
-      const finalizadas=items.filter(i=>i.estado==='finalizado').length;
-      const todoFinalizado=finalizadas===uds;
-      const parcialFinalizado=finalizadas>0&&!todoFinalizado;
-      const pillCls=todoFinalizado
-        ?'bg-slate-100 border-slate-200 opacity-60 cursor-default'
+      const pillCls=fin
+        ?'bg-slate-100 border-slate-200 opacity-70 cursor-default'
         :`${col.pill} border ${col.border}`;
-      const dotCls=todoFinalizado?'bg-slate-400':col.dot;
-      const draggableAttr=todoFinalizado?'draggable="false"':'draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"';
-      const badgeFin=todoFinalizado
-        ?'<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">✓ FIN</span>'
-        :parcialFinalizado
-          ?`<span class="text-[9px] font-black text-amber-600 bg-amber-100 rounded px-1 ml-1">${finalizadas}/${uds}</span>`
-          :'';
+      const dotCls=fin?'bg-slate-400':col.dot;
+      const draggableAttr=fin?'draggable="false"':`draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+      const badge=fin?'<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>':'';
+      const botones=fin
+        ?'<span class="text-slate-300 text-lg leading-none select-none">\u2713</span>'
+        :`<button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
+          <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
       return `
       <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
            ${draggableAttr}
@@ -691,15 +716,12 @@ function renderCalGrid(){
             <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
             <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
             <span class="text-[11px] font-black">${uds}u</span>
-            ${badgeFin}
+            ${badge}
           </div>
           <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
           <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
         </div>
-        ${todoFinalizado
-          ?'<span class="flex-shrink-0 text-slate-300 text-lg leading-none">✓</span>'
-          :`<button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100" title="Eliminar">🗑️</button>`
-        }
+        <div class="flex flex-col gap-1 flex-shrink-0">${botones}</div>
       </div>`;
     }).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
@@ -744,27 +766,43 @@ function renderGlobalCal(){
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
-    // Pills por módulo → pedido
-    const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>
-      Object.entries(grupos).map(([pedId,items])=>{
-        const col=MOD_COLORS[key];
-        const cliente=items[0].cliente||'—';
-        const codigo=items[0].codigo||'—';
+    // Pills por m\u00f3dulo \u2192 pedido (incluye finalizadas desde tareasCache)
+    const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>{
+      const col=MOD_COLORS[key];
+      // Finalizadas de este m\u00f3dulo para esta fecha
+      const gruposFinGlobal={};
+      Object.values(tareasCache[key]).forEach(t=>{
+        if(!t.pedido||!t.inicioMS) return;
+        const f=new Date(t.inicioMS).toLocaleDateString('sv-SE');
+        if(f!==iso) return;
+        if(!gruposFinGlobal[t.pedido]) gruposFinGlobal[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[]};
+        const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
+        gruposFinGlobal[t.pedido].series.push(...ss);
+      });
+      const todosPedidosG={};
+      Object.entries(grupos).forEach(([pid,items])=>{ todosPedidosG[pid]={items,fin:false}; });
+      Object.entries(gruposFinGlobal).forEach(([pid,info])=>{
+        if(!todosPedidosG[pid]) todosPedidosG[pid]={items:[],fin:false};
+        todosPedidosG[pid].fin=true;
+        if(!todosPedidosG[pid].items.length){
+          todosPedidosG[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente,estado:'finalizado'}));
+        }
+      });
+      return Object.entries(todosPedidosG).map(([pedId,{items,fin}])=>{
+        const cliente=items[0]?.cliente||'\u2014';
+        const codigo=items[0]?.codigo||'\u2014';
         const uds=items.length;
         const pedSafe=String(pedId).replace(/'/g,"\\'");
-        const finalizadas=items.filter(i=>i.estado==='finalizado').length;
-        const todoFinalizado=finalizadas===uds;
-        const parcialFinalizado=finalizadas>0&&!todoFinalizado;
-        const pillCls=todoFinalizado
-          ?'bg-slate-100 border-slate-200 opacity-60 cursor-default'
+        const pillCls=fin
+          ?'bg-slate-100 border-slate-200 opacity-70 cursor-default'
           :`${col.pill} border ${col.border}`;
-        const dotCls=todoFinalizado?'bg-slate-400':col.dot;
-        const draggableAttr=todoFinalizado?'draggable="false"':'draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"';
-        const badgeFin=todoFinalizado
-          ?'<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">✓</span>'
-          :parcialFinalizado
-            ?`<span class="text-[8px] font-black text-amber-600 bg-amber-100 rounded px-1">${finalizadas}/${uds}</span>`
-            :'';
+        const dotCls=fin?'bg-slate-400':col.dot;
+        const draggableAttr=fin?'draggable="false"':`draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+        const badge=fin?'<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>':'';
+        const botones=fin
+          ?'<span class="text-slate-300 text-sm leading-none select-none">\u2713</span>'
+          :`<button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
+            <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
         return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
              ${draggableAttr}
              data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}">
@@ -773,18 +811,15 @@ function renderGlobalCal(){
               <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
               <span class="font-black truncate">Ped.${pedId}</span>
               <span class="font-black">${uds}u</span>
-              ${badgeFin}
+              ${badge}
             </div>
             <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
             <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
           </div>
-          ${todoFinalizado
-            ?'<span class="flex-shrink-0 text-slate-300 text-sm leading-none">✓</span>'
-            :`<button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="flex-shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">🗑️</button>`
-          }
+          <div class="flex flex-col gap-0.5 flex-shrink-0">${botones}</div>
         </div>`;
-      })
-    ).join('');
+      });
+    }).join('');
     html+=`<div class="cal-cell ${bgCls} border-b border-r border-slate-100 p-1.5"
                data-iso="${iso}"
                ondragover="onCalCellDragOver(event,null)"
@@ -1006,6 +1041,184 @@ function actualizarBotonesEnvio(){
 // Cerrar modal individual al clic fuera
 document.getElementById('modalCal').addEventListener('click', e=>{ if(e.target===document.getElementById('modalCal')) cerrarCal(); });
 
+// ================================================================
+// IMPRESION DE ETIQUETAS DESDE CALENDARIO
+// ================================================================
+const LOGO_DATA_URI = "data:image/png;base64,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";
+
+const etiquetasApp = initializeApp({
+  apiKey: "AIzaSyCKIlp1vE2U1tSZf2NaMXVozpDSkwY78eA",
+  authDomain: "etiquetas-dbf0d.firebaseapp.com",
+  databaseURL: "https://etiquetas-dbf0d-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "etiquetas-dbf0d",
+  storageBucket: "etiquetas-dbf0d.firebasestorage.app",
+  messagingSenderId: "946608201431",
+  appId: "1:946608201431:web:546a556be13fe442e71a92"
+}, 'etiquetas-db');
+const etiquetasDb = getDatabase(etiquetasApp);
+let _descCache = null;
+
+async function getDescripciones() {
+  if (_descCache) return _descCache;
+  const snap = await get(ref(etiquetasDb, '/'));
+  _descCache = snap.exists() ? snap.val() : {};
+  return _descCache;
+}
+
+function corregirTexto(t) {
+  if (!t) return '';
+  return t.replace(/[^\x00-\x7F]/g, 'o').replace(/pistn/gi, 'piston').toLowerCase();
+}
+
+window.imprimirEtiquetasPedidoCal = async (moduloKey, pedidoId, fecha, e) => {
+  if (e) e.stopPropagation();
+  // Buscar series: primero en planCache, luego en tareasCache
+  const planItems = Object.entries(planCache[moduloKey])
+    .filter(([, v]) => v.pedido === pedidoId && v.fecha === fecha)
+    .map(([, v]) => v);
+  // Si no hay en planCache (ya iniciadas), buscar en tareasCache por fecha local
+  const tareasItems = Object.values(tareasCache[moduloKey]).filter(t => {
+    if (t.pedido !== pedidoId || !t.inicioMS) return false;
+    return new Date(t.inicioMS).toLocaleDateString('sv-SE') === fecha;
+  });
+  // Construir lista de series
+  let items = planItems.length ? planItems : [];
+  if (!items.length && tareasItems.length) {
+    tareasItems.forEach(t => {
+      const ss = String(t.series || t.numSerie || '').split(',').map(s=>s.trim()).filter(Boolean);
+      ss.forEach(s => items.push({ serie: s, codigo: t.codigo, cliente: t.cliente, fecha }));
+    });
+  }
+  if (!items.length) { alert('No se encontraron series para este pedido.'); return; }
+
+  const modal = document.getElementById('modalEtiqCal');
+  const info  = document.getElementById('etiqCalInfo');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  info.innerHTML = 'Cargando descripciones...';
+
+  try {
+    const descripciones = await getDescripciones();
+    const codigoBuscado = String(items[0].codigo || '').trim().toUpperCase();
+    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === codigoBuscado);
+    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : codigoBuscado;
+    const descEn = itemDesc ? (itemDesc['Nombre extranjero'] || '') : '';
+    const sns = items.map(i=>i.serie).join(' &middot; ');
+    info.innerHTML = `<b class="text-slate-700">${items.length} etiqueta${items.length>1?'s':''}</b> &mdash; Ped.<b>${pedidoId}</b><br><span class="text-[11px] text-slate-400 font-mono">${sns}</span>`;
+    window._calEtiqData = { items, descEs, descEn, pedidoId };
+  } catch(err) {
+    info.textContent = 'Sin conexion a descripciones. Se imprimira igualmente.';
+    window._calEtiqData = { items, descEs: items[0]?.codigo || '', descEn: '', pedidoId };
+  }
+};
+
+window.cerrarModalEtiqCal = () => {
+  document.getElementById('modalEtiqCal').classList.add('hidden');
+  document.getElementById('modalEtiqCal').classList.remove('flex');
+};
+
+window.lanzarImpresionCal = () => {
+  const { items, descEs, descEn, pedidoId } = window._calEtiqData || {};
+  if (!items || !items.length) return;
+
+  const buildEtiqueta = (p, idx) => {
+    const uid = 'e' + idx + '_' + Math.random().toString(36).slice(2,5);
+    return [
+      '<div class="etiqueta-itc">',
+      '  <div class="header-row">',
+      '    <div class="section-title">CODE</div>',
+      '    <img class="logo-itc" src="' + LOGO_DATA_URI + '" alt="ITC">',
+      '  </div>',
+      '  <div class="barcode-area">',
+      '    <svg id="code_' + uid + '" data-val="' + (p.codigo || 'N/A') + '" data-type="code" class="barcode-svg"></svg>',
+      '  </div>',
+      '  <div class="divider"></div>',
+      '  <div class="section-title">DESCRIPTION</div>',
+      '  <div class="desc-text desc-es">' + descEs + '</div>',
+      '  <div class="desc-text desc-en">' + descEn + '</div>',
+      '  <div class="divider"></div>',
+      '  <div class="section-title">S/N:</div>',
+      '  <div class="barcode-area">',
+      '    <svg id="sn_' + uid + '" data-val="' + (p.serie || 'D000000') + '" data-type="sn" class="barcode-svg"></svg>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+  };
+
+  const etiquetasHTML = items.map(buildEtiqueta).join('\n');
+
+  const CSS = [
+    '* { margin:0; padding:0; box-sizing:border-box; }',
+    'body { font-family:Arial,sans-serif; background:#e2e8f0; padding:16px; }',
+    '.toolbar { position:fixed; top:0; left:0; right:0; background:#1e293b; color:white; padding:10px 20px; display:flex; align-items:center; justify-content:space-between; z-index:9999; }',
+    '.toolbar-left { display:flex; flex-direction:column; gap:2px; }',
+    '.toolbar-title { font-size:13px; font-weight:900; }',
+    '.toolbar-sub { font-size:11px; color:#94a3b8; }',
+    '.toolbar button { background:#a855f7; color:white; border:none; padding:8px 20px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; }',
+    '.toolbar .close-btn { background:#475569; margin-left:8px; }',
+    '.preview-wrap { margin-top:62px; display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }',
+    '.etiqueta-itc { width:75mm; height:55mm; background:white; border:1px solid #ccc; display:flex; flex-direction:column; padding:1.5mm 2.5mm; box-sizing:border-box; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.15); }',
+    '.header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:0; }',
+    '.logo-itc { height:10mm; width:auto; flex-shrink:0; }',
+    '.section-title { font-size:7pt; font-weight:bold; text-align:left; margin-top:0.5mm; }',
+    '.barcode-area { text-align:center; width:100%; margin:0; padding:0; }',
+    '.barcode-svg { max-width:100%; height:auto; display:block; margin:0 auto; }',
+    '.divider { border-top:1px solid #000; margin:0.8mm 0; width:100%; }',
+    '.desc-text { font-size:6.5pt; line-height:1.15; text-align:left; word-wrap:break-word; }',
+    '.desc-es { font-weight:normal; color:#000; }',
+    '.desc-en { font-style:italic; color:#444; }',
+    '@media print {',
+    '  html, body { width:75mm; height:55mm; margin:0; padding:0; background:white; }',
+    '  .toolbar { display:none !important; }',
+    '  .preview-wrap { margin:0; padding:0; gap:0; display:block; }',
+    '  .etiqueta-itc { width:75mm !important; height:55mm !important; box-shadow:none; border:none; page-break-after:always; break-after:page; }',
+    '  .etiqueta-itc:last-child { page-break-after:avoid; break-after:avoid; }',
+    '  @page { size:75mm 55mm; margin:0; }',
+    '}'
+  ].join('\n');
+
+  const SCRIPT = [
+    'window.onload = function() {',
+    '  document.querySelectorAll(".barcode-svg").forEach(function(svg) {',
+    '    var val  = svg.dataset.val  || "ERROR";',
+    '    var type = svg.dataset.type || "sn";',
+    '    try {',
+    '      JsBarcode(svg, val, { format:"CODE128", width:1.3, height: type==="code" ? 26 : 20, displayValue:true, fontSize:8, textMargin:1, margin:0 });',
+    '    } catch(err) {',
+    '      JsBarcode(svg, "ERROR", { format:"CODE128", width:1.3, height:20, displayValue:true, fontSize:8, margin:0 });',
+    '    }',
+    '  });',
+    '};'
+  ].join('\n');
+
+  const n = items.length;
+  const snList = items.map(i=>i.serie).join(' \u00b7 ');
+  const htmlParts = [
+    '<!DOCTYPE html><html lang="es"><head>',
+    '<meta charset="UTF-8">',
+    '<title>Etiquetas - Ped.' + pedidoId + '</title>',
+    '<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>',
+    '<style>' + CSS + '</style>',
+    '</head><body>',
+    '<div class="toolbar">',
+    '  <div class="toolbar-left">',
+    '    <span class="toolbar-title">Ped.' + pedidoId + ' &mdash; ' + n + ' etiqueta' + (n>1?'s':'') + '</span>',
+    '    <span class="toolbar-sub">' + snList + '</span>',
+    '  </div>',
+    '  <div>',
+    '    <button onclick="window.print()">Imprimir</button>',
+    '    <button class="close-btn" onclick="window.close()">Cerrar</button>',
+    '  </div>',
+    '</div>',
+    '<div class="preview-wrap">' + etiquetasHTML + '</div>',
+    '<script>' + SCRIPT + '<\/script>',
+    '</body></html>'
+  ];
+  const ventana = window.open('', '_blank');
+  ventana.document.write(htmlParts.join('\n'));
+  ventana.document.close();
+  cerrarModalEtiqCal();
+};
+
 // ── MODAL VISTA MÓDULO (IFRAME) ─────────────────────────────────────────────
 window.abrirModuloIframe = (moduloKey) => {
   const url = MOD_URLS[moduloKey];
@@ -1038,5 +1251,20 @@ document.getElementById('modalModulo').addEventListener('click', e=>{
   if(e.target===document.getElementById('modalModulo')) cerrarModuloIframe();
 });
 </script>
+
+<!-- MODAL ETIQUETAS DESDE CALENDARIO -->
+<div id="modalEtiqCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center">
+    <div class="text-5xl mb-4">🏷️</div>
+    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight mb-3">Imprimir Etiquetas</h2>
+    <p id="etiqCalInfo" class="text-slate-500 text-sm mb-4 min-h-[44px] flex items-center justify-center leading-snug">Cargando...</p>
+    <p class="text-[11px] text-slate-400 mb-6">Una página 75×55 mm por cada número de serie</p>
+    <div class="flex gap-3 justify-center">
+      <button onclick="cerrarModalEtiqCal()" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-sm uppercase">Cancelar</button>
+      <button onclick="lanzarImpresionCal()" class="px-6 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-black text-sm uppercase shadow-lg">🖨️ Generar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
