@@ -414,6 +414,7 @@ for (const [key, mod] of Object.entries(MODULOS)) {
         if (t.codigo)  agrupado[fecha][pid].codigo  = t.codigo;
       });
       tareasCache[key] = agrupado;
+      console.log(`[tareasCache] ${key}:`, JSON.stringify(agrupado, null, 2));
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
@@ -421,7 +422,7 @@ for (const [key, mod] of Object.entries(MODULOS)) {
 }
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
-const hoyISO = () => new Date().toISOString().slice(0,10);
+const hoyISO = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 function resolverModulo(s){ const v=String(s||'').trim().toLowerCase(); for(const [k,m] of Object.entries(MODULOS)) if(m.aliases.some(a=>a===v)) return k; return null; }
 function parsearFecha(val){
   if(!val) return null; const s=String(val).trim();
@@ -693,6 +694,7 @@ function renderCalGrid(){
     // Pills arrastrables por pedido — merge planificacion + tareas
     // tareasCache[modulo][iso][pedido] = {series,estados,cliente,codigo}
     const tareasHoy = (tareasCache[modulo][iso]) || {};
+    if(Object.keys(tareasHoy).length > 0) console.log(`[render] ${iso} tareasHoy:`, tareasHoy);
     // Unir pedidos de planCache + tareasCache para este dia
     const todosPedidos = {};
     Object.entries(grupos).forEach(([pid, items]) => {
