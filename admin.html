@@ -369,7 +369,7 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
 const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
-const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
+const tareasCache = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} }; // activo+finalizado, excluye SISTEMA
 
 for (const [key, mod] of Object.entries(MODULOS)) {
   try {
@@ -391,11 +391,18 @@ for (const [key, mod] of Object.entries(MODULOS)) {
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
     });
+    // Escuchar tareas (activo + finalizado) para mostrar en calendario
     onValue(ref(dbs[key],'tareas'), snap=>{
       const raw=snap.val()||{};
-      // Guardar solo tareas finalizadas que tengan pedido y fecha
+      const ESTADOS_VALIDOS=['activo','pausa','finalizado','en_pausa_sistema','en_incidencia_sistema','en_reposicion_sistema'];
+      const SERIES_SISTEMA=['ENTRADA LÍNEA','SALIDA LÍNEA','ENTRADA LINEA','SALIDA LINEA'];
       tareasCache[key]=Object.fromEntries(
-        Object.entries(raw).filter(([,v])=>v!==null && v.estado==='finalizado' && v.pedido && v.inicioMS)
+        Object.entries(raw).filter(([,v])=>
+          v!==null && v.pedido && v.inicioMS &&
+          v.codigo!=='SISTEMA' &&
+          !SERIES_SISTEMA.includes(v.numSerie) &&
+          ESTADOS_VALIDOS.includes(v.estado)
+        )
       );
       if(calState.modulo===key && !document.getElementById('modalCal').classList.contains('hidden')) renderCalGrid();
       renderGlobalCal();
@@ -673,44 +680,54 @@ function renderCalGrid(){
     const grupos=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
-    // Pills arrastrables por pedido — incluye finalizadas desde tareasCache
-    const gruposFinalizados={};
+    // Pills arrastrables por pedido — merge planificacion + tareas
+    const tsToISO = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+    // Agrupar tareas de este modulo y fecha por pedido
+    const tareasGrupos={};
     Object.values(tareasCache[modulo]).forEach(t=>{
-      if(!t.pedido||!t.inicioMS) return;
-      const f=new Date(t.inicioMS).toLocaleDateString('sv-SE');
-      if(f!==iso) return;
-      if(!gruposFinalizados[t.pedido]) gruposFinalizados[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[]};
+      if(tsToISO(t.inicioMS)!==iso) return;
+      if(!tareasGrupos[t.pedido]) tareasGrupos[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[],estados:[]};
       const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
-      gruposFinalizados[t.pedido].series.push(...ss);
+      tareasGrupos[t.pedido].series.push(...ss);
+      tareasGrupos[t.pedido].estados.push(t.estado);
     });
+    // Fusionar: pendientes de planCache + en curso/finalizados de tareasCache
     const todosPedidos={};
-    Object.entries(grupos).forEach(([pid,items])=>{ todosPedidos[pid]={items,fin:false}; });
-    Object.entries(gruposFinalizados).forEach(([pid,info])=>{
-      if(!todosPedidos[pid]) todosPedidos[pid]={items:[],fin:false};
-      todosPedidos[pid].fin=true;
+    Object.entries(grupos).forEach(([pid,items])=>{ todosPedidos[pid]={items,tarea:null}; });
+    Object.entries(tareasGrupos).forEach(([pid,info])=>{
+      if(!todosPedidos[pid]) todosPedidos[pid]={items:[],tarea:null};
+      todosPedidos[pid].tarea=info;
+      // Si ya no hay items en planCache, crear items virtuales con los S/N de tareas
       if(!todosPedidos[pid].items.length){
-        todosPedidos[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente,estado:'finalizado'}));
+        todosPedidos[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente}));
       }
     });
-    const pillsHtml=Object.entries(todosPedidos).map(([pedId,{items,fin}])=>{
+    const pillsHtml=Object.entries(todosPedidos).map(([pedId,{items,tarea}])=>{
       const cliente=items[0]?.cliente||'\u2014';
       const codigo=items[0]?.codigo||'\u2014';
       const uds=items.length;
       const pedSafe=String(pedId).replace(/'/g,"\\'");
-      const pillCls=fin
-        ?'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-        :`${col.pill} border ${col.border}`;
-      const dotCls=fin?'bg-slate-400':col.dot;
-      const draggableAttr=fin?'draggable="false"':`draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-      const badge=fin?'<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>':'';
-      const botones=fin
-        ?'<span class="text-slate-300 text-lg leading-none select-none">\u2713</span>'
-        :`<button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
+      // Determinar estado visual
+      const esFinalizado = tarea && tarea.estados.length>0 && tarea.estados.every(e=>e==='finalizado');
+      const esEnCurso   = tarea && !esFinalizado;
+      const pillCls = esFinalizado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
+                    : esEnCurso   ? `bg-blue-50 border-blue-300`
+                    : `${col.pill} border ${col.border}`;
+      const dotCls  = esFinalizado ? 'bg-slate-400'
+                    : esEnCurso   ? 'bg-blue-400 animate-pulse'
+                    : col.dot;
+      const draggable = (esFinalizado||esEnCurso) ? 'draggable="false"'
+                      : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+      const badge = esFinalizado ? '<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>'
+                  : esEnCurso   ? '<span class="text-[9px] font-black text-blue-600 bg-blue-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>'
+                  : '';
+      const botones = (esFinalizado||esEnCurso)
+        ? `<span class="text-slate-300 text-lg leading-none select-none">${esFinalizado?'\u2713':'\u25b6'}</span>`
+        : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
           <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
       return `
       <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
-           ${draggableAttr}
-           data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}">
+           ${draggable} data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 mb-1 flex-wrap">
             <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
@@ -766,46 +783,51 @@ function renderGlobalCal(){
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
     let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     const totalDia=Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
-    // Pills por m\u00f3dulo \u2192 pedido (incluye finalizadas desde tareasCache)
+    // Pills por m\u00f3dulo \u2192 pedido (merge planificacion + tareas)
+    const tsToISO2 = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
     const pillsHtml=Object.entries(modsDia).flatMap(([key,grupos])=>{
       const col=MOD_COLORS[key];
-      // Finalizadas de este m\u00f3dulo para esta fecha
-      const gruposFinGlobal={};
+      const tareasGruposG={};
       Object.values(tareasCache[key]).forEach(t=>{
-        if(!t.pedido||!t.inicioMS) return;
-        const f=new Date(t.inicioMS).toLocaleDateString('sv-SE');
-        if(f!==iso) return;
-        if(!gruposFinGlobal[t.pedido]) gruposFinGlobal[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[]};
+        if(tsToISO2(t.inicioMS)!==iso) return;
+        if(!tareasGruposG[t.pedido]) tareasGruposG[t.pedido]={cliente:t.cliente||'\u2014',codigo:t.codigo||'\u2014',series:[],estados:[]};
         const ss=String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
-        gruposFinGlobal[t.pedido].series.push(...ss);
+        tareasGruposG[t.pedido].series.push(...ss);
+        tareasGruposG[t.pedido].estados.push(t.estado);
       });
-      const todosPedidosG={};
-      Object.entries(grupos).forEach(([pid,items])=>{ todosPedidosG[pid]={items,fin:false}; });
-      Object.entries(gruposFinGlobal).forEach(([pid,info])=>{
-        if(!todosPedidosG[pid]) todosPedidosG[pid]={items:[],fin:false};
-        todosPedidosG[pid].fin=true;
-        if(!todosPedidosG[pid].items.length){
-          todosPedidosG[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente,estado:'finalizado'}));
+      const todosPG={};
+      Object.entries(grupos).forEach(([pid,items])=>{ todosPG[pid]={items,tarea:null}; });
+      Object.entries(tareasGruposG).forEach(([pid,info])=>{
+        if(!todosPG[pid]) todosPG[pid]={items:[],tarea:null};
+        todosPG[pid].tarea=info;
+        if(!todosPG[pid].items.length){
+          todosPG[pid].items=info.series.map(s=>({serie:s,codigo:info.codigo,cliente:info.cliente}));
         }
       });
-      return Object.entries(todosPedidosG).map(([pedId,{items,fin}])=>{
+      return Object.entries(todosPG).map(([pedId,{items,tarea}])=>{
         const cliente=items[0]?.cliente||'\u2014';
         const codigo=items[0]?.codigo||'\u2014';
         const uds=items.length;
         const pedSafe=String(pedId).replace(/'/g,"\\'");
-        const pillCls=fin
-          ?'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-          :`${col.pill} border ${col.border}`;
-        const dotCls=fin?'bg-slate-400':col.dot;
-        const draggableAttr=fin?'draggable="false"':`draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-        const badge=fin?'<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>':'';
-        const botones=fin
-          ?'<span class="text-slate-300 text-sm leading-none select-none">\u2713</span>'
-          :`<button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
+        const esFinalizado = tarea && tarea.estados.length>0 && tarea.estados.every(e=>e==='finalizado');
+        const esEnCurso   = tarea && !esFinalizado;
+        const pillCls = esFinalizado ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
+                      : esEnCurso   ? 'bg-blue-50 border-blue-300'
+                      : `${col.pill} border ${col.border}`;
+        const dotCls  = esFinalizado ? 'bg-slate-400'
+                      : esEnCurso   ? 'bg-blue-400 animate-pulse'
+                      : col.dot;
+        const draggable = (esFinalizado||esEnCurso) ? 'draggable="false"'
+                        : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
+        const badge = esFinalizado ? '<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>'
+                    : esEnCurso   ? '<span class="text-[8px] font-black text-blue-600 bg-blue-100 rounded px-1">\u25b6</span>'
+                    : '';
+        const botones = (esFinalizado||esEnCurso)
+          ? `<span class="text-slate-300 text-sm leading-none select-none">${esFinalizado?'\u2713':'\u25b6'}</span>`
+          : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
             <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
         return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
-             ${draggableAttr}
-             data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}">
+             ${draggable} data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1 mb-0.5 flex-wrap">
               <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
@@ -1057,14 +1079,12 @@ const etiquetasApp = initializeApp({
 }, 'etiquetas-db');
 const etiquetasDb = getDatabase(etiquetasApp);
 let _descCache = null;
-
 async function getDescripciones() {
   if (_descCache) return _descCache;
   const snap = await get(ref(etiquetasDb, '/'));
   _descCache = snap.exists() ? snap.val() : {};
   return _descCache;
 }
-
 function corregirTexto(t) {
   if (!t) return '';
   return t.replace(/[^\x00-\x7F]/g, 'o').replace(/pistn/gi, 'piston').toLowerCase();
@@ -1072,82 +1092,65 @@ function corregirTexto(t) {
 
 window.imprimirEtiquetasPedidoCal = async (moduloKey, pedidoId, fecha, e) => {
   if (e) e.stopPropagation();
-  // Buscar series: primero en planCache, luego en tareasCache
-  const planItems = Object.entries(planCache[moduloKey])
-    .filter(([, v]) => v.pedido === pedidoId && v.fecha === fecha)
-    .map(([, v]) => v);
-  // Si no hay en planCache (ya iniciadas), buscar en tareasCache por fecha local
-  const tareasItems = Object.values(tareasCache[moduloKey]).filter(t => {
-    if (t.pedido !== pedidoId || !t.inicioMS) return false;
-    return new Date(t.inicioMS).toLocaleDateString('sv-SE') === fecha;
-  });
-  // Construir lista de series
-  let items = planItems.length ? planItems : [];
-  if (!items.length && tareasItems.length) {
-    tareasItems.forEach(t => {
-      const ss = String(t.series || t.numSerie || '').split(',').map(s=>s.trim()).filter(Boolean);
-      ss.forEach(s => items.push({ serie: s, codigo: t.codigo, cliente: t.cliente, fecha }));
-    });
+  const tsToISOP = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  // Buscar en planCache primero, luego en tareasCache
+  let items = Object.entries(planCache[moduloKey])
+    .filter(([,v]) => v.pedido === pedidoId && v.fecha === fecha)
+    .map(([,v]) => v);
+  if (!items.length) {
+    // Ya fue iniciada — reconstruir series desde tareasCache
+    Object.values(tareasCache[moduloKey])
+      .filter(t => t.pedido === pedidoId && tsToISOP(t.inicioMS) === fecha)
+      .forEach(t => {
+        const ss = String(t.series||t.numSerie||'').split(',').map(s=>s.trim()).filter(Boolean);
+        ss.forEach(s => items.push({ serie:s, codigo:t.codigo, cliente:t.cliente, fecha }));
+      });
   }
   if (!items.length) { alert('No se encontraron series para este pedido.'); return; }
-
   const modal = document.getElementById('modalEtiqCal');
   const info  = document.getElementById('etiqCalInfo');
   modal.classList.remove('hidden'); modal.classList.add('flex');
   info.innerHTML = 'Cargando descripciones...';
-
   try {
     const descripciones = await getDescripciones();
-    const codigoBuscado = String(items[0].codigo || '').trim().toUpperCase();
-    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === codigoBuscado);
-    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : codigoBuscado;
-    const descEn = itemDesc ? (itemDesc['Nombre extranjero'] || '') : '';
+    const cod = String(items[0].codigo||'').trim().toUpperCase();
+    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase()===cod);
+    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : cod;
+    const descEn = itemDesc ? (itemDesc['Nombre extranjero']||'') : '';
     const sns = items.map(i=>i.serie).join(' &middot; ');
     info.innerHTML = `<b class="text-slate-700">${items.length} etiqueta${items.length>1?'s':''}</b> &mdash; Ped.<b>${pedidoId}</b><br><span class="text-[11px] text-slate-400 font-mono">${sns}</span>`;
     window._calEtiqData = { items, descEs, descEn, pedidoId };
   } catch(err) {
-    info.textContent = 'Sin conexion a descripciones. Se imprimira igualmente.';
-    window._calEtiqData = { items, descEs: items[0]?.codigo || '', descEn: '', pedidoId };
+    info.textContent = 'Sin conexion. Se imprimira sin descripcion.';
+    window._calEtiqData = { items, descEs:items[0]?.codigo||'', descEn:'', pedidoId };
   }
 };
-
 window.cerrarModalEtiqCal = () => {
   document.getElementById('modalEtiqCal').classList.add('hidden');
   document.getElementById('modalEtiqCal').classList.remove('flex');
 };
-
 window.lanzarImpresionCal = () => {
   const { items, descEs, descEn, pedidoId } = window._calEtiqData || {};
-  if (!items || !items.length) return;
-
+  if (!items||!items.length) return;
   const buildEtiqueta = (p, idx) => {
-    const uid = 'e' + idx + '_' + Math.random().toString(36).slice(2,5);
-    return [
-      '<div class="etiqueta-itc">',
+    const uid = 'e'+idx+'_'+Math.random().toString(36).slice(2,5);
+    return ['<div class="etiqueta-itc">',
       '  <div class="header-row">',
       '    <div class="section-title">CODE</div>',
-      '    <img class="logo-itc" src="' + LOGO_DATA_URI + '" alt="ITC">',
+      '    <img class="logo-itc" src="'+LOGO_DATA_URI+'" alt="ITC">',
       '  </div>',
-      '  <div class="barcode-area">',
-      '    <svg id="code_' + uid + '" data-val="' + (p.codigo || 'N/A') + '" data-type="code" class="barcode-svg"></svg>',
-      '  </div>',
+      '  <div class="barcode-area"><svg id="code_'+uid+'" data-val="'+(p.codigo||'N/A')+'" data-type="code" class="barcode-svg"></svg></div>',
       '  <div class="divider"></div>',
       '  <div class="section-title">DESCRIPTION</div>',
-      '  <div class="desc-text desc-es">' + descEs + '</div>',
-      '  <div class="desc-text desc-en">' + descEn + '</div>',
+      '  <div class="desc-text desc-es">'+descEs+'</div>',
+      '  <div class="desc-text desc-en">'+descEn+'</div>',
       '  <div class="divider"></div>',
       '  <div class="section-title">S/N:</div>',
-      '  <div class="barcode-area">',
-      '    <svg id="sn_' + uid + '" data-val="' + (p.serie || 'D000000') + '" data-type="sn" class="barcode-svg"></svg>',
-      '  </div>',
-      '</div>'
-    ].join('\n');
+      '  <div class="barcode-area"><svg id="sn_'+uid+'" data-val="'+(p.serie||'D000000')+'" data-type="sn" class="barcode-svg"></svg></div>',
+      '</div>'].join('\n');
   };
-
   const etiquetasHTML = items.map(buildEtiqueta).join('\n');
-
-  const CSS = [
-    '* { margin:0; padding:0; box-sizing:border-box; }',
+  const CSS=['* { margin:0; padding:0; box-sizing:border-box; }',
     'body { font-family:Arial,sans-serif; background:#e2e8f0; padding:16px; }',
     '.toolbar { position:fixed; top:0; left:0; right:0; background:#1e293b; color:white; padding:10px 20px; display:flex; align-items:center; justify-content:space-between; z-index:9999; }',
     '.toolbar-left { display:flex; flex-direction:column; gap:2px; }',
@@ -1157,64 +1160,35 @@ window.lanzarImpresionCal = () => {
     '.toolbar .close-btn { background:#475569; margin-left:8px; }',
     '.preview-wrap { margin-top:62px; display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }',
     '.etiqueta-itc { width:75mm; height:55mm; background:white; border:1px solid #ccc; display:flex; flex-direction:column; padding:1.5mm 2.5mm; box-sizing:border-box; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.15); }',
-    '.header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:0; }',
+    '.header-row { display:flex; align-items:center; justify-content:space-between; }',
     '.logo-itc { height:10mm; width:auto; flex-shrink:0; }',
-    '.section-title { font-size:7pt; font-weight:bold; text-align:left; margin-top:0.5mm; }',
-    '.barcode-area { text-align:center; width:100%; margin:0; padding:0; }',
+    '.section-title { font-size:7pt; font-weight:bold; margin-top:0.5mm; }',
+    '.barcode-area { text-align:center; width:100%; }',
     '.barcode-svg { max-width:100%; height:auto; display:block; margin:0 auto; }',
     '.divider { border-top:1px solid #000; margin:0.8mm 0; width:100%; }',
-    '.desc-text { font-size:6.5pt; line-height:1.15; text-align:left; word-wrap:break-word; }',
-    '.desc-es { font-weight:normal; color:#000; }',
+    '.desc-text { font-size:6.5pt; line-height:1.15; word-wrap:break-word; }',
+    '.desc-es { color:#000; }',
     '.desc-en { font-style:italic; color:#444; }',
-    '@media print {',
-    '  html, body { width:75mm; height:55mm; margin:0; padding:0; background:white; }',
-    '  .toolbar { display:none !important; }',
-    '  .preview-wrap { margin:0; padding:0; gap:0; display:block; }',
-    '  .etiqueta-itc { width:75mm !important; height:55mm !important; box-shadow:none; border:none; page-break-after:always; break-after:page; }',
-    '  .etiqueta-itc:last-child { page-break-after:avoid; break-after:avoid; }',
-    '  @page { size:75mm 55mm; margin:0; }',
-    '}'
-  ].join('\n');
-
-  const SCRIPT = [
-    'window.onload = function() {',
-    '  document.querySelectorAll(".barcode-svg").forEach(function(svg) {',
-    '    var val  = svg.dataset.val  || "ERROR";',
-    '    var type = svg.dataset.type || "sn";',
-    '    try {',
-    '      JsBarcode(svg, val, { format:"CODE128", width:1.3, height: type==="code" ? 26 : 20, displayValue:true, fontSize:8, textMargin:1, margin:0 });',
-    '    } catch(err) {',
-    '      JsBarcode(svg, "ERROR", { format:"CODE128", width:1.3, height:20, displayValue:true, fontSize:8, margin:0 });',
-    '    }',
+    '@media print { html,body{width:75mm;height:55mm;margin:0;padding:0;background:white;} .toolbar{display:none!important;} .preview-wrap{margin:0;padding:0;gap:0;display:block;} .etiqueta-itc{width:75mm!important;height:55mm!important;box-shadow:none;border:none;page-break-after:always;break-after:page;} .etiqueta-itc:last-child{page-break-after:avoid;break-after:avoid;} @page{size:75mm 55mm;margin:0;} }'  ].join('\n');
+  const SCRIPT=['window.onload=function(){',
+    '  document.querySelectorAll(".barcode-svg").forEach(function(svg){',
+    '    var val=svg.dataset.val||"ERROR"; var type=svg.dataset.type||"sn";',
+    '    try{ JsBarcode(svg,val,{format:"CODE128",width:1.3,height:type==="code"?26:20,displayValue:true,fontSize:8,textMargin:1,margin:0}); }',
+    '    catch(e){ JsBarcode(svg,"ERROR",{format:"CODE128",width:1.3,height:20,displayValue:true,fontSize:8,margin:0}); }',
     '  });',
-    '};'
-  ].join('\n');
-
-  const n = items.length;
-  const snList = items.map(i=>i.serie).join(' \u00b7 ');
-  const htmlParts = [
-    '<!DOCTYPE html><html lang="es"><head>',
-    '<meta charset="UTF-8">',
-    '<title>Etiquetas - Ped.' + pedidoId + '</title>',
+    '};'].join('\n');
+  const n=items.length; const snList=items.map(i=>i.serie).join(' \u00b7 ');
+  const ventana=window.open('','_blank');
+  ventana.document.write([
+    '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">',
+    '<title>Etiquetas Ped.'+pedidoId+'</title>',
     '<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>',
-    '<style>' + CSS + '</style>',
-    '</head><body>',
-    '<div class="toolbar">',
-    '  <div class="toolbar-left">',
-    '    <span class="toolbar-title">Ped.' + pedidoId + ' &mdash; ' + n + ' etiqueta' + (n>1?'s':'') + '</span>',
-    '    <span class="toolbar-sub">' + snList + '</span>',
-    '  </div>',
-    '  <div>',
-    '    <button onclick="window.print()">Imprimir</button>',
-    '    <button class="close-btn" onclick="window.close()">Cerrar</button>',
-    '  </div>',
-    '</div>',
-    '<div class="preview-wrap">' + etiquetasHTML + '</div>',
-    '<script>' + SCRIPT + '<\/script>',
-    '</body></html>'
-  ];
-  const ventana = window.open('', '_blank');
-  ventana.document.write(htmlParts.join('\n'));
+    '<style>'+CSS+'</style></head><body>',
+    '<div class="toolbar"><div class="toolbar-left"><span class="toolbar-title">Ped.'+pedidoId+' &mdash; '+n+' etiqueta'+(n>1?'s':'')+'</span><span class="toolbar-sub">'+snList+'</span></div>',
+    '<div><button onclick="window.print()">Imprimir</button><button class="close-btn" onclick="window.close()">Cerrar</button></div></div>',
+    '<div class="preview-wrap">'+etiquetasHTML+'</div>',
+    '<script>'+SCRIPT+'<\/script></body></html>'
+  ].join('\n'));
   ventana.document.close();
   cerrarModalEtiqCal();
 };
