@@ -139,8 +139,8 @@
                 <div class="section-title">S/N:</div>
                 <div class="barcode-area"><svg id="sn_${uid}" class="barcode-svg"></svg></div>
                 <div class="sn-text">${sn}</div>`;
-            JsBarcode('#bc_' + uid, codigo, { format: "CODE128", width: 1.3, height: 30, displayValue: false, margin: 0 });
-            JsBarcode('#sn_' + uid, sn,     { format: "CODE128", width: 1.3, height: 20, displayValue: false, margin: 0 });
+            JsBarcode('#bc_' + uid, codigo, { format: "CODE128", width: 0.9, height: 30, displayValue: false, margin: 0 });
+            JsBarcode('#sn_' + uid, sn,     { format: "CODE128", width: 0.9, height: 20, displayValue: false, margin: 0 });
         }
 
         window.addEventListener('message', (event) => {
@@ -211,7 +211,7 @@
 
                     if (item) {
                         JsBarcode("#barcode-code", item.Articulo, {
-                            format: "CODE128", width: 1.3, height: 30, displayValue: false, margin: 0
+                            format: "CODE128", width: 0.9, height: 30, displayValue: false, margin: 0
                         });
                         document.getElementById('code-display').textContent = item.Articulo;
                         document.getElementById('res-desc-es').innerText = corregirTexto(item.Descripcion);
@@ -219,7 +219,7 @@
 
                         const serial = snManual || "D000000";
                         JsBarcode("#barcode-sn", serial, {
-                            format: "CODE128", width: 1.3, height: 20, displayValue: false, margin: 0
+                            format: "CODE128", width: 0.9, height: 20, displayValue: false, margin: 0
                         });
                         document.getElementById('sn-display').textContent = serial;
                         document.getElementById('etiqueta-itc').style.display = 'flex';
