@@ -139,17 +139,27 @@
 
                         const serial = snManual || "D000000";
                         
-                        // Modificación: S/N con texto el doble de grande (fontSize: 20) y en negrita (fontOptions)
+                        // Generar barcode S/N sin display value
                         JsBarcode("#barcode-sn", serial, {
                             format: "CODE128", 
                             width: 1.3, 
                             height: 20, 
-                            displayValue: true, 
-                            fontSize: 20, 
-                            fontOptions: "bold",
-                            textMargin: 2,
+                            displayValue: false,
                             margin: 0
                         });
+                        
+                        // Agregar texto grande y en negrita después del barcode
+                        const svgSN = document.getElementById('barcode-sn');
+                        const bbox = svgSN.getBBox();
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("x", bbox.width / 2);
+                        text.setAttribute("y", bbox.height + 20);
+                        text.setAttribute("text-anchor", "middle");
+                        text.setAttribute("font-size", "16px");
+                        text.setAttribute("font-weight", "bold");
+                        text.setAttribute("font-family", "monospace");
+                        text.textContent = serial;
+                        svgSN.appendChild(text);
 
                         document.getElementById('etiqueta-itc').style.display = 'flex';
                         document.getElementById('btnPrint').style.display = 'block';
