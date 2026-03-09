@@ -1212,10 +1212,10 @@ window.lanzarImpresionCal = () => {
     '        var textDiv=document.getElementById("sntext_"+uid);',
     '        if(textDiv) textDiv.textContent=val;',
     '      } else {',
-    '        JsBarcode(svg,val,{format:"CODE128",width:1.3,height:26,displayValue:true,fontSize:10,textMargin:2,margin:0});',
+    '        JsBarcode(svg,val,{format:"CODE128",width:1.3,height:26,displayValue:true,fontSize:12,textMargin:3,margin:0});',
     '      }',
     '    }',
-    '    catch(e){ JsBarcode(svg,"ERROR",{format:"CODE128",width:1.3,height:20,displayValue:true,fontSize:8,margin:0}); }',
+    '    catch(e){ JsBarcode(svg,"ERROR",{format:"CODE128",width:1.3,height:20,displayValue:true,fontSize:10,margin:0}); }',
     '  });',
     '};'].join('\n');
   const n=items.length; const snList=items.map(i=>i.serie).join(' \u00b7 ');
