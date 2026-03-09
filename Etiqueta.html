@@ -50,6 +50,8 @@
         /* Modificación: Sin cursiva */
         .desc-en { font-style: normal; color: #444; margin-top: 1px; }
 
+        .sn-text { font-size: 14pt; font-weight: bold; font-family: monospace; text-align: center; margin-top: 0.5mm; letter-spacing: 1px; }
+
         @media print {
             body * { visibility: hidden; }
             #etiqueta-itc, #etiqueta-itc * { visibility: visible; }
@@ -90,6 +92,7 @@
         <div class="barcode-area" style="margin-bottom: 1mm;">
             <svg id="barcode-sn" class="barcode-svg"></svg>
         </div>
+        <div id="sn-display" class="sn-text"></div>
     </div>
 
     <script type="module">
@@ -148,18 +151,8 @@
                             margin: 0
                         });
                         
-                        // Agregar texto grande y en negrita después del barcode
-                        const svgSN = document.getElementById('barcode-sn');
-                        const bbox = svgSN.getBBox();
-                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                        text.setAttribute("x", bbox.width / 2);
-                        text.setAttribute("y", bbox.height + 20);
-                        text.setAttribute("text-anchor", "middle");
-                        text.setAttribute("font-size", "16px");
-                        text.setAttribute("font-weight", "bold");
-                        text.setAttribute("font-family", "monospace");
-                        text.textContent = serial;
-                        svgSN.appendChild(text);
+                        // Mostrar el número de serie en el div
+                        document.getElementById('sn-display').textContent = serial;
 
                         document.getElementById('etiqueta-itc').style.display = 'flex';
                         document.getElementById('btnPrint').style.display = 'block';
