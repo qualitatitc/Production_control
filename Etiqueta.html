@@ -134,8 +134,22 @@
 
                     if (item) {
                         JsBarcode("#barcode-code", item.Articulo, {
-                            format: "CODE128", width: 1.3, height: 30, displayValue: true, fontSize: 12, textMargin: 3, margin: 0
+                            format: "CODE128", width: 1.3, height: 30, displayValue: false, margin: 0
                         });
+                        
+                        // Agregar el texto del código debajo del barcode
+                        setTimeout(function(){
+                            const svg = document.getElementById('barcode-code');
+                            const bbox = svg.getBBox();
+                            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            text.setAttribute("x", bbox.width / 2);
+                            text.setAttribute("y", bbox.height + 14);
+                            text.setAttribute("text-anchor", "middle");
+                            text.setAttribute("font-size", "12px");
+                            text.setAttribute("font-family", "Arial,sans-serif");
+                            text.textContent = item.Articulo;
+                            svg.appendChild(text);
+                        }, 100);
 
                         document.getElementById('res-desc-es').innerText = corregirTexto(item.Descripcion);
                         document.getElementById('res-desc-en').innerText = item["Nombre extranjero"] || "";
