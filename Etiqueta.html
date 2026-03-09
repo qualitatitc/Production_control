@@ -50,6 +50,8 @@
         /* Modificación: Sin cursiva */
         .desc-en { font-style: normal; color: #444; margin-top: 1px; }
 
+        .code-text { font-size: 9pt; font-weight: normal; font-family: monospace; text-align: center; margin-top: 0.3mm; letter-spacing: 0.5px; }
+
         .sn-text { font-size: 18pt; font-weight: bold; font-family: monospace; text-align: center; margin-top: 0.5mm; letter-spacing: 1px; }
 
         @media print {
@@ -79,6 +81,7 @@
         <div class="barcode-area">
             <svg id="barcode-code" class="barcode-svg"></svg>
         </div>
+        <div id="code-display" class="code-text"></div>
         
         <div class="divider"></div>
         
@@ -137,19 +140,8 @@
                             format: "CODE128", width: 1.3, height: 30, displayValue: false, margin: 0
                         });
                         
-                        // Agregar el texto del código debajo del barcode
-                        setTimeout(function(){
-                            const svg = document.getElementById('barcode-code');
-                            const bbox = svg.getBBox();
-                            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                            text.setAttribute("x", bbox.width / 2);
-                            text.setAttribute("y", bbox.height + 14);
-                            text.setAttribute("text-anchor", "middle");
-                            text.setAttribute("font-size", "12px");
-                            text.setAttribute("font-family", "Arial,sans-serif");
-                            text.textContent = item.Articulo;
-                            svg.appendChild(text);
-                        }, 100);
+                        // Mostrar el código en el div
+                        document.getElementById('code-display').textContent = item.Articulo;
 
                         document.getElementById('res-desc-es').innerText = corregirTexto(item.Descripcion);
                         document.getElementById('res-desc-en').innerText = item["Nombre extranjero"] || "";
