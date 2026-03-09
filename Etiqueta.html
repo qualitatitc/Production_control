@@ -23,7 +23,6 @@
             overflow: hidden;
         }
 
-        /* Fila superior: título CODE + logo */
         .header-row {
             display: flex;
             align-items: center;
@@ -44,8 +43,12 @@
         .divider { border-top: 1px solid #000; margin: 0.8mm 0; width: 100%; }
 
         .desc-text { font-size: 6.5pt; line-height: 1.1; text-align: left; word-wrap: break-word; }
-        .desc-es { font-weight: normal; text-transform: lowercase; color: #000; }
-        .desc-en { font-style: italic; color: #444; }
+        
+        /* Modificación: Empieza con Mayúscula */
+        .desc-es { font-weight: normal; text-transform: capitalize; color: #000; }
+        
+        /* Modificación: Sin cursiva */
+        .desc-en { font-style: normal; color: #444; margin-top: 1px; }
 
         @media print {
             body * { visibility: hidden; }
@@ -67,7 +70,6 @@
     </div>
 
     <div id="etiqueta-itc">
-        <!-- Fila superior: CODE a la izquierda, logo a la derecha -->
         <div class="header-row">
             <div class="section-title">CODE</div>
             <img class="logo-itc" src="Logo_itc.png" alt="ITC">
@@ -107,11 +109,11 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
+        // Modificado para que la descripción empiece con mayúscula (Capitalize)
         function corregirTexto(t) {
             if (!t) return "";
-            return t.replace(/[^\x00-\x7F]/g, "ó") 
-                    .replace(/pistn/gi, "pistón")
-                    .toLowerCase();
+            let texto = t.replace(/[^\x00-\x7F]/g, "ó").replace(/pistn/gi, "pistón").toLowerCase();
+            return texto.charAt(0).toUpperCase() + texto.slice(1);
         }
 
         window.buscar = async () => {
@@ -128,7 +130,6 @@
                     const item = Object.values(data).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === codBuscado);
 
                     if (item) {
-                        // Ajuste de CODE: Ancho 1.3 para evitar que se corte a la derecha
                         JsBarcode("#barcode-code", item.Articulo, {
                             format: "CODE128", width: 1.3, height: 30, displayValue: true, fontSize: 10, margin: 0
                         });
@@ -136,14 +137,16 @@
                         document.getElementById('res-desc-es').innerText = corregirTexto(item.Descripcion);
                         document.getElementById('res-desc-en').innerText = item["Nombre extranjero"] || "";
 
-                        // Ajuste de S/N: Reducción de altura para asegurar visibilidad del número
                         const serial = snManual || "D000000";
+                        
+                        // Modificación: S/N con texto el doble de grande (fontSize: 20) y en negrita (fontOptions)
                         JsBarcode("#barcode-sn", serial, {
                             format: "CODE128", 
                             width: 1.3, 
-                            height: 25, 
+                            height: 20, 
                             displayValue: true, 
-                            fontSize: 10, 
+                            fontSize: 20, 
+                            fontOptions: "bold",
                             textMargin: 2,
                             margin: 0
                         });
