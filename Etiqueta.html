@@ -20,7 +20,7 @@
         .desc-es { font-weight:normal; text-transform:capitalize; color:#000; }
         .desc-en { font-style:normal; color:#444; margin-top:1px; }
         .code-text { font-size:8pt; font-weight:bold; font-family:monospace; text-align:center; margin-top:0.5mm; letter-spacing:1px; display:block; }
-        .sn-text { font-size:10pt; font-weight:bold; font-family:monospace; text-align:center; margin-top:0.3mm; letter-spacing:1px; }
+        .sn-text { font-size:10pt; font-weight:bold; font-family:monospace; text-align:center; margin-top:0; letter-spacing:1px; line-height:1; }
         #etiqueta-itc { width:75mm; height:55mm; background:white; border:1px solid #000; display:none; flex-direction:column; padding:1.5mm 2.5mm; box-sizing:border-box; overflow:hidden; }
         #etiquetas-container { display:none; flex-direction:column; align-items:center; gap:8px; padding:4px 0; }
         .etiqueta-itc { width:75mm; height:55mm; background:white; border:1px solid #ccc; display:flex; flex-direction:column; padding:1.5mm 2.5mm; box-sizing:border-box; overflow:hidden; box-shadow:0 1px 5px rgba(0,0,0,.15); }
@@ -62,7 +62,7 @@
         <div id="res-desc-en" class="desc-text desc-en"></div>
         <div class="divider"></div>
         <div class="section-title">S/N:</div>
-        <div class="barcode-area" style="margin-bottom:1mm;"><svg id="barcode-sn" class="barcode-svg"></svg></div>
+        <div class="barcode-area" style="margin-bottom:0;"><svg id="barcode-sn" class="barcode-svg"></svg></div>
         <div id="sn-display" class="sn-text"></div>
     </div>
 
@@ -108,7 +108,7 @@
                     <div class="desc-text desc-en">${descEn || ''}</div>
                     <div class="divider"></div>
                     <div class="section-title">S/N:</div>
-                    <div class="barcode-area" style="margin-bottom:1mm;"><svg id="bc-sn-${idx}" class="barcode-svg"></svg></div>
+                    <div class="barcode-area" style="margin-bottom:0;"><svg id="bc-sn-${idx}" class="barcode-svg"></svg></div>
                     <div class="sn-text">${item.serie}</div>
                 `;
                 container.appendChild(etiq);
