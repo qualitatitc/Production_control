@@ -6,6 +6,7 @@
 <title>Admin Central — ITC Production Systems</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <style>
   body { font-family:'Inter',sans-serif; }
@@ -1119,55 +1120,80 @@ function corregirTexto(t) {
   return t.replace(/[^\x00-\x7F]/g, 'o').replace(/pistn/gi, 'piston').toLowerCase();
 }
 
+// ── Función central: recopila items + descripciones y abre el modal ──
+async function abrirModalEtiquetas(items) {
+  if (!items.length) { alert('No se encontraron series para este pedido.'); return; }
+
+  const modal  = document.getElementById('modalEtiqCal');
+  const infoEl = document.getElementById('etiqCalInfo');
+  const btnImp = document.getElementById('btnImprimirEtiq');
+  const iframe = document.getElementById('etiqIframe');
+
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  infoEl.textContent = 'Cargando descripciones…';
+  btnImp.disabled = true;
+  // Resetear iframe
+  iframe.src = 'about:blank';
+
+  let descEs = items[0]?.codigo || '';
+  let descEn = '';
+  try {
+    const descripciones = await getDescripciones();
+    const cod = String(items[0].codigo||'').trim().toUpperCase();
+    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase()===cod);
+    if (itemDesc) {
+      descEs = corregirTexto(itemDesc.Descripcion);
+      descEn = itemDesc['Nombre extranjero'] || '';
+    }
+  } catch(err) { /* sin conexión */ }
+
+  const sns = items.map(i=>i.serie).join(' · ');
+  infoEl.innerHTML = `<b>${items.length} etiqueta${items.length>1?'s':''}</b> — S/N: <span class="font-mono">${sns}</span>`;
+
+  window._calEtiqData = { items, descEs, descEn };
+
+  // Cargar Etiqueta.html en el iframe y enviar datos cuando esté lista
+  iframe.src = 'Etiqueta.html';
+  iframe.onload = () => {
+    iframe.contentWindow.postMessage({ type: 'ITC_ETIQUETAS', items, descEs, descEn }, '*');
+    // Ajustar altura del iframe al contenido real tras render
+    setTimeout(() => {
+      try {
+        const h = iframe.contentDocument.body.scrollHeight;
+        iframe.style.height = Math.max(h, 280) + 'px';
+      } catch(e) {}
+      btnImp.disabled = false;
+    }, 600);
+  };
+}
+
 window.imprimirEtiquetasPedidoCal = async (moduloKey, pedidoId, fecha, e) => {
   if (e) e.stopPropagation();
-  const msToISOP = ms => { const d=new Date(Number(ms)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-  // 1. Buscar en planCache (pendientes)
   let items = Object.entries(planCache[moduloKey])
     .filter(([,v]) => v.pedido === pedidoId && (v.fecha||'sin-fecha') === fecha)
     .map(([,v]) => ({ serie:v.serie, codigo:v.codigo, cliente:v.cliente, fecha }));
-  // 2. Si no hay en planCache, buscar en tareasCache (en curso o finalizadas)
   if (!items.length) {
     const tareasPed = (tareasCache[moduloKey][fecha] || {})[pedidoId];
     if (tareasPed) {
       items = [...new Set(tareasPed.series)].map(s => ({ serie:s, codigo:tareasPed.codigo, cliente:tareasPed.cliente, fecha }));
     }
   }
-  if (!items.length) { alert('No se encontraron series para este pedido.'); return; }
-  const modal = document.getElementById('modalEtiqCal');
-  const info  = document.getElementById('etiqCalInfo');
-  modal.classList.remove('hidden'); modal.classList.add('flex');
-  info.innerHTML = 'Cargando descripciones...';
-  try {
-    const descripciones = await getDescripciones();
-    const cod = String(items[0].codigo||'').trim().toUpperCase();
-    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase()===cod);
-    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : cod;
-    const descEn = itemDesc ? (itemDesc['Nombre extranjero']||'') : '';
-    const sns = items.map(i=>i.serie).join(' &middot; ');
-    info.innerHTML = `<b class="text-slate-700">${items.length} etiqueta${items.length>1?'s':''}</b> &mdash; Ped.<b>${pedidoId}</b><br><span class="text-[11px] text-slate-400 font-mono">${sns}</span>`;
-    window._calEtiqData = { items, descEs, descEn, pedidoId };
-  } catch(err) {
-    info.textContent = 'Sin conexion. Se imprimira sin descripcion.';
-    window._calEtiqData = { items, descEs:items[0]?.codigo||'', descEn:'', pedidoId };
-  }
+  await abrirModalEtiquetas(items);
 };
+
 window.cerrarModalEtiqCal = () => {
-  document.getElementById('modalEtiqCal').classList.add('hidden');
-  document.getElementById('modalEtiqCal').classList.remove('flex');
+  const modal  = document.getElementById('modalEtiqCal');
+  const iframe = document.getElementById('etiqIframe');
+  iframe.src = 'about:blank';
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
 };
+
 window.lanzarImpresionCal = () => {
-  const { items, descEs, descEn, pedidoId } = window._calEtiqData || {};
-  if (!items || !items.length) return;
-  // Abrir Etiqueta.html y enviarle los datos via postMessage
-  // El formato y CSS se gestionan exclusivamente en Etiqueta.html
-  const ventana = window.open('Etiqueta.html', '_blank');
-  const payload = { type: 'ITC_ETIQUETAS', items, descEs, descEn, pedidoId };
-  // Esperar a que la ventana cargue antes de enviar el mensaje
-  ventana.addEventListener('load', () => {
-    ventana.postMessage(payload, '*');
-  });
-  cerrarModalEtiqCal();
+  const iframe = document.getElementById('etiqIframe');
+  if (!iframe || !iframe.contentWindow) return;
+  // Imprimir solo el contenido del iframe (que ya tiene su propio @media print)
+  iframe.contentWindow.print();
 };
 
 // ── MODAL VISTA MÓDULO (IFRAME) ─────────────────────────────────────────────
@@ -1292,42 +1318,39 @@ window.buscarSerie = function(query) {
 window.imprimirEtiquetaBuscador = async function(idx) {
   const r = window._searchResultados?.[idx];
   if (!r) return;
-  const modal = document.getElementById('modalEtiqCal');
-  const info  = document.getElementById('etiqCalInfo');
-  modal.classList.remove('hidden'); modal.classList.add('flex');
-  info.innerHTML = 'Cargando descripción...';
-  try {
-    const descripciones = await getDescripciones();
-    const cod = String(r.codigo || '').trim().toUpperCase();
-    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === cod);
-    const descEs = itemDesc ? corregirTexto(itemDesc.Descripcion) : cod;
-    const descEn = itemDesc ? (itemDesc['Nombre extranjero'] || '') : '';
-    info.innerHTML = `<b class="text-slate-700">1 etiqueta</b> &mdash; S/N <b>${r.serie}</b><br><span class="text-[11px] text-slate-400 font-mono">Ped.${r.pedido} · ${r.codigo}</span>`;
-    window._calEtiqData = {
-      items: [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }],
-      descEs, descEn,
-      pedidoId: r.pedido
-    };
-  } catch(err) {
-    info.textContent = 'Sin conexión. Se imprimirá sin descripción.';
-    window._calEtiqData = {
-      items: [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }],
-      descEs: r.codigo, descEn: '', pedidoId: r.pedido
-    };
-  }
+  const items = [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }];
+  await abrirModalEtiquetas(items);
 };
 </script>
 
 <!-- MODAL ETIQUETAS DESDE CALENDARIO -->
 <div id="modalEtiqCal" class="fixed inset-0 bg-slate-900/70 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center">
-    <div class="text-5xl mb-4">🏷️</div>
-    <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight mb-3">Imprimir Etiquetas</h2>
-    <p id="etiqCalInfo" class="text-slate-500 text-sm mb-4 min-h-[44px] flex items-center justify-center leading-snug">Cargando...</p>
-    <p class="text-[11px] text-slate-400 mb-6">Una página 75×55 mm por cada número de serie</p>
-    <div class="flex gap-3 justify-center">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden" style="max-height:92vh;">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+      <div>
+        <h2 class="text-lg font-black text-slate-800 uppercase tracking-tight">🏷️ Previsualización de Etiquetas</h2>
+        <p id="etiqCalInfo" class="text-slate-500 text-xs mt-0.5 min-h-[18px]">Cargando…</p>
+      </div>
+      <button onclick="cerrarModalEtiqCal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 hover:text-red-600 flex items-center justify-center font-black text-slate-500 text-sm">✕</button>
+    </div>
+
+    <!-- IFRAME — muestra Etiqueta.html directamente con los datos reales -->
+    <div class="flex-1 overflow-y-auto bg-slate-100 flex items-start justify-center p-4" style="min-height:280px;">
+      <iframe id="etiqIframe"
+        src="about:blank"
+        style="width:100%; min-height:260px; border:none; background:transparent;"
+        scrolling="no">
+      </iframe>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end flex-shrink-0">
       <button onclick="cerrarModalEtiqCal()" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-sm uppercase">Cancelar</button>
-      <button onclick="lanzarImpresionCal()" class="px-6 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-black text-sm uppercase shadow-lg">🖨️ Generar</button>
+      <button id="btnImprimirEtiq" onclick="lanzarImpresionCal()" disabled
+        class="px-6 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-sm uppercase shadow-lg transition-all">
+        🖨️ Imprimir todas
+      </button>
     </div>
   </div>
 </div>
