@@ -281,7 +281,8 @@
 
   <!-- PREVIEW -->
   <div id="seccionPreview" class="hidden">
-    <div id="alertaErrores"    class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-sm text-amber-800 font-bold"></div>
+    <div id="alertaErrores"    class="hidden bg-red-50 border border-red-300 rounded-2xl p-4 mb-3 text-sm text-red-800 font-bold"></div>
+    <div id="alertaFechas"     class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-sm text-amber-800 font-bold"></div>
     <div id="alertaDuplicados" class="hidden bg-orange-50 border-2 border-orange-300 rounded-2xl p-4 mb-6">
       <div class="flex items-start gap-3">
         <span class="text-2xl">⚠️</span>
@@ -485,7 +486,8 @@ function procesarFile(file){
       const wb=XLSX.read(new Uint8Array(evt.target.result),{type:'array',cellDates:true,dateNF:'yyyy-mm-dd'});
       const json=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
       if(!json.length){alert('El archivo está vacío');return;}
-      pedidos=[]; const errores=[];
+      pedidos=[]; const errores=[]; const avisosFechas=[];
+      const hoy = hoyISO();
       json.forEach((item,idx)=>{
         const row={}; Object.keys(item).forEach(k=>{ row[k.trim().toLowerCase()]=item[k]; });
         const pedido=String(row.pedido||row.orden||'').trim(), codigo=String(row['código']||row.codigo||'').trim();
@@ -494,6 +496,9 @@ function procesarFile(file){
         const moduloKey=resolverModulo(sistema);
         if(!moduloKey) errores.push(`Fila ${idx+2}: Sistema desconocido "${sistema}"`);
         const fecha=parsearFecha(fechaRaw), cliente=String(row.cliente||row.client||'Sin cliente').trim();
+        if (fecha && fecha < hoy) {
+          avisosFechas.push(`Fila ${idx+2}: Fecha ${fecha} anterior a la fecha de hoy`);
+        }
         const notas=String(row.notas||row.observaciones||'').trim(), serieBase=String(row.serie||row['nº serie']||'').trim();
         const cantidad=parseInt(String(row.unidaes||row.unidades||row.cantidad||row.uds||row.qty||'1'))||1;
         const ms=serieBase.match(/^(.*?)(\d+)$/); let pref='',numBase=0,pad=0;
@@ -504,13 +509,28 @@ function procesarFile(file){
         }
       });
       const errEl=document.getElementById('alertaErrores');
-      if(errores.length){errEl.classList.remove('hidden');errEl.innerHTML='⚠️ Módulos no reconocidos:<br>'+errores.join('<br>');}
-      else errEl.classList.add('hidden');
+      const fechasEl=document.getElementById('alertaFechas');
+      if(errores.length){
+        errEl.classList.remove('hidden');
+        errEl.innerHTML='❌ Errores en el archivo:<br>'+errores.join('<br>');
+      } else {
+        errEl.classList.add('hidden');
+      }
+      if(avisosFechas.length){
+        fechasEl.classList.remove('hidden');
+        const total = avisosFechas.length;
+        const listado = avisosFechas.slice(0,10).join('<br>');
+        fechasEl.innerHTML = `⚠️ Hay ${total} registro${total>1?'s':''} con fecha anterior a hoy.<br><span class="text-xs font-semibold">Revisa el Excel o continúa solo si es intencionado.</span><br><br>${listado}${total>10?'<br>…':''}`;
+      } else {
+        fechasEl.classList.add('hidden');
+      }
       await comprobarDuplicados();
       const dias=[...new Set(pedidos.map(p=>p.fecha||'sin-fecha'))].sort();
       diaActivo=dias[0]||'todos';
       renderTogglesModulos(); renderTabs(dias); renderResumen(); renderTabla();
-      document.getElementById('seccionPreview').classList.remove('hidden');
+      const prev = document.getElementById('seccionPreview');
+      prev.classList.remove('hidden');
+      prev.scrollIntoView({behavior:'smooth', block:'start'});
     }catch(e){alert('❌ Error: '+e.message);}
   };
   r.readAsArrayBuffer(file);
