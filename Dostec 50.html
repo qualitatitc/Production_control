@@ -2277,39 +2277,42 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Gráfico Tiempo por Bomba -->
-    <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">⏱️ Tiempo por Bomba</h3>
-            <div class="flex items-center gap-3">
-                <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border">✏️ Editar puntos</button>
-                <button onclick="mostrarSelectorFechaProd()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-black text-xs border-2 border-indigo-300">📅 <span id="tituloFechaProd">Hoy</span></button>
-                <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)">
-            </div>
-        </div>
-        <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
-            <canvas id="graficoProd"></canvas>
-        </div>
-        <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
-    </div>
-    
-    <!-- Gráfico Tiempo Medio por Día (Mensual) -->
-    <div class="bg-white rounded-3xl shadow-lg overflow-hidden border mt-6 p-6">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">📅 Tiempo Medio por Bomba Diario</h3>
-            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-300 rounded-xl px-2 py-1.5">
-                <div class="flex items-center gap-2">
-                    <button onclick="cambiarMesTiempoMensual(-1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">◀</button>
-                    <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1">
-                        <span class="text-sm font-black text-indigo-900 uppercase" id="nombreMesTiempoMensual">Febrero</span>
-                        <span class="text-sm font-black text-indigo-900" id="anioMesTiempoMensual">2026</span>
-                    </div>
-                    <button onclick="cambiarMesTiempoMensual(1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">▶</button>
+    <!-- Gráficos de Tiempo por Bomba / Tiempo Medio Diario -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <!-- Gráfico Tiempo por Bomba -->
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">⏱️ Tiempo por Bomba</h3>
+                <div class="flex items-center gap-3">
+                    <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border">✏️ Editar puntos</button>
+                    <button onclick="mostrarSelectorFechaProd()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-black text-xs border-2 border-indigo-300">📅 <span id="tituloFechaProd">Hoy</span></button>
+                    <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)">
                 </div>
             </div>
+            <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
+                <canvas id="graficoProd"></canvas>
+            </div>
+            <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
         </div>
-        <div class="relative h-64 bg-slate-50 rounded-xl p-2">
-            <canvas id="graficoTiempoMensual"></canvas>
+        
+        <!-- Gráfico Tiempo Medio por Día (Mensual) -->
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 class="text-sm font-black uppercase tracking-widest text-indigo-600">📅 Tiempo Medio por Bomba Diario</h3>
+                <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-300 rounded-xl px-2 py-1.5">
+                    <div class="flex items-center gap-2">
+                        <button onclick="cambiarMesTiempoMensual(-1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">◀</button>
+                        <div class="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1">
+                            <span class="text-sm font-black text-indigo-900 uppercase" id="nombreMesTiempoMensual">Febrero</span>
+                            <span class="text-sm font-black text-indigo-900" id="anioMesTiempoMensual">2026</span>
+                        </div>
+                        <button onclick="cambiarMesTiempoMensual(1)" class="text-indigo-600 hover:text-indigo-800 font-black text-base leading-none px-1">▶</button>
+                    </div>
+                </div>
+            </div>
+            <div class="relative h-64 bg-slate-50 rounded-xl p-2">
+                <canvas id="graficoTiempoMensual"></canvas>
+            </div>
         </div>
     </div>
 

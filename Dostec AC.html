@@ -1371,12 +1371,23 @@ function renderizarIncidencias() {
   arr.forEach(t => {
     cuerpo.innerHTML += `<tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
       <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-      <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
-      <td class="p-4 text-right"><button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500 transition-colors" title="Borrar incidencia">🗑️</button></td></tr>`;
+      <td class="p-4 text-slate-800 font-semibold cursor-pointer hover:text-red-600" onclick="editarIncidenciaTexto('${t.id}', '${(t.descripcion || '').replace(/'/g, "\\'")}')" title="Editar texto de la incidencia">
+        ${t.descripcion}
+      </td>
+      <td class="p-4 text-right">
+        <button onclick="editarIncidenciaTexto('${t.id}', '${(t.descripcion || '').replace(/'/g, "\\'")}')" class="text-slate-300 hover:text-blue-500 transition-colors mr-2" title="Editar incidencia">✏️</button>
+        <button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500 transition-colors" title="Borrar incidencia">🗑️</button>
+      </td></tr>`;
   });
 }
 
 window.filtrarIncidenciasPorMes = function() { renderizarIncidencias(); };
+
+window.editarIncidenciaTexto = async function(id, textoActual) {
+  const nuevo = prompt('Editar incidencia:', textoActual || '');
+  if (nuevo === null || nuevo.trim() === '') return;
+  await fbUpdate(ref(db, `incidencias_texto/${id}`), { descripcion: nuevo.trim() });
+};
 
 // ============================================
 // LISTENER HISTORIAL — actualiza gráficos y tabla

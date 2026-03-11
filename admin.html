@@ -198,7 +198,7 @@
 
   <!-- BUSCADOR DISCRETO -->
   <div class="mb-6">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3 flex-wrap">
       <div class="relative">
         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
         <input id="searchSerieInput" type="text" placeholder="Buscar serie o pedido…"
@@ -207,6 +207,11 @@
         <button id="searchClearBtn" onclick="document.getElementById('searchSerieInput').value='';buscarSerie('');"
           class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 text-xs font-black">✕</button>
       </div>
+      <button type="button"
+        onclick="abrirEtiquetasManuales()"
+        class="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-[11px] font-black uppercase shadow-sm">
+        🏷️ Etiquetas manuales
+      </button>
     </div>
     <!-- Resultados flotantes -->
     <div id="searchResults" class="hidden relative z-40 mt-1 w-96 max-w-[90vw]">
@@ -1340,6 +1345,11 @@ window.imprimirEtiquetaBuscador = async function(idx) {
   if (!r) return;
   const items = [{ serie: r.serie, codigo: r.codigo, cliente: r.cliente, fecha: r.fecha }];
   await abrirModalEtiquetas(items);
+};
+
+// ── Etiquetas manuales: abrir Etiqueta.html en nueva pestaña ──
+window.abrirEtiquetasManuales = () => {
+  window.open('Etiqueta.html', '_blank');
 };
 </script>
 
