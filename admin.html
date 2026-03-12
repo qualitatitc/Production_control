@@ -1164,12 +1164,18 @@ async function abrirModalEtiquetas(items) {
   let descEn = '';
   try {
     const descripciones = await getDescripciones();
-    const cod = String(items[0].codigo||'').trim().toUpperCase();
-    const itemDesc = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase()===cod);
-    if (itemDesc) {
-      descEs = corregirTexto(itemDesc.Descripcion);
-      descEn = itemDesc['Nombre extranjero'] || '';
-    }
+    // Enriquecer cada item con su propia descripción (ES/EN)
+    items = items.map(it => {
+      const codIt = String(it.codigo || '').trim().toUpperCase();
+      const itemDescIt = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === codIt);
+      const descEsIt = itemDescIt ? corregirTexto(itemDescIt.Descripcion) : (it.codigo || '');
+      const descEnIt = itemDescIt ? (itemDescIt['Nombre extranjero'] || '') : '';
+      return { ...it, descEs: descEsIt, descEn: descEnIt };
+    });
+    // Para la cabecera del modal usamos la del primer código
+    const firstDesc = items[0];
+    descEs = firstDesc.descEs;
+    descEn = firstDesc.descEn;
   } catch(err) { /* sin conexión */ }
 
   const sns = items.map(i=>i.serie).join(' · ');

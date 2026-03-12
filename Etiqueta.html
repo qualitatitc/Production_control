@@ -93,6 +93,8 @@
             const container = document.getElementById('etiquetas-container');
             container.innerHTML = '';
             items.forEach((item, idx) => {
+                const descEsItem = item.descEs || descEs || '';
+                const descEnItem = item.descEn || descEn || '';
                 const etiq = document.createElement('div');
                 etiq.className = 'etiqueta-itc';
                 etiq.innerHTML = `
@@ -104,8 +106,8 @@
                     <div class="code-text">${item.codigo}</div>
                     <div class="divider"></div>
                     <div class="section-title">DESCRIPTION</div>
-                    <div class="desc-text desc-es">${descEs || ''}</div>
-                    <div class="desc-text desc-en">${descEn || ''}</div>
+                    <div class="desc-text desc-es">${descEsItem}</div>
+                    <div class="desc-text desc-en">${descEnItem}</div>
                     <div class="divider"></div>
                     <div class="section-title">S/N:</div>
                     <div class="barcode-area" style="margin-bottom:0;"><svg id="bc-sn-${idx}" class="barcode-svg"></svg></div>
