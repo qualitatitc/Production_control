@@ -2473,6 +2473,7 @@ window.addEventListener('load', async () => {
             <button id="btnReposicion" onclick="mostrarSelectorOperarios('reposicion')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">🔄 Reposición</button>
             <button id="btnIncidencia" onclick="toggleIncidencia()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">⚠️ Incidencia</button>
             <button id="btnDesayuno" onclick="pausaDesayuno()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">☕ Desayuno</button>
+            <button id="btnPedirMaterial" onclick="abrirModalQR()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">📦 Pedir material</button>
         </div>
     </div>
     
@@ -2628,7 +2629,149 @@ window.addEventListener('load', async () => {
             </table>
         </div>
     </div>
+<!-- Modal Escáner QR -->
+<div id="modalQR" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md border-2 border-blue-500 flex flex-col overflow-hidden">
+    <div class="px-5 py-3 bg-blue-600 text-white flex items-center justify-between">
+      <div>
+        <h3 class="text-sm font-black uppercase tracking-widest">📦 Escanear QR de material</h3>
+        <p class="text-[10px] font-semibold text-blue-100 mt-0.5">Apunta la cámara al código QR</p>
+      </div>
+      <button onclick="cerrarModalQR()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-red-500 flex items-center justify-center text-sm font-black">✕</button>
+    </div>
+    <div class="p-4 space-y-3">
+      <div id="qr-reader" class="w-full rounded-2xl overflow-hidden border border-slate-200"></div>
+      <p id="qrMensaje" class="text-[11px] text-slate-500 font-semibold">
+        Formato esperado: <span class="font-mono bg-slate-100 px-1 py-0.5 rounded">CODIGO|DESCRIPCION|CANTIDAD</span>
+      </p>
+    </div>
+  </div>
 </div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const supabaseUrl = 'https://jjumuwwalquiimfvzwgs.supabase.co';
+  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdW11d3dhbHF1aWltZnZ6d2dzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzQ4NDYsImV4cCI6MjA4ODc1MDg0Nn0.1-QncUnJV_OocW4t2bE3NNYiIQl0IhZaxRyW99FCMl8';
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  let qrScanner = null;
+  let qrScannerActivo = false;
+
+  async function pedirMaterial({ modulo, codigo, descripcion, cantidad }) {
+    const { error } = await supabase
+      .from('solicitudes_material')
+      .insert([{ modulo: modulo || 'agitador', codigo, descripcion, cantidad }]);
+
+    if (error) {
+      console.error('Error solicitando material', error);
+      alert('No se pudo enviar la petición de material.');
+      return false;
+    }
+
+    alert('Petición de material enviada al almacén.');
+    return true;
+  }
+
+  function parsearQR(texto) {
+    try {
+      // Soportar JSON
+      if (texto.trim().startsWith('{')) {
+        const obj = JSON.parse(texto);
+        return {
+          codigo: String(obj.codigo || '').trim(),
+          descripcion: String(obj.descripcion || '').trim(),
+          cantidad: Number(obj.cantidad || 1) || 1
+        };
+      }
+      // Formato CODIGO|DESCRIPCION|CANTIDAD
+      const partes = texto.split('|');
+      const codigo = (partes[0] || '').trim();
+      const descripcion = (partes[1] || '').trim();
+      const cantidad = Number((partes[2] || '1').trim()) || 1;
+      return { codigo, descripcion, cantidad };
+    } catch (e) {
+      console.error('Error parseando QR', e);
+      return null;
+    }
+  }
+
+  window.abrirModalQR = async () => {
+    const modal = document.getElementById('modalQR');
+    const mensaje = document.getElementById('qrMensaje');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    if (qrScannerActivo) return;
+
+    const qrDivId = 'qr-reader';
+    const config = {
+      fps: 10,
+      qrbox: { width: 220, height: 220 },
+      aspectRatio: 1.0,
+      facingMode: 'environment'
+    };
+
+    qrScanner = new Html5Qrcode(qrDivId);
+    qrScannerActivo = true;
+
+    try {
+      await qrScanner.start(
+        { facingMode: 'environment' },
+        config,
+        async (decodedText) => {
+          if (!decodedText) return;
+          if (mensaje) mensaje.textContent = 'QR leído, enviando petición…';
+
+          const datos = parsearQR(decodedText);
+          if (!datos || !datos.codigo || !datos.descripcion) {
+            alert('El QR no tiene el formato esperado.');
+            if (mensaje) mensaje.textContent = 'Formato incorrecto. Esperado: CODIGO|DESCRIPCION|CANTIDAD';
+            return;
+          }
+
+          const ok = await pedirMaterial({ ...datos, modulo: 'agitador' });
+          if (ok) {
+            await cerrarQRInterno();
+          } else if (mensaje) {
+            mensaje.textContent = 'Error al enviar. Reintenta.';
+          }
+        },
+        (errorMsg) => {
+          // Errores de escaneo continuos se ignoran en silencio
+        }
+      );
+    } catch (e) {
+      console.error('Error iniciando cámara QR', e);
+      alert('No se pudo acceder a la cámara. Revisa permisos del navegador.');
+      await cerrarQRInterno();
+    }
+  };
+
+  async function cerrarQRInterno() {
+    if (qrScanner && qrScannerActivo) {
+      try {
+        await qrScanner.stop();
+      } catch (_) {}
+      try {
+        await qrScanner.clear();
+      } catch (_) {}
+    }
+    qrScannerActivo = false;
+    const modal = document.getElementById('modalQR');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  window.cerrarModalQR = async () => {
+    await cerrarQRInterno();
+  };
+</script>
 
 </body>
 </html>
