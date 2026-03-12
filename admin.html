@@ -1164,8 +1164,8 @@ async function abrirModalEtiquetas(items) {
   let descEn = '';
   try {
     const descripciones = await getDescripciones();
-    // Enriquecer cada item con su propia descripción (ES/EN)
-    items = items.map(it => {
+    // Enriquecer cada item con su propia descripción (ES/EN) para que cada etiqueta tenga su texto correcto
+    items = items.map((it) => {
       const codIt = String(it.codigo || '').trim().toUpperCase();
       const itemDescIt = Object.values(descripciones).find(x => x && x.Articulo && x.Articulo.toString().toUpperCase() === codIt);
       const descEsIt = itemDescIt ? corregirTexto(itemDescIt.Descripcion) : (it.codigo || '');
@@ -1186,7 +1186,8 @@ async function abrirModalEtiquetas(items) {
   // Cargar Etiqueta.html en el iframe y enviar datos cuando esté lista
   iframe.src = 'Etiqueta.html';
   iframe.onload = () => {
-    iframe.contentWindow.postMessage({ type: 'ITC_ETIQUETAS', items, descEs, descEn }, '*');
+    // Enviamos todos los datos por item; Etiqueta.html usará item.descEs / item.descEn
+    iframe.contentWindow.postMessage({ type: 'ITC_ETIQUETAS', items }, '*');
     // Ajustar altura del iframe al contenido real tras render
     setTimeout(() => {
       try {

@@ -89,12 +89,12 @@
             return texto.charAt(0).toUpperCase() + texto.slice(1);
         }
 
-        function renderEtiquetasMultiples(items, descEs, descEn) {
+        function renderEtiquetasMultiples(items) {
             const container = document.getElementById('etiquetas-container');
             container.innerHTML = '';
             items.forEach((item, idx) => {
-                const descEsItem = item.descEs || descEs || '';
-                const descEnItem = item.descEn || descEn || '';
+                const descEsItem = item.descEs || '';
+                const descEnItem = item.descEn || '';
                 const etiq = document.createElement('div');
                 etiq.className = 'etiqueta-itc';
                 etiq.innerHTML = `
@@ -127,12 +127,12 @@
         window.addEventListener('message', (event) => {
             const data = event.data;
             if (!data || data.type !== 'ITC_ETIQUETAS') return;
-            const { items, descEs, descEn } = data;
+            const { items } = data;
             if (!items || !items.length) return;
             document.body.classList.add('modo-iframe');
             document.getElementById('panelManual').style.display = 'none';
             document.getElementById('etiqueta-itc').style.display = 'none';
-            renderEtiquetasMultiples(items, descEs, descEn);
+            renderEtiquetasMultiples(items);
         });
 
         window.buscar = async () => {
