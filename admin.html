@@ -938,6 +938,17 @@ function renderGlobalCal(){
       return Object.entries(todosPG).map(([pedId, { items, tarea }]) => {
         const cliente = items[0]?.cliente || '\u2014';
         const uds     = items.length;
+        // Desglose por modelo (código) + unidades
+        const modelosMapG = {};
+        items.forEach(it => {
+          const codigo = it.codigo || '\u2014';
+          if (!modelosMapG[codigo]) modelosMapG[codigo] = 0;
+          modelosMapG[codigo] += 1;
+        });
+        const modelosHtml = Object.entries(modelosMapG)
+          .map(([codigo, udsModelo]) =>
+            `<div class="text-[8px] opacity-75 font-semibold truncate">${codigo} <span class="font-black">${udsModelo}u</span></div>`
+          ).join('');
         const pedSafe = String(pedId).replace(/'/g, "\\'");
         const esFin   = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
         const esCurso = tarea && !esFin;
