@@ -967,6 +967,12 @@ window.borrarIncidenciaTexto = async function(id) {
   await remove(ref(db, `incidencias_texto/${id}`));
 };
 
+window.editarIncidenciaTexto = async function(id, textoActual) {
+  const nuevo = prompt('Editar incidencia:', textoActual || '');
+  if (nuevo === null || nuevo.trim() === '') return;
+  await update(ref(db, `incidencias_texto/${id}`), { descripcion: nuevo.trim() });
+};
+
 onValue(mantenimientoRef, (snapshot) => {
   const cuerpo = document.getElementById('cuerpoMantenimiento');
   cuerpo.innerHTML = "";
@@ -997,12 +1003,14 @@ onValue(incidenciasTextoRef, (snapshot) => {
   const cuerpo = document.getElementById('cuerpoIncidencias');
   cuerpo.innerHTML = "";
   const datos = snapshot.val();
-  if (!datos) { cuerpo.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>'; return; }
+  if (!datos) { cuerpo.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">No hay incidencias registradas</td></tr>'; return; }
   const arr = Object.keys(datos).map(id => ({ id, ...datos[id] })).sort((a, b) => b.timestamp - a.timestamp);
+  const esc = (s) => String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
   arr.forEach(t => {
     cuerpo.innerHTML += `<tr class="bg-white border-b border-slate-100 hover:bg-red-50 transition-all">
       <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
-      <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td></tr>`;
+      <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
+      <td class="p-4 text-right"><button onclick="editarIncidenciaTexto('${t.id}', '${esc(t.descripcion)}')" class="text-slate-300 hover:text-blue-500 mr-2" title="Editar">✏️</button><button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500" title="Borrar">🗑️</button></td></tr>`;
   });
 });
 
@@ -1391,10 +1399,10 @@ window.exportarExcel = async () => {
       <div class="max-h-96 overflow-y-auto">
         <table class="w-full text-left">
           <thead class="bg-orange-100 text-orange-800 text-[10px] font-black uppercase sticky top-0">
-            <tr><th class="p-4 w-32">Fecha</th><th class="p-4">Motivo</th></tr>
+            <tr><th class="p-4 w-32">Fecha</th><th class="p-4">Motivo</th><th class="p-4 text-right w-24"></th></tr>
           </thead>
           <tbody id="cuerpoIncidencias" class="divide-y divide-slate-100">
-            <tr><td colspan="2" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
+            <tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
