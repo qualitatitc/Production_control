@@ -760,26 +760,17 @@ function renderCalGrid(){
     const pillsHtml = Object.entries(todosPedidos).map(([pedId, { items, tarea }]) => {
       const cliente = items[0]?.cliente || '\u2014';
       const uds     = items.length;
-      // Desglose por modelo (código) + sus números de serie
+      // Desglose por modelo (código) + unidades (SIN números de serie; van en el popup)
       const modelosMap = {};
       items.forEach(it => {
         const codigo = it.codigo || '\u2014';
-        if (!modelosMap[codigo]) modelosMap[codigo] = { uds: 0, series: [] };
-        modelosMap[codigo].uds += 1;
-        if (it.serie) modelosMap[codigo].series.push(it.serie);
+        if (!modelosMap[codigo]) modelosMap[codigo] = 0;
+        modelosMap[codigo] += 1;
       });
-      const modelosHtml = Object.entries(modelosMap).map(([codigo, info]) => {
-        const seriesOrdenadas = info.series.slice().sort();
-        let snTexto = '';
-        if (seriesOrdenadas.length === 1) {
-          snTexto = `S/N: ${seriesOrdenadas[0]}`;
-        } else if (seriesOrdenadas.length > 1) {
-          snTexto = `S/N: ${seriesOrdenadas[0]} - ${seriesOrdenadas[seriesOrdenadas.length - 1]}`;
-        }
-        return `<div class="text-[10px] opacity-80 font-semibold truncate">
-                  ${codigo} <span class="font-black">${info.uds}u</span>${snTexto ? ' · ' + snTexto : ''}
-                </div>`;
-      }).join('');
+      const modelosHtml = Object.entries(modelosMap)
+        .map(([codigo, udsModelo]) =>
+          `<div class="text-[10px] opacity-80 font-semibold truncate">${codigo} <span class="font-black">${udsModelo}u</span></div>`
+        ).join('');
       const pedSafe = String(pedId).replace(/'/g, "\\'");
       const esFin    = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
       const esCurso  = tarea && !esFin;
@@ -947,14 +938,6 @@ function renderGlobalCal(){
       return Object.entries(todosPG).map(([pedId, { items, tarea }]) => {
         const cliente = items[0]?.cliente || '\u2014';
         const uds     = items.length;
-        // Rango de números de serie (S/N) en calendario global
-        const series = items.map(it => it.serie).filter(Boolean).sort();
-        let snHtml = '';
-        if (series.length === 1) {
-          snHtml = `<div class="text-[8px] opacity-75 font-semibold truncate">S/N: ${series[0]}</div>`;
-        } else if (series.length > 1) {
-          snHtml = `<div class="text-[8px] opacity-75 font-semibold truncate">S/N: ${series[0]} - ${series[series.length-1]}</div>`;
-        }
         const pedSafe = String(pedId).replace(/'/g, "\\'");
         const esFin   = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
         const esCurso = tarea && !esFin;
@@ -984,7 +967,7 @@ function renderGlobalCal(){
               ${badge}
             </div>
             <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-            ${snHtml}
+            ${modelosHtml}
           </div>
           <div class="flex flex-col gap-0.5 flex-shrink-0">${botones}</div>
         </div>`;
