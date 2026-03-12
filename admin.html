@@ -399,6 +399,24 @@ const MOD_COLORS = {
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// Festivos nacionales (año actual) + días adicionales del usuario
+const FESTIVOS_NACIONALES = new Set([
+  // 2026 festivos nacionales España (simplificado) + 26, 27 y 30 de marzo locales
+  '2026-01-01', // Año Nuevo
+  '2026-01-06', // Reyes
+  '2026-03-26', // Festivo propio usuario
+  '2026-03-27', // Festivo propio usuario
+  '2026-03-30', // Festivo propio usuario
+  '2026-05-01', // Día del Trabajo
+  '2026-08-15', // Asunción
+  '2026-10-12', // Fiesta Nacional
+  '2026-11-01', // Todos los Santos
+  '2026-12-06', // Constitución
+  '2026-12-08', // Inmaculada
+  '2026-12-25'  // Navidad
+]);
+const esFestivo = (iso) => FESTIVOS_NACIONALES.has(iso);
+
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 const apps={}, dbs={};
 const planCache   = { agitador:{}, dostec40:{}, dostec50:{}, restyling:{} };
@@ -741,7 +759,8 @@ function renderCalGrid(){
     const iso=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const grupos=porFecha[iso]||{};
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
-    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    const festivo = esFestivo(iso);
+    let bgCls=(esFinSem || festivo)?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     // Pills arrastrables por pedido — merge planificacion + tareas
     // tareasCache[modulo][iso][pedido] = {series,estados,cliente,codigo}
     const tareasHoy = (tareasCache[modulo][iso]) || {};
@@ -792,19 +811,23 @@ function renderCalGrid(){
            <button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
            <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
       return `
-      <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
+      <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex flex-col gap-1"
            ${draggable} data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1.5 mb-1 flex-wrap">
-            <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
-            <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
-            <span class="text-[11px] font-black">${uds}u</span>
-            ${badge}
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
+              <span class="text-[11px] font-black truncate">Ped.${pedId}</span>
+              <span class="text-[11px] font-black">${uds}u</span>
+              ${badge}
+            </div>
           </div>
+          <div class="flex items-center gap-1 flex-shrink-0">${botones}</div>
+        </div>
+        <div class="min-w-0">
           <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
           ${modelosHtml}
         </div>
-        <div class="flex flex-col gap-1 flex-shrink-0">${botones}</div>
       </div>`;
     }).join('');
     html+=`<div class="cal-cell ${bgCls} border border-slate-100 p-1.5"
@@ -960,7 +983,8 @@ function renderGlobalCal(){
       if(porFechaTareas[iso] && !modsDia[key]) modsDia[key]={};
     }
     const esHoy=iso===hoy; const diaSem=new Date(iso+'T12:00:00').getDay(); const esFinSem=diaSem===0||diaSem===6;
-    let bgCls=esFinSem?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
+    const festivo = esFestivo(iso);
+    let bgCls=(esFinSem || festivo)?'bg-slate-50':'bg-white'; if(esHoy) bgCls='bg-blue-50';
     const totalPlan = Object.values(modsDia).reduce((s,grupos)=>s+Object.values(grupos).reduce((s2,arr)=>s2+arr.length,0),0);
     const totalTareas = Object.keys(tareasCache).reduce((s,key)=>{ const t=tareasCache[key][iso]||{}; return s+Object.values(t).reduce((s2,info)=>s2+info.series.length,0); },0);
     const totalDia = totalPlan + (totalTareas > totalPlan ? totalTareas - totalPlan : 0);
@@ -1012,19 +1036,23 @@ function renderGlobalCal(){
           : `<button type="button" class="btn-info-pedido text-slate-400 hover:text-slate-700 rounded p-0.5 text-[10px]" title="Información">ℹ️</button>
              <button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
              <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
-        return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
+        return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex flex-col gap-0.5"
              ${draggable} data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1 mb-0.5 flex-wrap">
-              <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
-              <span class="font-black truncate">Ped.${pedId}</span>
-              <span class="font-black">${uds}u</span>
-              ${badge}
+          <div class="flex items-center justify-between gap-1">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1 mb-0.5 flex-wrap">
+                <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
+                <span class="font-black truncate">Ped.${pedId}</span>
+                <span class="font-black">${uds}u</span>
+                ${badge}
+              </div>
             </div>
+            <div class="flex items-center gap-0.5 flex-shrink-0">${botones}</div>
+          </div>
+          <div class="min-w-0">
             <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
             ${modelosHtml}
           </div>
-          <div class="flex flex-col gap-0.5 flex-shrink-0">${botones}</div>
         </div>`;
       });
     }).join('');
@@ -1034,7 +1062,7 @@ function renderGlobalCal(){
                ondragleave="onCalCellDragLeave(event)"
                ondrop="onCalCellDrop(event,null)">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-[11px] font-black ${esHoy?'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]':esFinSem?'text-slate-300':'text-slate-700'}">${d}</span>
+        <span class="text-[11px] font-black ${esHoy?'bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]':(esFinSem||festivo)?'text-slate-300':'text-slate-700'}">${d}</span>
         ${totalDia?`<span class="text-[9px] font-black text-slate-400">${totalDia}</span>`:''}
       </div>
       ${pillsHtml}

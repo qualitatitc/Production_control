@@ -2044,7 +2044,10 @@ const renderIncidencias = (items) => {
         '<td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">' + esc(t.fecha) + '</td>' +
         '<td class="p-2 text-[10px] text-slate-400 whitespace-nowrap">' + esc(t.hora) + '</td>' +
         '<td class="p-2 text-xs font-bold text-slate-700">' + esc(t.texto) + '</td>' +
-        '<td class="p-2 text-right"><button onclick="editarIncidenciaLog(\'' + id + '\', \'' + esc(t.texto).replace(/\'/g, "\\'" ) + '\')" class="text-slate-300 hover:text-blue-500 text-base leading-none mr-2" title="Editar">✏️</button><button onclick="borrarIncidenciaLog(\'' + id + '\')" class="text-slate-300 hover:text-red-500 text-base leading-none" title="Borrar">🗑️</button></td>' +
+        '<td class="p-2 text-right whitespace-nowrap"><span class="inline-flex items-center justify-end gap-2">' +
+          '<button onclick="editarIncidenciaLog(\'' + id + '\', \'' + esc(t.texto).replace(/\'/g, "\\'" ) + '\')" class="text-slate-300 hover:text-blue-500 text-base leading-none" title="Editar">✏️</button>' +
+          '<button onclick="borrarIncidenciaLog(\'' + id + '\')" class="text-slate-300 hover:text-red-500 text-base leading-none" title="Borrar">🗑️</button>' +
+        '</span></td>' +
         '</tr>'
     ).join('');
 };

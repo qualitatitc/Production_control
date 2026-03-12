@@ -1373,8 +1373,10 @@ function renderizarIncidencias() {
       <td class="p-4 text-slate-600 font-medium text-sm">${t.fecha}</td>
       <td class="p-4 text-slate-800 font-semibold">${t.descripcion}</td>
       <td class="p-4 text-right">
-        <button onclick="editarIncidenciaTexto('${t.id}', '${(t.descripcion || '').replace(/'/g, "\\'")}')" class="text-slate-300 hover:text-blue-500 transition-colors mr-2" title="Editar incidencia">✏️</button>
-        <button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500 transition-colors" title="Borrar incidencia">🗑️</button>
+        <span class="inline-flex items-center justify-end gap-2">
+          <button onclick="editarIncidenciaTexto('${t.id}', '${(t.descripcion || '').replace(/'/g, "\\'")}')" class="text-slate-300 hover:text-blue-500 transition-colors text-base leading-none" title="Editar incidencia">✏️</button>
+          <button onclick="borrarIncidenciaTexto('${t.id}')" class="text-slate-300 hover:text-red-500 transition-colors text-base leading-none" title="Borrar incidencia">🗑️</button>
+        </span>
       </td></tr>`;
   });
 }
