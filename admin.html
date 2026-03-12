@@ -117,6 +117,11 @@
   </div>
 </div>
 
+<!-- Popup detalle pedido calendario -->
+<div id="popupDetallePedido" onclick="cerrarDetallePedido()" class="hidden fixed z-50 bg-white shadow-2xl border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-xs max-w-xs cursor-pointer">
+  <div id="popupDetalleBody"></div>
+</div>
+
 <!-- MODAL VISTA MÓDULO (IFRAME) -->
 <div id="modalModulo" class="fixed inset-0 bg-slate-900/80 z-50 hidden items-center justify-center p-2 md:p-4">
   <div class="bg-slate-900 rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
@@ -789,13 +794,14 @@ function renderCalGrid(){
       const badge = esFin   ? '<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>'
                   : esCurso ? '<span class="text-[9px] font-black text-blue-600 bg-blue-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>'
                   : '';
-      const botones = (esFin || esCurso)
+        const botones = (esFin || esCurso)
         ? `<span class="text-slate-300 text-lg leading-none select-none">${esFin ? '\u2713' : '\u25b6'}</span>`
         : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Imprimir etiquetas">\uD83C\uDFF7\uFE0F</button>
           <button type="button" onclick="eliminarPedidoCal('${modulo}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-1 opacity-70 hover:opacity-100 text-[11px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
       return `
       <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
-           ${draggable} data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}">
+           ${draggable} data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
+           onclick="mostrarDetallePedidoCal('${modulo}','${pedSafe}','${iso}', event, false)">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 mb-1 flex-wrap">
             <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
@@ -820,6 +826,64 @@ function renderCalGrid(){
   }
   const resto=(offset+diasMes)%7; if(resto>0) for(let i=0;i<7-resto;i++) html+=`<div class="cal-cell bg-slate-50/50 border border-slate-50"></div>`;
   document.getElementById('calGrid').innerHTML=html;
+}
+
+// Popup detalle de pedido desde calendarios
+function mostrarDetallePedidoCal(moduloKey, pedidoIdSafe, fechaIso, event, esGlobal){
+  event.stopPropagation();
+  const pedidoId = pedidoIdSafe.replace(/\\'/g, "'");
+  const cont = document.getElementById('popupDetallePedido');
+  const body = document.getElementById('popupDetalleBody');
+  if (!cont || !body) return;
+  const dataPlan = planCache[moduloKey] || {};
+  const itemsPlan = Object.values(dataPlan).filter(it => (it.pedido||'S/P')===pedidoId && (it.fecha||'sin-fecha')===fechaIso);
+  const tareasDia = (tareasCache[moduloKey] && tareasCache[moduloKey][fechaIso]) || {};
+  const infoTarea = tareasDia[pedidoId] || null;
+  const items = itemsPlan.length ? itemsPlan.map(it => ({ codigo:it.codigo, serie:it.serie })) :
+                infoTarea ? infoTarea.series.map(s => ({ codigo:infoTarea.codigo, serie:s })) : [];
+  if (!items.length){ return; }
+  const cliente = (itemsPlan[0]?.cliente) || (infoTarea?.cliente) || '—';
+  // Agrupar por modelo
+  const modelos = {};
+  items.forEach(it=>{
+    const c = it.codigo || '—';
+    if(!modelos[c]) modelos[c]={ uds:0, series:[] };
+    modelos[c].uds++;
+    if(it.serie) modelos[c].series.push(it.serie);
+  });
+  const filas = Object.entries(modelos).map(([cod,info])=>{
+    const s = info.series.slice().sort();
+    let sn = '';
+    if (s.length===1) sn = s[0];
+    else if (s.length>1) sn = `${s[0]} - ${s[s.length-1]}`;
+    return `<tr>
+      <td class="px-2 py-1 text-[11px] font-mono">${cod}</td>
+      <td class="px-2 py-1 text-[11px] text-right font-black">${info.uds}</td>
+      <td class="px-2 py-1 text-[11px] font-mono">${sn}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `
+    <div class="mb-1 text-[11px] font-black uppercase text-slate-700">Ped.${pedidoId}</div>
+    <div class="mb-1 text-[11px] font-semibold text-slate-700 truncate">${cliente}</div>
+    <div class="mb-2 text-[10px] text-slate-400">${fechaIso} · ${moduloKey}</div>
+    <table class="w-full border-t border-slate-200 mt-1">
+      <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
+        <tr><th class="px-2 py-1 text-left">Modelo</th><th class="px-2 py-1 text-right">Uds</th><th class="px-2 py-1 text-left">S/N</th></tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+  `;
+  cont.classList.remove('hidden');
+  // Posicionar cerca del cursor
+  const rect = cont.getBoundingClientRect();
+  const x = Math.min(window.innerWidth - rect.width - 8, event.clientX + 16);
+  const y = Math.min(window.innerHeight - rect.height - 8, event.clientY + 16);
+  cont.style.left = x + 'px';
+  cont.style.top  = y + 'px';
+}
+function cerrarDetallePedido(){
+  const cont = document.getElementById('popupDetallePedido');
+  if (cont) cont.classList.add('hidden');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -910,7 +974,8 @@ function renderGlobalCal(){
           : `<button type="button" onclick="imprimirEtiquetasPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-purple-600 hover:bg-purple-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Imprimir">\uD83C\uDFF7\uFE0F</button>
             <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
         return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
-             ${draggable} data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}">
+             ${draggable} data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
+             onclick="mostrarDetallePedidoCal('${key}','${pedSafe}','${iso}', event, true)">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1 mb-0.5 flex-wrap">
               <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
