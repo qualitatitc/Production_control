@@ -754,8 +754,16 @@ function renderCalGrid(){
     });
     const pillsHtml = Object.entries(todosPedidos).map(([pedId, { items, tarea }]) => {
       const cliente = items[0]?.cliente || '\u2014';
-      const codigo  = items[0]?.codigo  || '\u2014';
       const uds     = items.length;
+      // Desglose de modelos (códigos) por pedido
+      const modelosMap = {};
+      items.forEach(it => {
+        const c = it.codigo || '\u2014';
+        modelosMap[c] = (modelosMap[c] || 0) + 1;
+      });
+      const modelosHtml = Object.entries(modelosMap)
+        .map(([cod, n]) => `<div class="text-[9px] opacity-70 font-mono truncate">${cod} <span class="font-black">${n}u</span></div>`)
+        .join('');
       const pedSafe = String(pedId).replace(/'/g, "\\'");
       const esFin    = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
       const esCurso  = tarea && !esFin;
@@ -785,7 +793,7 @@ function renderCalGrid(){
             ${badge}
           </div>
           <div class="text-[10px] opacity-80 font-semibold truncate">${cliente}</div>
-          <div class="text-[10px] opacity-60 font-mono truncate">${codigo}</div>
+          ${modelosHtml}
         </div>
         <div class="flex flex-col gap-1 flex-shrink-0">${botones}</div>
       </div>`;
@@ -863,8 +871,16 @@ function renderGlobalCal(){
       });
       return Object.entries(todosPG).map(([pedId, { items, tarea }]) => {
         const cliente = items[0]?.cliente || '\u2014';
-        const codigo  = items[0]?.codigo  || '\u2014';
         const uds     = items.length;
+        // Desglose de modelos (códigos) por pedido en calendario global
+        const modelosMap = {};
+        items.forEach(it => {
+          const c = it.codigo || '\u2014';
+          modelosMap[c] = (modelosMap[c] || 0) + 1;
+        });
+        const modelosHtml = Object.entries(modelosMap)
+          .map(([cod, n]) => `<div class="text-[8px] opacity-70 font-mono truncate">${cod} <span class="font-black">${n}u</span></div>`)
+          .join('');
         const pedSafe = String(pedId).replace(/'/g, "\\'");
         const esFin   = tarea && tarea.estados.length > 0 && tarea.estados.every(e => e === 'finalizado');
         const esCurso = tarea && !esFin;
@@ -893,7 +909,7 @@ function renderGlobalCal(){
               ${badge}
             </div>
             <div class="text-[8px] opacity-75 font-semibold truncate">${cliente}</div>
-            <div class="text-[8px] opacity-55 font-mono truncate">${codigo}</div>
+            ${modelosHtml}
           </div>
           <div class="flex flex-col gap-0.5 flex-shrink-0">${botones}</div>
         </div>`;
