@@ -274,6 +274,14 @@ const tsToFechaLocal = (ms) => {
     return `${year}-${month}-${day}`;
 };
 
+// Formato corto para tablas: dd/mm/aa
+const formatearFechaCorta = (iso) => {
+    if (!iso) return '';
+    const [year, month, day] = String(iso).split('-');
+    if (!year || !month || !day) return iso;
+    return `${day}/${month}/${year.slice(-2)}`;
+};
+
 const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
 // ✅ CORREGIDO: Sintaxis correcta para Chart.js
@@ -2046,7 +2054,7 @@ onValue(mantenimientoRef, (snap) => {
         ? '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin tareas de mantenimiento</td></tr>'
         : items.map(([id, t]) => `
             <tr class="border-b border-slate-100 ${t.realizado ? 'bg-emerald-50' : 'bg-white'} hover:bg-slate-50">
-                <td class="p-2 text-[10px] text-slate-500">${t.fecha || ''}</td>
+                <td class="p-2 text-[10px] text-slate-500">${formatearFechaCorta(t.fecha || '')}</td>
                 <td class="p-2 text-xs font-bold ${t.realizado ? 'line-through text-slate-400' : 'text-slate-700'}">${t.texto || ''}</td>
                 <td class="p-2 text-center">
                     <button onclick="toggleMantenimiento('${id}', ${t.realizado})" class="text-[9px] font-black px-2 py-0.5 rounded-full border ${t.realizado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
@@ -2070,13 +2078,12 @@ const renderIncidencias = (items) => {
     const tbody = document.getElementById('tablaIncidenciasBody');
     if (!tbody) return;
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias para este período</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-400 text-xs italic">Sin incidencias para este período</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(([id, t]) =>
         '<tr class="border-b border-slate-100 bg-white hover:bg-red-50">' +
-        '<td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">' + esc(t.fecha) + '</td>' +
-        '<td class="p-2 text-[10px] text-slate-400 whitespace-nowrap">' + esc(t.hora) + '</td>' +
+        '<td class="p-2 text-[10px] text-slate-500 whitespace-nowrap">' + esc(formatearFechaCorta(t.fecha)) + '</td>' +
         '<td class="p-2 text-xs font-bold text-slate-700 cursor-pointer hover:text-red-600" onclick="editarIncidenciaLog(\'' + id + '\', \'' + esc(t.texto).replace(/\'/g, "\\'" ) + '\')" title="Pulsa para editar">' + esc(t.texto) + ' <span class="text-[9px] text-slate-300 font-normal">✏️</span></td>' +
         '<td class="p-2 text-right"><button onclick="borrarIncidenciaLog(\'' + id + '\')" class="text-slate-300 hover:text-red-500 text-base leading-none">🗑️</button></td>' +
         '</tr>'
@@ -2439,7 +2446,6 @@ window.addEventListener('load', async () => {
                 <thead class="bg-red-50 text-red-700 font-black uppercase text-[10px] sticky top-0">
                     <tr>
                         <th class="p-2 whitespace-nowrap">Fecha</th>
-                        <th class="p-2 whitespace-nowrap">Hora</th>
                         <th class="p-2 w-full">Motivo</th>
                         <th class="p-2"></th>
                     </tr>
