@@ -118,7 +118,7 @@
 </div>
 
 <!-- Popup detalle pedido calendario -->
-<div id="popupDetallePedido" onclick="cerrarDetallePedido()" class="hidden fixed z-50 bg-white shadow-2xl border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-xs max-w-xs cursor-pointer">
+<div id="popupDetallePedido" class="hidden fixed z-[9999] bg-white shadow-2xl border border-slate-200 rounded-2xl px-4 py-3 text-slate-800 text-xs" style="min-width:260px;max-width:360px;">
   <div id="popupDetalleBody"></div>
 </div>
 
@@ -792,7 +792,7 @@ function renderCalGrid(){
       return `
       <div class="pedido-pill ${pillCls} rounded-xl px-3 py-2 mb-1.5 leading-tight flex justify-between items-start gap-2"
            ${draggable} data-modulo="${modulo}" data-pedido="${pedId}" data-fecha="${iso}"
-           onclick="mostrarDetallePedidoCal('${modulo}','${pedSafe}','${iso}', event, false)">
+           onclick="mostrarDetallePedidoCal('${modulo}','${pedSafe}','${iso}', event)">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 mb-1 flex-wrap">
             <span class="w-2 h-2 rounded-full ${dotCls} flex-shrink-0"></span>
@@ -820,8 +820,9 @@ function renderCalGrid(){
 }
 
 // Popup detalle de pedido desde calendarios
-function mostrarDetallePedidoCal(moduloKey, pedidoIdSafe, fechaIso, event, esGlobal){
+window.mostrarDetallePedidoCal = function(moduloKey, pedidoIdSafe, fechaIso, event){
   event.stopPropagation();
+  event.preventDefault();
   const pedidoId = pedidoIdSafe.replace(/\\'/g, "'");
   const cont = document.getElementById('popupDetallePedido');
   const body = document.getElementById('popupDetalleBody');
@@ -832,9 +833,7 @@ function mostrarDetallePedidoCal(moduloKey, pedidoIdSafe, fechaIso, event, esGlo
   const infoTarea = tareasDia[pedidoId] || null;
   const items = itemsPlan.length ? itemsPlan.map(it => ({ codigo:it.codigo, serie:it.serie })) :
                 infoTarea ? infoTarea.series.map(s => ({ codigo:infoTarea.codigo, serie:s })) : [];
-  if (!items.length){ return; }
   const cliente = (itemsPlan[0]?.cliente) || (infoTarea?.cliente) || '—';
-  // Agrupar por modelo
   const modelos = {};
   items.forEach(it=>{
     const c = it.codigo || '—';
@@ -842,40 +841,60 @@ function mostrarDetallePedidoCal(moduloKey, pedidoIdSafe, fechaIso, event, esGlo
     modelos[c].uds++;
     if(it.serie) modelos[c].series.push(it.serie);
   });
-  const filas = Object.entries(modelos).map(([cod,info])=>{
+  const filas = items.length ? Object.entries(modelos).map(([cod,info])=>{
     const s = info.series.slice().sort();
-    let sn = '';
-    if (s.length===1) sn = s[0];
-    else if (s.length>1) sn = `${s[0]} - ${s[s.length-1]}`;
-    return `<tr>
-      <td class="px-2 py-1 text-[11px] font-mono">${cod}</td>
-      <td class="px-2 py-1 text-[11px] text-right font-black">${info.uds}</td>
-      <td class="px-2 py-1 text-[11px] font-mono">${sn}</td>
+    const sn = s.length===1 ? s[0] : s.length>1 ? `${s[0]} — ${s[s.length-1]}` : '—';
+    return `<tr class="border-t border-slate-100">
+      <td class="px-2 py-1 font-mono font-bold">${cod}</td>
+      <td class="px-2 py-1 text-right font-black">${info.uds}u</td>
+      <td class="px-2 py-1 font-mono text-slate-500">${sn}</td>
     </tr>`;
-  }).join('');
+  }).join('') : `<tr><td colspan="3" class="px-2 py-2 text-slate-400 italic">Sin datos</td></tr>`;
+  const modLabel = moduloKey.charAt(0).toUpperCase() + moduloKey.slice(1);
   body.innerHTML = `
-    <div class="mb-1 text-[11px] font-black uppercase text-slate-700">Ped.${pedidoId}</div>
-    <div class="mb-1 text-[11px] font-semibold text-slate-700 truncate">${cliente}</div>
-    <div class="mb-2 text-[10px] text-slate-400">${fechaIso} · ${moduloKey}</div>
-    <table class="w-full border-t border-slate-200 mt-1">
-      <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
-        <tr><th class="px-2 py-1 text-left">Modelo</th><th class="px-2 py-1 text-right">Uds</th><th class="px-2 py-1 text-left">S/N</th></tr>
+    <div class="flex items-center justify-between mb-2">
+      <span class="font-black uppercase text-slate-800">Pedido ${pedidoId}</span>
+      <button onclick="cerrarDetallePedido()" class="text-slate-400 hover:text-red-500 text-sm leading-none ml-4">✕</button>
+    </div>
+    <div class="text-[11px] font-semibold text-slate-600 mb-0.5">👤 ${cliente}</div>
+    <div class="text-[10px] text-slate-400 mb-3">📅 ${fechaIso} &nbsp;·&nbsp; ${modLabel}</div>
+    <table class="w-full text-[11px]">
+      <thead class="bg-slate-50 text-[10px] uppercase text-slate-400">
+        <tr>
+          <th class="px-2 py-1 text-left">Modelo</th>
+          <th class="px-2 py-1 text-right">Uds</th>
+          <th class="px-2 py-1 text-left">S/N</th>
+        </tr>
       </thead>
       <tbody>${filas}</tbody>
     </table>
   `;
+  // Posicionar: primero mostrar para medir, luego colocar
+  cont.style.left = '-9999px';
+  cont.style.top  = '-9999px';
   cont.classList.remove('hidden');
-  // Posicionar cerca del cursor
-  const rect = cont.getBoundingClientRect();
-  const x = Math.min(window.innerWidth - rect.width - 8, event.clientX + 16);
-  const y = Math.min(window.innerHeight - rect.height - 8, event.clientY + 16);
-  cont.style.left = x + 'px';
-  cont.style.top  = y + 'px';
-}
-function cerrarDetallePedido(){
+  requestAnimationFrame(() => {
+    const pw = cont.offsetWidth;
+    const ph = cont.offsetHeight;
+    const cx = event.clientX + window.scrollX;
+    const cy = event.clientY + window.scrollY;
+    const x = Math.min(cx + 12, window.innerWidth + window.scrollX - pw - 8);
+    const y = Math.min(cy + 12, window.innerHeight + window.scrollY - ph - 8);
+    cont.style.left = x + 'px';
+    cont.style.top  = y + 'px';
+  });
+};
+window.cerrarDetallePedido = function(){
   const cont = document.getElementById('popupDetallePedido');
   if (cont) cont.classList.add('hidden');
-}
+};
+// Cerrar el popup al hacer clic fuera
+document.addEventListener('click', function(e){
+  const cont = document.getElementById('popupDetallePedido');
+  if (cont && !cont.classList.contains('hidden') && !cont.contains(e.target)) {
+    cont.classList.add('hidden');
+  }
+});
 
 // ════════════════════════════════════════════════════════════════════
 // CALENDARIO GLOBAL con drag & drop
@@ -969,7 +988,7 @@ function renderGlobalCal(){
             <button type="button" onclick="eliminarPedidoCal('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-red-600 hover:bg-red-100 rounded p-0.5 opacity-70 hover:opacity-100 text-[10px]" title="Eliminar">\uD83D\uDDD1\uFE0F</button>`;
         return `<div class="pedido-pill ${pillCls} rounded-md px-1.5 py-1 mb-0.5 text-[9px] leading-tight w-full flex justify-between items-start gap-1"
              ${draggable} data-modulo="${key}" data-pedido="${pedId}" data-fecha="${iso}"
-             onclick="mostrarDetallePedidoCal('${key}','${pedSafe}','${iso}', event, true)">
+             onclick="mostrarDetallePedidoCal('${key}','${pedSafe}','${iso}', event)">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1 mb-0.5 flex-wrap">
               <span class="w-1.5 h-1.5 rounded-full ${dotCls} flex-shrink-0"></span>
