@@ -2632,12 +2632,17 @@ window.addEventListener('load', async () => {
 <!-- Modal Escáner QR -->
 <div id="modalQR" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
   <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md border-2 border-blue-500 flex flex-col overflow-hidden">
-    <div class="px-5 py-3 bg-blue-600 text-white flex items-center justify-between">
+    <div class="px-5 py-3 bg-blue-600 text-white flex items-center justify-between gap-3">
       <div>
         <h3 class="text-sm font-black uppercase tracking-widest">📦 Escanear QR de material</h3>
         <p class="text-[10px] font-semibold text-blue-100 mt-0.5">Apunta la cámara al código QR</p>
       </div>
-      <button onclick="cerrarModalQR()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-red-500 flex items-center justify-center text-sm font-black">✕</button>
+      <div class="flex items-center gap-2">
+        <button id="btnToggleCam" onclick="toggleQRCamera()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-base font-black" title="Cambiar cámara">
+          🔄
+        </button>
+        <button onclick="cerrarModalQR()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-red-500 flex items-center justify-center text-sm font-black">✕</button>
+      </div>
     </div>
     <div class="p-4 space-y-3">
       <div id="qr-reader" class="w-full rounded-2xl overflow-hidden border border-slate-200"></div>
@@ -2659,6 +2664,8 @@ window.addEventListener('load', async () => {
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   let qrScanner = null;
   let qrScannerActivo = false;
+  let qrProcesando = false;
+  let qrFacingMode = 'environment'; // 'environment' (trasera) o 'user' (frontal)
 
   async function pedirMaterial({ modulo, codigo, descripcion, cantidad }) {
     const { error } = await supabase
@@ -2698,38 +2705,35 @@ window.addEventListener('load', async () => {
     }
   }
 
-  window.abrirModalQR = async () => {
-    const modal = document.getElementById('modalQR');
-    const mensaje = document.getElementById('qrMensaje');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-
-    if (qrScannerActivo) return;
-
+  async function iniciarQRScanner() {
     const qrDivId = 'qr-reader';
+    const mensaje = document.getElementById('qrMensaje');
     const config = {
       fps: 10,
       qrbox: { width: 220, height: 220 },
-      aspectRatio: 1.0,
-      facingMode: 'environment'
+      aspectRatio: 1.0
     };
 
-    qrScanner = new Html5Qrcode(qrDivId);
+    if (!qrScanner) {
+      qrScanner = new Html5Qrcode(qrDivId);
+    }
+    qrProcesando = false;
     qrScannerActivo = true;
 
     try {
       await qrScanner.start(
-        { facingMode: 'environment' },
+        { facingMode: qrFacingMode },
         config,
         async (decodedText) => {
-          if (!decodedText) return;
+          if (!decodedText || qrProcesando) return;
+          qrProcesando = true;
           if (mensaje) mensaje.textContent = 'QR leído, enviando petición…';
 
           const datos = parsearQR(decodedText);
           if (!datos || !datos.codigo || !datos.descripcion) {
             alert('El QR no tiene el formato esperado.');
             if (mensaje) mensaje.textContent = 'Formato incorrecto. Esperado: CODIGO|DESCRIPCION|CANTIDAD';
+            qrProcesando = false;
             return;
           }
 
@@ -2738,6 +2742,7 @@ window.addEventListener('load', async () => {
             await cerrarQRInterno();
           } else if (mensaje) {
             mensaje.textContent = 'Error al enviar. Reintenta.';
+            // dejamos el escáner activo pero bloqueamos más envíos hasta cerrar
           }
         },
         (errorMsg) => {
@@ -2749,6 +2754,16 @@ window.addEventListener('load', async () => {
       alert('No se pudo acceder a la cámara. Revisa permisos del navegador.');
       await cerrarQRInterno();
     }
+  }
+
+  window.abrirModalQR = async () => {
+    const modal = document.getElementById('modalQR');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    if (qrScannerActivo) return;
+    await iniciarQRScanner();
   };
 
   async function cerrarQRInterno() {
@@ -2761,6 +2776,7 @@ window.addEventListener('load', async () => {
       } catch (_) {}
     }
     qrScannerActivo = false;
+    qrProcesando = false;
     const modal = document.getElementById('modalQR');
     if (modal) {
       modal.classList.add('hidden');
@@ -2770,6 +2786,20 @@ window.addEventListener('load', async () => {
 
   window.cerrarModalQR = async () => {
     await cerrarQRInterno();
+  };
+
+  window.toggleQRCamera = async () => {
+    // Cambia entre frontal y trasera
+    qrFacingMode = qrFacingMode === 'environment' ? 'user' : 'environment';
+    if (!qrScanner) return;
+    // Reiniciar solo el escáner, manteniendo abierto el modal
+    if (qrScannerActivo) {
+      try {
+        await qrScanner.stop();
+      } catch (_) {}
+      qrScannerActivo = false;
+    }
+    await iniciarQRScanner();
   };
 </script>
 

@@ -48,8 +48,8 @@
                     <p id="current-date" class="text-xs font-bold uppercase"></p>
                     <p id="current-time" class="text-xl font-light"></p>
                 </div>
-                <button id="btn-config-mode" onclick="toggleConfigMode()" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
-                    Modo configuración
+                <button id="btn-config-mode" onclick="toggleConfigMode()" class="w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-slate-100 text-lg transition-colors border border-slate-700" title="Configurar orden de accesos">
+                    ⚙️
                 </button>
                 <button onclick="resetOrder()" class="text-[10px] bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
                     Restablecer Orden
@@ -276,13 +276,15 @@
             const btn = document.getElementById('btn-config-mode');
             if (btn) {
                 if (configMode) {
-                    btn.textContent = 'Salir configuración';
-                    btn.classList.remove('bg-slate-800');
-                    btn.classList.add('bg-amber-500', 'hover:bg-amber-600', 'text-slate-900');
+                    btn.textContent = '🛠️';
+                    btn.classList.remove('bg-slate-800','hover:bg-slate-700');
+                    btn.classList.add('bg-amber-500','hover:bg-amber-600','text-slate-900');
+                    btn.title = 'Modo configuración activo';
                 } else {
-                    btn.textContent = 'Modo configuración';
+                    btn.textContent = '⚙️';
                     btn.classList.remove('bg-amber-500','hover:bg-amber-600','text-slate-900');
                     btn.classList.add('bg-slate-800','hover:bg-slate-700');
+                    btn.title = 'Configurar orden de accesos';
                 }
             }
         }
