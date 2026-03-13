@@ -2463,6 +2463,11 @@ window.addEventListener('load', async () => {
         ⚠️ MODO PRUEBA ACTIVO — Ningún cambio se guardará en Firebase
     </div>
 
+    <!-- Toast notificaciones -->
+    <div id="toastMaterial" class="hidden fixed bottom-5 right-5 z-50 max-w-xs bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2">
+        <span>✅ Petición de material enviada</span>
+    </div>
+
     <!-- Header Principal -->
     <div class="bg-white p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4 border">
         <div class="flex items-center gap-4">
@@ -2674,12 +2679,30 @@ window.addEventListener('load', async () => {
 
     if (error) {
       console.error('Error solicitando material', error);
-      alert('No se pudo enviar la petición de material.');
+      mostrarToastMaterial('❌ No se pudo enviar la petición de material', false);
       return false;
     }
 
-    alert('Petición de material enviada al almacén.');
+    mostrarToastMaterial('✅ Petición de material enviada', true);
     return true;
+  }
+
+  function mostrarToastMaterial(texto, ok = true) {
+    const toast = document.getElementById('toastMaterial');
+    if (!toast) return;
+    toast.textContent = texto;
+    toast.classList.remove('hidden');
+    toast.classList.remove('bg-emerald-600', 'bg-red-600');
+    toast.classList.add(ok ? 'bg-emerald-600' : 'bg-red-600');
+    // Reiniciar animación sencilla
+    toast.style.opacity = '1';
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.style.opacity = '';
+      }, 300);
+    }, 2000);
   }
 
   function parsearQR(texto) {
