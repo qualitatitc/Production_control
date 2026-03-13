@@ -13,9 +13,10 @@
             background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(10px);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
-            cursor: grab;
+            cursor: default;
         }
-        .glass-card:active { cursor: grabbing; }
+        body.config-mode .glass-card { cursor: grab; }
+        body.config-mode .glass-card:active { cursor: grabbing; }
         .sortable-ghost {
             opacity: 0.4;
             transform: scale(0.95);
@@ -24,10 +25,12 @@
         .drag-handle {
             cursor: grab;
             opacity: 0;
+            pointer-events: none;
             transition: opacity 0.2s ease;
         }
-        .glass-card:hover .drag-handle {
+        body.config-mode .glass-card:hover .drag-handle {
             opacity: 1;
+            pointer-events: auto;
         }
     </style>
 </head>
@@ -45,7 +48,10 @@
                     <p id="current-date" class="text-xs font-bold uppercase"></p>
                     <p id="current-time" class="text-xl font-light"></p>
                 </div>
-                <button onclick="resetOrder()" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
+                <button id="btn-config-mode" onclick="toggleConfigMode()" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
+                    Modo configuración
+                </button>
+                <button onclick="resetOrder()" class="text-[10px] bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold uppercase tracking-tighter transition-colors border border-slate-700">
                     Restablecer Orden
                 </button>
             </div>
@@ -238,12 +244,14 @@
 
     <script>
         const grid = document.getElementById('dashboard-grid');
+        let configMode = false;
         
-        // Inicializar SortableJS
+        // Inicializar SortableJS (desactivado por defecto; solo en modo configuración)
         const sortable = new Sortable(grid, {
             animation: 350,
             ghostClass: 'sortable-ghost',
-            handle: '.glass-card',
+            handle: '.drag-handle',
+            disabled: true,
             store: {
                 get: function (sortable) {
                     const order = localStorage.getItem('itc-dashboard-order');
@@ -259,6 +267,24 @@
         function resetOrder() {
             localStorage.removeItem('itc-dashboard-order');
             location.reload();
+        }
+
+        function toggleConfigMode() {
+            configMode = !configMode;
+            sortable.option('disabled', !configMode);
+            document.body.classList.toggle('config-mode', configMode);
+            const btn = document.getElementById('btn-config-mode');
+            if (btn) {
+                if (configMode) {
+                    btn.textContent = 'Salir configuración';
+                    btn.classList.remove('bg-slate-800');
+                    btn.classList.add('bg-amber-500', 'hover:bg-amber-600', 'text-slate-900');
+                } else {
+                    btn.textContent = 'Modo configuración';
+                    btn.classList.remove('bg-amber-500','hover:bg-amber-600','text-slate-900');
+                    btn.classList.add('bg-slate-800','hover:bg-slate-700');
+                }
+            }
         }
 
         function updateDateTime() {
