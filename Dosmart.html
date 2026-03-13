@@ -1242,6 +1242,223 @@ window.exportarExcel = async () => {
     <button id="btnSalida" onclick="registrarJornada('FIN')" class="bg-rose-500 text-white p-4 rounded-2xl font-black uppercase shadow-lg hover:bg-rose-600 transition-colors opacity-50 cursor-not-allowed" disabled>🌙 Salida</button>
   </div>
 
+  <!-- Toast notificaciones -->
+  <div id="toastMaterial" class="hidden fixed bottom-5 right-5 z-50 max-w-xs bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2">
+      <span>✅ Petición de material enviada</span>
+  </div>
+
+  <!-- Popup confirmación petición material -->
+  <div id="popupMaterial" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full px-6 py-5 border border-emerald-300">
+          <h3 class="text-sm font-black uppercase tracking-widest text-emerald-700 mb-2">📦 Petición de material</h3>
+          <p id="popupMaterialTexto" class="text-[13px] text-slate-700 mb-4">
+              La petición de material se ha enviado correctamente al almacén.
+          </p>
+          <div class="flex justify-end">
+              <button onclick="cerrarPopupMaterial()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-[11px] font-black uppercase">
+                  Cerrar
+              </button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Modal Escáner QR -->
+  <div id="modalQR" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md border-2 border-blue-500 flex flex-col overflow-hidden">
+      <div class="px-5 py-3 bg-blue-600 text-white flex items-center justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-black uppercase tracking-widest">📦 Escanear QR de material</h3>
+          <p class="text-[10px] font-semibold text-blue-100 mt-0.5">Apunta la cámara al código QR</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnToggleCam" onclick="toggleQRCamera()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-base font-black" title="Cambiar cámara">
+            🔄
+          </button>
+          <button onclick="cerrarModalQR()" class="w-8 h-8 rounded-full bg-white/15 hover:bg-red-500 flex items-center justify-center text-sm font-black">✕</button>
+        </div>
+      </div>
+      <div class="p-4 space-y-3">
+        <div id="qr-reader" class="w-full rounded-2xl overflow-hidden border border-slate-200"></div>
+        <p id="qrMensaje" class="text-[11px] text-slate-500 font-semibold">
+          Formato esperado: <span class="font-mono bg-slate-100 px-1 py-0.5 rounded">CODIGO|DESCRIPCION|CANTIDAD</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const supabaseUrl = 'https://jjumuwwalquiimfvzwgs.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdW11d3dhbHF1aWltZnZ6d2dzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzQ4NDYsImV4cCI6MjA4ODc1MDg0Nn0.1-QncUnJV_OocW4t2bE3NNYiIQl0IhZaxRyW99FCMl8';
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    let qrScanner = null;
+    let qrScannerActivo = false;
+    let qrProcesando = false;
+    let qrFacingMode = 'environment';
+
+    async function pedirMaterial({ modulo, codigo, descripcion, cantidad }) {
+      const { error } = await supabase
+        .from('solicitudes_material')
+        .insert([{ modulo: modulo || 'dosmart', codigo, descripcion, cantidad }]);
+
+      if (error) {
+        console.error('Error solicitando material', error);
+        mostrarToastMaterial('❌ No se pudo enviar la petición de material', false);
+        return false;
+      }
+
+      mostrarToastMaterial('✅ Petición de material enviada', true);
+      mostrarPopupMaterial('La petición de material se ha enviado correctamente al almacén.');
+      return true;
+    }
+
+    function mostrarToastMaterial(texto, ok = true) {
+      const toast = document.getElementById('toastMaterial');
+      if (!toast) return;
+      toast.textContent = texto;
+      toast.classList.remove('hidden');
+      toast.classList.remove('bg-emerald-600', 'bg-red-600');
+      toast.classList.add(ok ? 'bg-emerald-600' : 'bg-red-600');
+      toast.style.opacity = '1';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+          toast.classList.add('hidden');
+          toast.style.opacity = '';
+        }, 300);
+      }, 2000);
+    }
+
+    function mostrarPopupMaterial(texto) {
+      const popup = document.getElementById('popupMaterial');
+      const contenido = document.getElementById('popupMaterialTexto');
+      if (!popup || !contenido) return;
+      contenido.textContent = texto || 'La petición de material se ha enviado correctamente al almacén.';
+      popup.classList.remove('hidden');
+      popup.classList.add('flex');
+    }
+
+    window.cerrarPopupMaterial = () => {
+      const popup = document.getElementById('popupMaterial');
+      if (popup) {
+        popup.classList.add('hidden');
+        popup.classList.remove('flex');
+      }
+    };
+
+    function parsearQR(texto) {
+      try {
+        if (texto.trim().startsWith('{')) {
+          const obj = JSON.parse(texto);
+          return {
+            codigo: String(obj.codigo || '').trim(),
+            descripcion: String(obj.descripcion || '').trim(),
+            cantidad: Number(obj.cantidad || 1) || 1
+          };
+        }
+        const partes = texto.split('|');
+        const codigo = (partes[0] || '').trim();
+        const descripcion = (partes[1] || '').trim();
+        const cantidad = Number((partes[2] || '1').trim()) || 1;
+        return { codigo, descripcion, cantidad };
+      } catch (e) {
+        console.error('Error parseando QR', e);
+        return null;
+      }
+    }
+
+    async function iniciarQRScanner() {
+      const qrDivId = 'qr-reader';
+      const mensaje = document.getElementById('qrMensaje');
+      const config = {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        aspectRatio: 1.0
+      };
+
+      if (!qrScanner) {
+        qrScanner = new Html5Qrcode(qrDivId);
+      }
+      qrProcesando = false;
+      qrScannerActivo = true;
+
+      try {
+        await qrScanner.start(
+          { facingMode: qrFacingMode },
+          config,
+          async (decodedText) => {
+            if (!decodedText || qrProcesando) return;
+            qrProcesando = true;
+            if (mensaje) mensaje.textContent = 'QR leído, enviando petición…';
+
+            const datos = parsearQR(decodedText);
+            if (!datos || !datos.codigo || !datos.descripcion) {
+              alert('El QR no tiene el formato esperado.');
+              if (mensaje) mensaje.textContent = 'Formato incorrecto. Esperado: CODIGO|DESCRIPCION|CANTIDAD';
+              qrProcesando = false;
+              return;
+            }
+
+            const ok = await pedirMaterial({ ...datos, modulo: 'dosmart' });
+            if (ok) {
+              if (mensaje) mensaje.textContent = '✅ Petición de material enviada.';
+              await cerrarQRInterno();
+            } else if (mensaje) {
+              mensaje.textContent = 'Error al enviar. Reintenta o cierra la ventana.';
+            }
+          },
+          () => {}
+        );
+      } catch (e) {
+        console.error('Error iniciando cámara QR', e);
+        alert('No se pudo acceder a la cámara. Revisa permisos del navegador.');
+        await cerrarQRInterno();
+      }
+    }
+
+    window.abrirModalQR = async () => {
+      const modal = document.getElementById('modalQR');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      if (qrScannerActivo) return;
+      await iniciarQRScanner();
+    };
+
+    async function cerrarQRInterno() {
+      if (qrScanner && qrScannerActivo) {
+        try { await qrScanner.stop(); } catch (_) {}
+        try { await qrScanner.clear(); } catch (_) {}
+      }
+      qrScannerActivo = false;
+      qrProcesando = false;
+      const modal = document.getElementById('modalQR');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    window.cerrarModalQR = async () => {
+      await cerrarQRInterno();
+    };
+
+    window.toggleQRCamera = async () => {
+      qrFacingMode = qrFacingMode === 'environment' ? 'user' : 'environment';
+      if (!qrScanner) return;
+      if (qrScannerActivo) {
+        try { await qrScanner.stop(); } catch (_) {}
+        qrScannerActivo = false;
+      }
+      await iniciarQRScanner();
+    };
+  </script>
+
   <div class="bg-white rounded-[2rem] shadow-xl p-6 mb-8 border-b-4 border-amber-400 grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="flex flex-col">
       <label class="text-[10px] font-black uppercase text-slate-400 mb-1 ml-2">Operario Actual</label>
