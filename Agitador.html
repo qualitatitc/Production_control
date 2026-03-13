@@ -2762,9 +2762,13 @@ window.addEventListener('load', async () => {
 
           const ok = await pedirMaterial({ ...datos, modulo: 'agitador' });
           if (ok) {
-            await cerrarQRInterno();
+            if (mensaje) mensaje.textContent = '✅ Petición de material enviada. Cerrando...';
+            // pequeña pausa para que el usuario vea el mensaje
+            setTimeout(() => {
+              cerrarQRInterno();
+            }, 900);
           } else if (mensaje) {
-            mensaje.textContent = 'Error al enviar. Reintenta.';
+            mensaje.textContent = 'Error al enviar. Reintenta o cierra la ventana.';
             // dejamos el escáner activo pero bloqueamos más envíos hasta cerrar
           }
         },
