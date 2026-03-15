@@ -46,49 +46,49 @@
         <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Agitador
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', -1)">‹</button>
-              <span id="filtro-agitador-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('agitador', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-agitador-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('agitador', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-agitador-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-agitador-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', -1)">‹</button>
-              <span id="filtro-agitador-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('agitador', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-agitador-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('agitador', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-agitador-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-agitador-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Agitador diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', -1)">‹</button>
-              <span id="filtro-agitador-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('agitador', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-agitador-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('agitador', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-agitador-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-agitador-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Agitador mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', -1)">‹</button>
-              <span id="filtro-agitador-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('agitador', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-agitador-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('agitador', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-agitador-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-agitador-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -99,49 +99,49 @@
         <span class="w-3 h-3 rounded-full bg-red-500"></span> Dostec 40 OEM
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', -1)">‹</button>
-              <span id="filtro-dostec40-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec40', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec40-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec40', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec40-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec40-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', -1)">‹</button>
-              <span id="filtro-dostec40-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec40', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec40-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec40', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec40-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec40-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 40 OEM diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', -1)">‹</button>
-              <span id="filtro-dostec40-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec40', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec40-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec40', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec40-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec40-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 40 OEM mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', -1)">‹</button>
-              <span id="filtro-dostec40-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec40', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec40-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec40', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec40-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec40-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -152,49 +152,49 @@
         <span class="w-3 h-3 rounded-full bg-orange-500"></span> Dostec 50
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', -1)">‹</button>
-              <span id="filtro-dostec50-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec50', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec50-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec50', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec50-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec50-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', -1)">‹</button>
-              <span id="filtro-dostec50-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec50', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec50-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec50', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec50-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec50-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 50 diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', -1)">‹</button>
-              <span id="filtro-dostec50-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec50', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec50-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostec50', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec50-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec50-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 50 mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', -1)">‹</button>
-              <span id="filtro-dostec50-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec50', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostec50-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostec50', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostec50-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostec50-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -205,49 +205,49 @@
         <span class="w-3 h-3 rounded-full bg-sky-500"></span> Restyling
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', -1)">‹</button>
-              <span id="filtro-restyling-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('restyling', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-restyling-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('restyling', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-restyling-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-restyling-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', -1)">‹</button>
-              <span id="filtro-restyling-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('restyling', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-restyling-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('restyling', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-restyling-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-restyling-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Restyling diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', -1)">‹</button>
-              <span id="filtro-restyling-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('restyling', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-restyling-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('restyling', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-restyling-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-restyling-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Restyling mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', -1)">‹</button>
-              <span id="filtro-restyling-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('restyling', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-restyling-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('restyling', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-restyling-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-restyling-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -258,49 +258,49 @@
         <span class="w-3 h-3 rounded-full bg-violet-500"></span> Dostec AC
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', -1)">‹</button>
-              <span id="filtro-dostecac-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostecac', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostecac-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostecac', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostecac-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostecac-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', -1)">‹</button>
-              <span id="filtro-dostecac-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostecac', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostecac-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostecac', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostecac-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostecac-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec AC diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', -1)">‹</button>
-              <span id="filtro-dostecac-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostecac', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostecac-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dostecac', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostecac-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostecac-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec AC mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', -1)">‹</button>
-              <span id="filtro-dostecac-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostecac', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dostecac-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dostecac', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dostecac-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dostecac-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -311,49 +311,49 @@
         <span class="w-3 h-3 rounded-full bg-teal-500"></span> Dosmart
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', -1)">‹</button>
-              <span id="filtro-dosmart-mes">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📈 Productividad Diaria</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dosmart', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dosmart-mes" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dosmart', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dosmart-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dosmart-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', -1)">‹</button>
-              <span id="filtro-dosmart-anio">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📊 Productividad Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dosmart', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dosmart-anio">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dosmart', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dosmart-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dosmart-mensual"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dosmart diario</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', -1)">‹</button>
-              <span id="filtro-dosmart-mes-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dosmart', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dosmart-mes-bomba" class="uppercase">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarMesFiltro('dosmart', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dosmart-bomba-diario"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dosmart-bomba-diario"></canvas></div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dosmart mensual</h3>
-            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', -1)">‹</button>
-              <span id="filtro-dosmart-anio-bomba">—</span>
-              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', 1)">›</button>
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6 chart-card">
+          <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+            <div class="flex items-center gap-2 justify-end">
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dosmart', -1)">&lt;</button>
+              <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;"><span id="filtro-dosmart-anio-bomba">—</span></div>
+              <button type="button" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;" onclick="cambiarAnioFiltro('dosmart', 1)">&gt;</button>
             </div>
           </div>
-          <div class="h-56"><canvas id="chart-dosmart-bomba-mensual"></canvas></div>
+          <div class="relative h-64 bg-slate-50 rounded-xl p-2"><canvas id="chart-dosmart-bomba-mensual"></canvas></div>
         </div>
       </div>
     </section>
@@ -502,7 +502,8 @@
     const CHART_FILL = 'rgba(0,0,0,0.06)';
     const CHART_POINT = '#000';
     const CHART_TEXT = '#000';
-    const LEGEND_NO_BOX = { display: true, position: 'top', align: 'end', labels: { boxWidth: 0, boxHeight: 0, color: CHART_TEXT, font: { size: 10 } } };
+    const LEGEND_NO_BOX = { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, boxHeight: 6, color: CHART_TEXT, font: { size: 10, weight: 'bold' } } };
+    const CHART_POINT_STYLE = { pointBorderColor: c => (c.raw == null ? 'transparent' : CHART_POINT), pointBorderWidth: 0, pointHoverRadius: 5 };
 
     function destroyChart(id) {
       if (charts[id]) { charts[id].destroy(); charts[id] = null; }
@@ -579,11 +580,11 @@
       const sinObjetivoProd = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsProdDiaria = sinObjetivoProd
         ? [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (19)', data: Array(dias).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -622,11 +623,11 @@
       const sinObjetivoProdMensual = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsProdMensual = sinObjetivoProdMensual
         ? [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (19)', data: Array(12).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -664,11 +665,11 @@
       const sinObjetivoTiempoDiario = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsDiario = sinObjetivoTiempoDiario
         ? [
-            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (22 min)', data: Array(dias).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -711,7 +712,7 @@
       const labelMediaAnual = mediaAnual !== '—' ? `Media ${mediaAnual} min` : 'Media';
       const spanGapsBomba = key === 'restyling' || key === 'dostecac' || key === 'dosmart' ? false : true;
       const datasets = [
-        { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 2, fill: true, tension: 0.5 }
+        { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE }
       ];
       if (mediaAnual !== '—') datasets.push({ label: labelMediaAnual, data: Array(12).fill(parseFloat(mediaAnual)), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false });
       if (key === 'restyling') datasets.push({ label: 'Objetivo (22 min)', data: Array(12).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false });

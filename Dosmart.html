@@ -33,6 +33,13 @@ const mantenimientoRef = ref(db, 'tareas_mantenimiento');
 const incidenciasTextoRef = ref(db, 'incidencias_texto');
 const connectedRef = ref(db, '.info/connected');
 
+// Tema charts (igual que Restyling): línea/relleno/puntos negro, grid suave
+const CHART_TEXT = '#000';
+const CHART_POINT = '#000';
+const CHART_GRID = 'rgba(0, 0, 0, 0.08)';
+const CHART_LINE = 'rgba(0, 0, 0, 1)';
+const CHART_FILL = 'rgba(0, 0, 0, 0.06)';
+
 onValue(connectedRef, (snapshot) => {
   const led = document.getElementById('firebaseLed');
   const pulse = document.getElementById('firebaseLedPulse');
@@ -286,8 +293,8 @@ function actualizarGraficoPuntos(fechaFiltro = null) {
         }
       },
       scales: {
-        x: { display: true, title: { display: true, text: 'Número de tarea (orden cronológico)', font: { weight: 'bold' } }, ticks: { callback: (v) => v + 1 }, grid: { color: '#e2e8f0' } },
-        y: { beginAtZero: true, title: { display: true, text: 'Tiempo (minutos)', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
+        x: { display: true, title: { display: true, text: 'Número de tarea (orden cronológico)', font: { weight: 'bold' } }, ticks: { callback: (v) => v + 1 }, grid: { color: CHART_GRID } },
+        y: { beginAtZero: true, title: { display: true, text: 'Tiempo (minutos)', font: { weight: 'bold' } }, grid: { color: CHART_GRID } }
       }
     }
   });
@@ -383,7 +390,7 @@ function actualizarGraficoProductividadDiaria() {
     data: {
       labels,
       datasets: [
-        { label: 'Productividad', data: datosProductividad, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 3, pointRadius: 3, pointBackgroundColor: '#3b82f6', fill: true, tension: 0.3, spanGaps: true, order: 2 },
+        { label: 'Productividad', data: datosProductividad, borderColor: CHART_LINE, backgroundColor: CHART_FILL, borderWidth: 3, pointRadius: 3, pointBackgroundColor: CHART_POINT, pointBorderColor: CHART_POINT, pointBorderWidth: 0, fill: true, tension: 0.3, spanGaps: true, order: 2 },
         { label: 'Media', data: lineaMedia, borderColor: '#fbbf24', backgroundColor: 'rgba(251, 191, 36, 0.1)', borderWidth: 3, borderDash: [5, 5], pointRadius: 0, fill: false, tension: 0, order: 1 }
       ]
     },
@@ -412,8 +419,8 @@ function actualizarGraficoProductividadDiaria() {
         tooltip: { callbacks: { label: (ctx) => { const v = ctx.raw; return (v === null || isNaN(v)) ? `${ctx.dataset.label}: Sin datos` : `${ctx.dataset.label}: ${v.toFixed(2)} tareas/hora`; } } }
       },
       scales: {
-        x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
-        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
+        x: { display: true, title: { display: true, text: 'Días del mes', font: { weight: 'bold' } }, grid: { color: CHART_GRID } },
+        y: { beginAtZero: true, title: { display: true, text: 'Productividad (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: CHART_GRID } }
       }
     }
   });
@@ -455,7 +462,7 @@ function actualizarGraficoProductividadMensual() {
     data: {
       labels,
       datasets: [
-        { label: 'Productividad Mensual', data: datosProductividad.map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null).filter(p => p !== null), backgroundColor: '#3b82f6', borderColor: '#2563eb', pointRadius: 3, pointHoverRadius: 5, showLine: false, order: 3 },
+        { label: 'Productividad Mensual', data: datosProductividad.map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null).filter(p => p !== null), backgroundColor: CHART_POINT, borderColor: CHART_LINE, pointRadius: 3, pointHoverRadius: 5, showLine: false, order: 3 },
         { label: 'Media Anual', data: lineaMedia.map((val, idx) => val !== null && !isNaN(val) && val > 0 ? { x: idx, y: val } : null).filter(p => p !== null), type: 'line', borderColor: '#fbbf24', backgroundColor: 'rgba(251, 191, 36, 0.1)', borderWidth: 3, borderDash: [5, 5], pointRadius: 0, fill: false, tension: 0, order: 1 },
         { label: esTendenciaPositiva ? 'Tendencia ↗' : 'Tendencia ↘', data: tendencia.map((val, idx) => val !== null && !isNaN(val) ? { x: idx, y: val } : null).filter(p => p !== null), type: 'line', borderColor: colorTendencia, backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', borderWidth: 3, pointRadius: 0, fill: false, tension: 0, order: 2 }
       ]
@@ -473,8 +480,8 @@ function actualizarGraficoProductividadMensual() {
         }
       },
       scales: {
-        x: { type: 'linear', display: true, min: 0, max: 11, ticks: { stepSize: 1, callback: (v) => labels[v] || '' }, title: { display: true, text: 'Meses del año', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } },
-        y: { beginAtZero: true, title: { display: true, text: 'Productividad Media (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: '#e2e8f0' } }
+        x: { type: 'linear', display: true, min: 0, max: 11, ticks: { stepSize: 1, callback: (v) => labels[v] || '' }, title: { display: true, text: 'Meses del año', font: { weight: 'bold' } }, grid: { color: CHART_GRID } },
+        y: { beginAtZero: true, title: { display: true, text: 'Productividad Media (tareas×7 / (h×op))', font: { weight: 'bold' } }, grid: { color: CHART_GRID } }
       }
     }
   });
@@ -1516,14 +1523,14 @@ window.exportarExcel = async () => {
 
     <!-- GRÁFICO 1: Tiempo por Tarea -->
     <div class="bg-white rounded-2xl shadow-xl p-6 border border-slate-200">
-      <div class="flex flex-col justify-between items-start mb-6 gap-4">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
         <div>
           <h2 class="text-lg font-black uppercase italic text-slate-800">Tiempo por Tarea Individual</h2>
           <p class="text-xs text-slate-500 mt-1">Cada punto = una tarea | Eje Y = tiempo en minutos</p>
         </div>
-        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl w-full">
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Fecha:</label>
-          <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 flex-1">
+          <input type="date" id="filtroFecha" onchange="filtrarPorFecha()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
       </div>
       <div class="h-72 w-full"><canvas id="graficoTareas"></canvas></div>
@@ -1538,14 +1545,14 @@ window.exportarExcel = async () => {
 
     <!-- GRÁFICO 2: Productividad Diaria -->
     <div class="bg-white rounded-2xl shadow-xl p-6 border border-slate-200">
-      <div class="flex flex-col justify-between items-start mb-6 gap-4">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
         <div>
           <h2 class="text-lg font-black uppercase italic text-slate-800">📊 Productividad Diaria</h2>
           <p class="text-xs text-slate-500 mt-1">Fórmula: (Tareas × 7) / (Horas × Nº Operarios)</p>
         </div>
-        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl w-full">
+        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
           <label class="text-xs font-bold text-slate-500 uppercase">📅 Mes:</label>
-          <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 flex-1">
+          <input type="month" id="filtroMesProductividadDiaria" onchange="cambiarMesProductividadDiaria()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
         </div>
       </div>
       <div class="h-72 w-full"><canvas id="graficoProductividadDiaria"></canvas></div>
@@ -1565,21 +1572,18 @@ window.exportarExcel = async () => {
 
   <!-- GRÁFICO 3: Productividad Mensual -->
   <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
       <div>
         <h2 class="text-2xl font-black uppercase italic text-slate-800">📈 Productividad Mensual</h2>
         <p class="text-xs text-slate-500 mt-1">Media de productividad de cada mes</p>
       </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-          <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
-          <select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="2024">2024</option>
-            <option value="2025" selected>2025</option>
-            <option value="2026">2026</option>
-          </select>
-        </div>
-
+      <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+        <label class="text-xs font-bold text-slate-500 uppercase">Año:</label>
+        <select id="selectAnioProductividadMensual" onchange="cambiarAnioProductividadMensual()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+          <option value="2024">2024</option>
+          <option value="2025" selected>2025</option>
+          <option value="2026">2026</option>
+        </select>
       </div>
     </div>
     <div class="h-96 w-full"><canvas id="graficoProductividadMensual"></canvas></div>
