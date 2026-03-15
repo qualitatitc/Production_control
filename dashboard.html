@@ -699,15 +699,17 @@
           if (obj && typeof obj === 'object') Object.values(obj).forEach(t => { if (t && t.tiempo > 0) todos.push(t.tiempo); });
         }
         const val = todos.length ? todos.reduce((a,b)=>a+b,0)/todos.length : null;
-        medias.push(key === 'agitador' ? val : (key === 'restyling' ? val : (val || 0)));
+        const sinDatosComoNull = key === 'agitador' || key === 'restyling' || key === 'dostecac' || key === 'dosmart';
+        medias.push(sinDatosComoNull ? val : (val || 0));
       }
       const conDatos = medias.filter(v => v != null && v > 0);
       const mediaAnual = conDatos.length ? (conDatos.reduce((a,b)=>a+b,0)/conDatos.length).toFixed(1) : '—';
       const ctx = document.getElementById(id);
       if (!ctx) return;
-      const pointVisible = key === 'agitador' ? c => (c.raw != null && c.raw > 0) : (key === 'restyling' ? c => (c.raw != null && c.raw > 0) : c => (c.raw !== 0));
+      const pointVisibleSoloConDatos = key === 'agitador' || key === 'restyling' || key === 'dostecac' || key === 'dosmart';
+      const pointVisible = pointVisibleSoloConDatos ? c => (c.raw != null && c.raw > 0) : c => (c.raw !== 0);
       const labelMediaAnual = mediaAnual !== '—' ? `Media ${mediaAnual} min` : 'Media';
-      const spanGapsBomba = key === 'restyling' ? false : true;
+      const spanGapsBomba = key === 'restyling' || key === 'dostecac' || key === 'dosmart' ? false : true;
       const datasets = [
         { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 2, fill: true, tension: 0.5 }
       ];
