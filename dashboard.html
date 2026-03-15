@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Gráficos todos los módulos | ITC Production</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .chart-card { min-height: 260px; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+  <header class="bg-slate-900 text-white py-4 shadow-lg sticky top-0 z-40">
+    <div class="container mx-auto px-6 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl font-black tracking-tight uppercase">ITC Production <span class="text-amber-400">Dashboard</span></h1>
+        <p class="text-slate-400 text-[10px] uppercase tracking-widest font-semibold mt-0.5">Gráficos y resumen de todos los módulos en tiempo real</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="admin.html" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase border border-slate-600 transition-colors">← Admin</a>
+        <a href="index.html" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase transition-colors">Panel</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-6 py-6">
+    <!-- Resumen por módulo -->
+    <section class="mb-8">
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <h2 class="text-sm font-black uppercase tracking-widest text-slate-600">📊 Datos</h2>
+        <div class="flex items-center gap-0.5 text-xs font-semibold bg-slate-200 rounded-lg px-2 py-1 border border-slate-300 text-slate-700">
+          <button type="button" class="w-6 h-6 rounded bg-white border border-slate-300 hover:bg-slate-100 font-black text-slate-700 text-xs leading-none" id="btn-mes-global-prev">‹</button>
+          <span id="mes-global-texto" class="min-w-[72px] text-center text-xs">—</span>
+          <button type="button" class="w-6 h-6 rounded bg-white border border-slate-300 hover:bg-slate-100 font-black text-slate-700 text-xs leading-none" id="btn-mes-global-next">›</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="resumenModulos"></div>
+    </section>
+
+    <!-- Gráficos por módulo: Agitador -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-emerald-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Agitador
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', -1)">‹</button>
+              <span id="filtro-agitador-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-agitador-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', -1)">‹</button>
+              <span id="filtro-agitador-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-agitador-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Agitador diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', -1)">‹</button>
+              <span id="filtro-agitador-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('agitador', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-agitador-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Agitador mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', -1)">‹</button>
+              <span id="filtro-agitador-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('agitador', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-agitador-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dostec 40 -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-red-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-red-500"></span> Dostec 40 OEM
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', -1)">‹</button>
+              <span id="filtro-dostec40-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec40-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', -1)">‹</button>
+              <span id="filtro-dostec40-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec40-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 40 OEM diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', -1)">‹</button>
+              <span id="filtro-dostec40-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec40', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec40-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 40 OEM mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', -1)">‹</button>
+              <span id="filtro-dostec40-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec40', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec40-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dostec 50 -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-orange-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-orange-500"></span> Dostec 50
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', -1)">‹</button>
+              <span id="filtro-dostec50-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec50-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', -1)">‹</button>
+              <span id="filtro-dostec50-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec50-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 50 diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', -1)">‹</button>
+              <span id="filtro-dostec50-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostec50', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec50-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec 50 mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', -1)">‹</button>
+              <span id="filtro-dostec50-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostec50', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostec50-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Restyling -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-sky-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-sky-500"></span> Restyling
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', -1)">‹</button>
+              <span id="filtro-restyling-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-restyling-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', -1)">‹</button>
+              <span id="filtro-restyling-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-restyling-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Restyling diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', -1)">‹</button>
+              <span id="filtro-restyling-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('restyling', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-restyling-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Restyling mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', -1)">‹</button>
+              <span id="filtro-restyling-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('restyling', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-restyling-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dostec AC -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-violet-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-violet-500"></span> Dostec AC
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', -1)">‹</button>
+              <span id="filtro-dostecac-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostecac-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', -1)">‹</button>
+              <span id="filtro-dostecac-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostecac-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec AC diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', -1)">‹</button>
+              <span id="filtro-dostecac-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dostecac', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostecac-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dostec AC mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', -1)">‹</button>
+              <span id="filtro-dostecac-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dostecac', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dostecac-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dosmart -->
+    <section class="mb-10">
+      <h2 class="text-base font-black uppercase tracking-widest text-teal-700 mb-4 flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-teal-500"></span> Dosmart
+      </h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Diaria</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', -1)">‹</button>
+              <span id="filtro-dosmart-mes">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dosmart-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Productividad Mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', -1)">‹</button>
+              <span id="filtro-dosmart-anio">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dosmart-mensual"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dosmart diario</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', -1)">‹</button>
+              <span id="filtro-dosmart-mes-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarMesFiltro('dosmart', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dosmart-bomba-diario"></canvas></div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm chart-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-black uppercase text-slate-500">Tiempo medio Dosmart mensual</h3>
+            <div class="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', -1)">‹</button>
+              <span id="filtro-dosmart-anio-bomba">—</span>
+              <button type="button" class="w-7 h-7 rounded-lg border border-slate-300 hover:bg-slate-100 font-black" onclick="cambiarAnioFiltro('dosmart', 1)">›</button>
+            </div>
+          </div>
+          <div class="h-56"><canvas id="chart-dosmart-bomba-mensual"></canvas></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getDatabase, ref, get, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+    const MODULOS = {
+      agitador:  { label: 'Agitador', color: 'emerald', config: { apiKey: "AIzaSyC4oVIS50zartNRGsYNG4zmDMPc6A102oE", authDomain: "agitador-e6584.firebaseapp.com", databaseURL: "https://agitador-e6584-default-rtdb.europe-west1.firebasedatabase.app", projectId: "agitador-e6584", storageBucket: "agitador-e6584.firebasestorage.app", messagingSenderId: "295479175763", appId: "1:295479175763:web:4d22a9b7a05744fe78b4a6" }},
+      dostec40:  { label: 'Dostec 40 OEM', color: 'red', config: { apiKey: "AIzaSyDqmHebrFc5yDzzpwtiW33q4lDEfxQ_bWo", authDomain: "tempprod-2ecad.firebaseapp.com", databaseURL: "https://tempprod-2ecad-default-rtdb.europe-west1.firebasedatabase.app", projectId: "tempprod-2ecad", storageBucket: "tempprod-2ecad.firebasestorage.app", messagingSenderId: "791527902001", appId: "1:791527902001:web:75d104fba52a0dbfc33e10" }},
+      dostec50:  { label: 'Dostec 50', color: 'orange', config: { apiKey: "AIzaSyC3-8SYYWCpn6aYflXFzaLSVurkLJ9gAm8", authDomain: "dostec-50.firebaseapp.com", databaseURL: "https://dostec-50-default-rtdb.europe-west1.firebasedatabase.app", projectId: "dostec-50", storageBucket: "dostec-50.firebasestorage.app", messagingSenderId: "581863827285", appId: "1:581863827285:web:b360b2f59cb95b6055b1dc" }},
+      restyling: { label: 'Restyling', color: 'sky', config: { apiKey: "AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg", authDomain: "d40restyling.firebaseapp.com", databaseURL: "https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app", projectId: "d40restyling", storageBucket: "d40restyling.appspot.com", appId: "1:1085425091704:web:4ce5ab8af47546035b998d" }},
+      dostecac:  { label: 'Dostec AC', color: 'violet', config: { apiKey: "AIzaSyAJAp5Zx4nmf0336aucWsQy8jB2L3LIsNM", authDomain: "dostecac.firebaseapp.com", databaseURL: "https://dostecac-default-rtdb.europe-west1.firebasedatabase.app", projectId: "dostecac", storageBucket: "dostecac.firebasestorage.app", messagingSenderId: "180048271313", appId: "1:180048271313:web:35bdfb8a43e35fa28ab2f0" }},
+      dosmart:   { label: 'Dosmart', color: 'teal', config: { apiKey: "AIzaSyCl2FTFnVh0QbAzwQS_hrGbbXcn3O1MsVw", authDomain: "dosmart-2f395.firebaseapp.com", databaseURL: "https://dosmart-2f395-default-rtdb.europe-west1.firebasedatabase.app", projectId: "dosmart-2f395", storageBucket: "dosmart-2f395.appspot.com", appId: "1:854942502621:web:5c1a7428f7492c3a382664" }}
+    };
+
+    const apps = {}, dbs = {};
+    const productividadCache = { agitador: {}, dostec40: {}, dostec50: {}, restyling: {}, dostecac: {}, dosmart: {} };
+    const tiempoPorTareaCache = { agitador: {}, dostec40: {}, dostec50: {}, restyling: {}, dostecac: {}, dosmart: {} };
+    const charts = {};
+    const now = new Date();
+    let mesGlobal = { year: now.getFullYear(), month: now.getMonth() };
+    const filtrosDashboard = { agitador: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year }, dostec40: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year }, dostec50: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year }, restyling: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year }, dostecac: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year }, dosmart: { mes: { year: mesGlobal.year, month: mesGlobal.month }, anio: mesGlobal.year } };
+
+    const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
+    const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+    const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    function historialFechaToKey(fechaStr) {
+      if (!fechaStr || !String(fechaStr).includes('/')) return null;
+      const parts = String(fechaStr).trim().split('/').map(Number);
+      if (parts.length < 3) return null;
+      const [d, m, y] = parts.length === 3 ? parts : [parts[0], parts[1], parts[2]];
+      if (!y || !m || !d) return null;
+      return `${y}_${String(m).padStart(2,'0')}_${String(d).padStart(2,'0')}`;
+    }
+    function transformarHistorialACache(key, historialVal) {
+      const prod = {};
+      const tiempo = {};
+      const raw = historialVal || {};
+      Object.entries(raw).forEach(([id, t]) => {
+        if (!t || t.tipo !== 'produccion') return;
+        const totalMin = t.total != null ? parseInt(t.total, 10) : 0;
+        if (!t.fecha || totalMin <= 0) return;
+        const fkey = historialFechaToKey(t.fecha);
+        if (!fkey) return;
+        if (!tiempo[fkey]) tiempo[fkey] = {};
+        tiempo[fkey][id] = { tiempo: totalMin };
+        if (!prod[fkey]) prod[fkey] = { totalTareas: 0, totalMinutos: 0 };
+        prod[fkey].totalTareas++;
+        prod[fkey].totalMinutos += totalMin;
+      });
+      const productividad = {};
+      Object.entries(prod).forEach(([fkey, p]) => {
+        const val = p.totalMinutos > 0 ? Math.round((p.totalTareas * 420 / p.totalMinutos) * 10) / 10 : 0;
+        productividad[fkey] = { productividad: val };
+      });
+      productividadCache[key] = productividad;
+      tiempoPorTareaCache[key] = tiempo;
+    }
+
+    for (const [key, mod] of Object.entries(MODULOS)) {
+      try {
+        apps[key] = initializeApp(mod.config, key);
+        dbs[key] = getDatabase(apps[key]);
+      } catch (e) { console.error(key, e); }
+    }
+
+    async function loadProductividad(key) {
+      if (key === 'dostecac' || key === 'dosmart') {
+        const snap = await get(ref(dbs[key], 'historial_tareas'));
+        transformarHistorialACache(key, snap.val());
+      } else {
+        const snap = await get(ref(dbs[key], 'productividadDiaria'));
+        productividadCache[key] = snap.val() || {};
+      }
+    }
+    async function loadTiempoPorTarea(key) {
+      if (key === 'dostecac' || key === 'dosmart') {
+        if (!productividadCache[key] || Object.keys(productividadCache[key]).length === 0) {
+          const snap = await get(ref(dbs[key], 'historial_tareas'));
+          transformarHistorialACache(key, snap.val());
+        }
+      } else {
+        const snap = await get(ref(dbs[key], 'tiempoPorTarea'));
+        tiempoPorTareaCache[key] = snap.val() || {};
+      }
+    }
+
+    function getMediaTiempoBombaMes(key) {
+      const data = tiempoPorTareaCache[key];
+      const f = filtrosDashboard[key]?.mes || mesGlobal;
+      const y = f.year, m = f.month;
+      const dias = new Date(y, m + 1, 0).getDate();
+      let todos = [];
+      for (let d = 1; d <= dias; d++) {
+        const fecha = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const obj = data[fechaToKey(fecha)];
+        if (obj && typeof obj === 'object')
+          Object.values(obj).forEach(t => { if (t && t.tiempo > 0) todos.push(t.tiempo); });
+      }
+      return todos.length ? (todos.reduce((a,b)=>a+b,0) / todos.length).toFixed(1) : '—';
+    }
+    function getMediaProductividadMensual(key) {
+      const data = productividadCache[key];
+      const f = filtrosDashboard[key]?.mes || mesGlobal;
+      const y = f.year, m = f.month;
+      const dias = new Date(y, m + 1, 0).getDate();
+      let suma = 0, n = 0;
+      for (let d = 1; d <= dias; d++) {
+        const fecha = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const p = data[fechaToKey(fecha)]?.productividad;
+        if (p > 0) { suma += p; n++; }
+      }
+      return n ? (suma / n).toFixed(1) : '—';
+    }
+
+    const RESUMEN_BORDER = { agitador: 'border-emerald-200', dostec40: 'border-red-200', dostec50: 'border-orange-200', restyling: 'border-sky-200', dostecac: 'border-violet-200', dosmart: 'border-teal-200' };
+    const RESUMEN_TITLE = { agitador: 'text-emerald-700', dostec40: 'text-red-700', dostec50: 'text-orange-700', restyling: 'text-sky-700', dostecac: 'text-violet-700', dosmart: 'text-teal-700' };
+    function renderResumen() {
+      document.getElementById('resumenModulos').innerHTML = Object.entries(MODULOS).map(([key, mod]) => {
+        const mediaBomba = getMediaTiempoBombaMes(key);
+        const mediaProd = getMediaProductividadMensual(key);
+        const borderCl = RESUMEN_BORDER[key] || 'border-slate-200';
+        const titleCl = RESUMEN_TITLE[key] || 'text-slate-700';
+        return `
+          <div class="bg-white rounded-2xl border-2 ${borderCl} p-4 shadow-sm">
+            <h3 class="text-sm font-black uppercase mb-3 ${titleCl}">${mod.label}</h3>
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-semibold">Media tiempo (mes)</span>
+                <span class="font-black text-slate-800">${mediaBomba} min</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-semibold">Productividad media mensual</span>
+                <span class="font-black text-slate-800">${mediaProd}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    const CHART_GRID = 'rgba(0,0,0,0.08)';
+    const CHART_LINE = 'rgba(0,0,0,1)';
+    const CHART_FILL = 'rgba(0,0,0,0.06)';
+    const CHART_POINT = '#000';
+    const CHART_TEXT = '#000';
+    const LEGEND_NO_BOX = { display: true, position: 'top', align: 'end', labels: { boxWidth: 0, boxHeight: 0, color: CHART_TEXT, font: { size: 10 } } };
+
+    function destroyChart(id) {
+      if (charts[id]) { charts[id].destroy(); charts[id] = null; }
+    }
+
+    function updateFiltroLabels(key) {
+      const f = filtrosDashboard[key];
+      if (!f) return;
+      const mesEl = document.getElementById(`filtro-${key}-mes`);
+      const anioEl = document.getElementById(`filtro-${key}-anio`);
+      const mesBombaEl = document.getElementById(`filtro-${key}-mes-bomba`);
+      const anioBombaEl = document.getElementById(`filtro-${key}-anio-bomba`);
+      const textoMes = `${MESES_ES[f.mes.month]} ${f.mes.year}`;
+      if (mesEl) mesEl.textContent = textoMes;
+      if (mesBombaEl) mesBombaEl.textContent = textoMes;
+      if (anioEl) anioEl.textContent = String(f.anio);
+      if (anioBombaEl) anioBombaEl.textContent = String(f.anio);
+    }
+
+    function cambiarMesFiltro(key, delta) {
+      const f = filtrosDashboard[key];
+      if (!f) return;
+      let { year, month } = f.mes;
+      month += delta;
+      if (month > 11) { month = 0; year++; }
+      if (month < 0) { month = 11; year--; }
+      f.mes = { year, month };
+      updateFiltroLabels(key);
+      renderGraficoProductividadDiaria(key);
+      renderGraficoTiempoBombaDiario(key);
+    }
+    function cambiarAnioFiltro(key, delta) {
+      const f = filtrosDashboard[key];
+      if (!f) return;
+      f.anio = f.anio + delta;
+      updateFiltroLabels(key);
+      renderGraficoProductividadMensual(key);
+      renderGraficoTiempoBombaMensual(key);
+    }
+    window.cambiarMesFiltro = cambiarMesFiltro;
+    window.cambiarAnioFiltro = cambiarAnioFiltro;
+
+    function updateMesGlobalTexto() {
+      const el = document.getElementById('mes-global-texto');
+      if (el) el.textContent = `${MESES_ES[mesGlobal.month]} ${mesGlobal.year}`;
+    }
+    function aplicarMesGlobal() {
+      Object.keys(filtrosDashboard).forEach(k => {
+        filtrosDashboard[k].mes = { year: mesGlobal.year, month: mesGlobal.month };
+        filtrosDashboard[k].anio = mesGlobal.year;
+        updateFiltroLabels(k);
+      });
+      refreshAll();
+      updateMesGlobalTexto();
+    }
+
+    function renderGraficoProductividadDiaria(key) {
+      const id = `chart-${key}-diario`;
+      destroyChart(id);
+      const data = productividadCache[key];
+      const { year: y, month: m } = filtrosDashboard[key]?.mes || { year: new Date().getFullYear(), month: new Date().getMonth() };
+      const dias = new Date(y, m + 1, 0).getDate();
+      const labels = Array.from({ length: dias }, (_, i) => i + 1);
+      const valores = labels.map(d => {
+        const f = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        return data[fechaToKey(f)]?.productividad || null;
+      });
+      const conDatos = valores.filter(v => v != null && v > 0);
+      const media = conDatos.length ? conDatos.reduce((a,b)=>a+b,0)/conDatos.length : 0;
+      const ctx = document.getElementById(id);
+      if (!ctx) return;
+      const labelMediaDiaria = `Media ${media.toFixed(1)}`;
+      const legendFilterDiaria = (item, chart) => item.datasetIndex !== 0;
+      const sinObjetivoProd = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
+      const datasetsProdDiaria = sinObjetivoProd
+        ? [
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ]
+        : [
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: 'Objetivo (19)', data: Array(dias).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
+            { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ];
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels.map(String),
+          datasets: datasetsProdDiaria
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { ...LEGEND_NO_BOX, labels: { ...LEGEND_NO_BOX.labels, filter: legendFilterDiaria } } }, scales: { x: { grid: { display: false }, ticks: { color: CHART_TEXT, maxTicksLimit: 15 } }, y: { beginAtZero: true, ticks: { color: CHART_TEXT }, grid: { color: CHART_GRID } } } }
+      });
+      updateFiltroLabels(key);
+    }
+
+    function renderGraficoProductividadMensual(key) {
+      const id = `chart-${key}-mensual`;
+      destroyChart(id);
+      const data = productividadCache[key];
+      const anio = filtrosDashboard[key]?.anio ?? new Date().getFullYear();
+      const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      const valores = meses.map((_, mes) => {
+        const dias = new Date(anio, mes + 1, 0).getDate();
+        let suma = 0, n = 0;
+        for (let d = 1; d <= dias; d++) {
+          const f = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const p = data[fechaToKey(f)]?.productividad;
+          if (p > 0) { suma += p; n++; }
+        }
+        return n ? suma / n : null;
+      });
+      const conDatosMensual = valores.filter(v => v != null && v > 0);
+      const mediaAnualProd = conDatosMensual.length ? (conDatosMensual.reduce((a,b)=>a+b,0)/conDatosMensual.length).toFixed(1) : '—';
+      const ctx = document.getElementById(id);
+      if (!ctx) return;
+      const labelMensual = `Media ${mediaAnualProd}`;
+      const sinObjetivoProdMensual = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
+      const datasetsProdMensual = sinObjetivoProdMensual
+        ? [
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ]
+        : [
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: 'Objetivo (19)', data: Array(12).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
+            { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ];
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: meses,
+          datasets: datasetsProdMensual
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { ...LEGEND_NO_BOX, labels: { ...LEGEND_NO_BOX.labels, filter: (item, chart) => item.datasetIndex !== 0 } } }, scales: { x: { grid: { display: false }, ticks: { color: CHART_TEXT } }, y: { beginAtZero: true, ticks: { color: CHART_TEXT }, grid: { color: CHART_GRID } } } }
+      });
+      updateFiltroLabels(key);
+    }
+
+    function renderGraficoTiempoBombaDiario(key) {
+      const id = `chart-${key}-bomba-diario`;
+      destroyChart(id);
+      const data = tiempoPorTareaCache[key];
+      const { year: y, month: m } = filtrosDashboard[key]?.mes || { year: new Date().getFullYear(), month: new Date().getMonth() };
+      const dias = new Date(y, m + 1, 0).getDate();
+      const medias = [];
+      for (let d = 1; d <= dias; d++) {
+        const f = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const obj = data[fechaToKey(f)];
+        if (!obj || typeof obj !== 'object') { medias.push(null); continue; }
+        const tiempos = Object.values(obj).map(t => t.tiempo).filter(t => t > 0);
+        medias.push(tiempos.length ? tiempos.reduce((a,b)=>a+b,0)/tiempos.length : null);
+      }
+      const conDatos = medias.filter(v => v != null);
+      const mediaTotal = conDatos.length ? conDatos.reduce((a,b)=>a+b,0)/conDatos.length : 0;
+      const ctx = document.getElementById(id);
+      if (!ctx) return;
+      const labelTiempoDiario = `Media ${mediaTotal.toFixed(1)} min`;
+      const legendFilterTiempoDiario = (item, chart) => item.datasetIndex !== 0;
+      const sinObjetivoTiempoDiario = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
+      const datasetsDiario = sinObjetivoTiempoDiario
+        ? [
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ]
+        : [
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5 },
+            { label: 'Objetivo (22 min)', data: Array(dias).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
+            { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
+          ];
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array.from({ length: dias }, (_, i) => String(i + 1)),
+          datasets: datasetsDiario
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { ...LEGEND_NO_BOX, labels: { ...LEGEND_NO_BOX.labels, filter: key === 'agitador' ? legendFilterTiempoDiario : legendFilterTiempoDiario } } }, scales: { x: { grid: { display: false }, ticks: { color: CHART_TEXT, maxTicksLimit: 15 } }, y: { beginAtZero: true, title: { display: true, text: 'Minutos' }, ticks: { color: CHART_TEXT }, grid: { color: CHART_GRID } } } }
+      });
+      updateFiltroLabels(key);
+    }
+
+    function renderGraficoTiempoBombaMensual(key) {
+      const id = `chart-${key}-bomba-mensual`;
+      destroyChart(id);
+      const data = tiempoPorTareaCache[key];
+      const anio = filtrosDashboard[key]?.anio ?? new Date().getFullYear();
+      const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      const medias = [];
+      for (let mes = 0; mes < 12; mes++) {
+        const dias = new Date(anio, mes + 1, 0).getDate();
+        let todos = [];
+        for (let d = 1; d <= dias; d++) {
+          const f = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const obj = data[fechaToKey(f)];
+          if (obj && typeof obj === 'object') Object.values(obj).forEach(t => { if (t && t.tiempo > 0) todos.push(t.tiempo); });
+        }
+        const val = todos.length ? todos.reduce((a,b)=>a+b,0)/todos.length : null;
+        medias.push(key === 'agitador' ? val : (key === 'restyling' ? val : (val || 0)));
+      }
+      const conDatos = medias.filter(v => v != null && v > 0);
+      const mediaAnual = conDatos.length ? (conDatos.reduce((a,b)=>a+b,0)/conDatos.length).toFixed(1) : '—';
+      const ctx = document.getElementById(id);
+      if (!ctx) return;
+      const pointVisible = key === 'agitador' ? c => (c.raw != null && c.raw > 0) : (key === 'restyling' ? c => (c.raw != null && c.raw > 0) : c => (c.raw !== 0));
+      const labelMediaAnual = mediaAnual !== '—' ? `Media ${mediaAnual} min` : 'Media';
+      const spanGapsBomba = key === 'restyling' ? false : true;
+      const datasets = [
+        { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 2, fill: true, tension: 0.5 }
+      ];
+      if (mediaAnual !== '—') datasets.push({ label: labelMediaAnual, data: Array(12).fill(parseFloat(mediaAnual)), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false });
+      if (key === 'restyling') datasets.push({ label: 'Objetivo (22 min)', data: Array(12).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false });
+      const legendFilterBombaMensual = key === 'agitador' ? (item, chart) => item.datasetIndex === 1 : (key === 'restyling' ? (item, chart) => item.datasetIndex !== 2 : (item, chart) => item.datasetIndex !== 0);
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: { labels: MESES, datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { ...LEGEND_NO_BOX, labels: { ...LEGEND_NO_BOX.labels, filter: legendFilterBombaMensual } } }, scales: { x: { grid: { display: false }, ticks: { color: CHART_TEXT } }, y: { beginAtZero: true, title: { display: true, text: 'Minutos' }, ticks: { color: CHART_TEXT }, grid: { color: CHART_GRID } } } }
+      });
+      updateFiltroLabels(key);
+    }
+
+    function refreshModulo(key) {
+      renderResumen();
+      renderGraficoProductividadDiaria(key);
+      renderGraficoProductividadMensual(key);
+      renderGraficoTiempoBombaDiario(key);
+      renderGraficoTiempoBombaMensual(key);
+    }
+    function refreshAll() {
+      renderResumen();
+      ['agitador','dostec40','dostec50','restyling','dostecac','dosmart'].forEach(k => {
+        renderGraficoProductividadDiaria(k);
+        renderGraficoProductividadMensual(k);
+        renderGraficoTiempoBombaDiario(k);
+        renderGraficoTiempoBombaMensual(k);
+      });
+    }
+
+    // Carga inicial y listeners en tiempo real
+    (async () => {
+      for (const key of Object.keys(MODULOS)) {
+        await loadProductividad(key);
+        await loadTiempoPorTarea(key);
+      }
+      refreshAll();
+      updateMesGlobalTexto();
+
+      document.getElementById('btn-mes-global-prev')?.addEventListener('click', () => {
+        mesGlobal.month--;
+        if (mesGlobal.month < 0) { mesGlobal.month = 11; mesGlobal.year--; }
+        aplicarMesGlobal();
+      });
+      document.getElementById('btn-mes-global-next')?.addEventListener('click', () => {
+        mesGlobal.month++;
+        if (mesGlobal.month > 11) { mesGlobal.month = 0; mesGlobal.year++; }
+        aplicarMesGlobal();
+      });
+
+      for (const key of Object.keys(MODULOS)) {
+        if (key === 'dostecac' || key === 'dosmart') {
+          onValue(ref(dbs[key], 'historial_tareas'), (snap) => {
+            transformarHistorialACache(key, snap.val());
+            refreshModulo(key);
+          });
+        } else {
+          onValue(ref(dbs[key], 'productividadDiaria'), (snap) => {
+            productividadCache[key] = snap.val() || {};
+            refreshModulo(key);
+          });
+          onValue(ref(dbs[key], 'tiempoPorTarea'), (snap) => {
+            tiempoPorTareaCache[key] = snap.val() || {};
+            refreshModulo(key);
+          });
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

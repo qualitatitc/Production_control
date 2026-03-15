@@ -44,7 +44,9 @@ const state = {
     chartDiario: null,
     chartMensual: null,
     chartTiempoMensual: null,
+    chartMediaMensualBomba: null,
     mesTiempoMensual: null,
+    anioGraficoMediaBomba: null,
     sortable: null,
     entradaLineaHoy: null,
     salidaLineaHoy: null,
@@ -291,173 +293,6 @@ const CHART_FILL = 'rgba(0, 0, 0, 0.06)';
 
 const fechaToKey = (fecha) => fecha.replace(/-/g, '_');
 
-// ✅ CORREGIDO: Sintaxis correcta para Chart.js
-const actualizarGraficoProd = (datosProd, fechaSeleccionada = null) => {
-    let ctx = document.getElementById('graficoProd');
-    const container = document.getElementById('graficoContainer');
-    if (!ctx || !container) return;
-    
-    const tituloFecha = document.getElementById('tituloFechaProd');
-    if (tituloFecha && fechaSeleccionada) {
-        const hoy = tsToFechaLocal(Date.now());
-        tituloFecha.textContent = fechaSeleccionada === hoy ? 'Hoy' :
-            new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-    }
-    
-    if (!datosProd || datosProd.length === 0) {
-        if (state.chart) state.chart.destroy();
-        const mediaIndicator = document.getElementById('mediaValor');
-        if (mediaIndicator) mediaIndicator.textContent = '--';
-        
-        state.chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Tiempo (min)',
-                    data: [],
-                    borderColor: CHART_LINE,
-                    pointBackgroundColor: CHART_POINT
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    title: {
-                        display: true,
-                        text: 'Sin datos para la fecha seleccionada',
-                        font: { size: 12, weight: 'bold' },
-                        color: CHART_TEXT
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Número de Serie', color: CHART_TEXT, font: { size: 11, weight: 'bold' } },
-                        grid: { display: false }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        title: { display: true, text: 'Minutos', color: CHART_TEXT, font: { size: 11, weight: 'bold' } },
-                        ticks: { color: CHART_TEXT },
-                        grid: { color: CHART_GRID }
-                    }
-                }
-            }
-        });
-        return;
-    }
-    
-    const tiempos = datosProd.map(d => d.tiempo);
-    const series = datosProd.map(d => d.serie);
-    const media = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
-    
-    const mediaIndicator = document.getElementById('mediaValor');
-    if (mediaIndicator) {
-        mediaIndicator.textContent = media.toFixed(1) + ' min';
-        mediaIndicator.className = 'font-black text-lg text-yellow-700';
-    }
-    
-    if (state.chart) {
-        state.chart.destroy();
-        state.chart = null;
-        // Resetear el canvas para evitar instancias huérfanas de Chart.js
-        const parent = ctx.parentNode;
-        const newCanvas = document.createElement('canvas');
-        newCanvas.id = ctx.id;
-        newCanvas.className = ctx.className;
-        parent.replaceChild(newCanvas, ctx);
-        ctx = newCanvas;
-    }
-    
-    state.chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: series.map((s, i) => i + 1),
-            datasets: [{
-                label: 'Tiempo (min)',
-                data: tiempos,
-                borderColor: CHART_LINE,
-                backgroundColor: CHART_FILL,
-                pointBackgroundColor: CHART_POINT,
-                pointBorderColor: CHART_POINT,
-                pointBorderWidth: 0,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                borderWidth: 2,
-                fill: true,
-                tension: 0.5,
-                order: 2
-            }, {
-                label: `Media (${media.toFixed(1)} min)`,
-                data: Array(series.length).fill(media),
-                borderColor: 'rgba(0, 0, 0, 0)',
-                borderWidth: 0,
-                borderDash: [],
-                pointRadius: 0,
-                fill: false,
-                order: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    align: 'end',
-                    labels: {
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        boxWidth: 6,
-                        boxHeight: 6,
-                        color: CHART_TEXT,
-                        font: { size: 10, weight: 'bold' }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    titleColor: '#fff',
-                    bodyColor: '#fff',
-                    callbacks: {
-                        title: (items) => `Serie: ${series[items[0].dataIndex]}`,
-                        label: (item) => {
-                            if (item.dataset.label.includes('Media')) return item.dataset.label;
-                            const tiempo = item.parsed.y;
-                            const productividad = (420 / tiempo).toFixed(1);
-                            return [
-                                `Tiempo: ${tiempo.toFixed(1)} min`,
-                                `Productividad: ${productividad}`,
-                                `vs Media: ${(tiempo - media).toFixed(1)} min`
-                            ];
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    title: { display: true, text: 'Orden de finalización', color: CHART_TEXT, font: { size: 11, weight: 'bold' } },
-                    grid: { display: false },
-                    ticks: {
-                        color: CHART_TEXT,
-                        font: { size: 9, weight: 'bold' },
-                        maxTicksLimit: 40,
-                        autoSkip: true
-                    }
-                },
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'Minutos', color: CHART_TEXT, font: { size: 11, weight: 'bold' } },
-                    ticks: { color: CHART_TEXT },
-                    grid: { color: CHART_GRID }
-                }
-            }
-        }
-    });
-};
-
 const actualizarGraficoTiempoMensual = async (mesObj = null) => {
     const ctx = document.getElementById('graficoTiempoMensual');
     if (!ctx) return;
@@ -489,23 +324,7 @@ const actualizarGraficoTiempoMensual = async (mesObj = null) => {
 
     const conDatos   = medias.filter(v => v !== null);
     const mediaTotal = conDatos.length > 0 ? conDatos.reduce((a, b) => a + b, 0) / conDatos.length : 0;
-
-    // Tendencia lineal sobre días con datos
-    const idxConDatos = medias.map((v, i) => v !== null ? i : null).filter(i => i !== null);
-    const valConDatos = idxConDatos.map(i => medias[i]);
-    let tendenciaDatos = null;
-    let tendenciaDescendente = false;
-    if (idxConDatos.length >= 2) {
-        const n = idxConDatos.length;
-        const sx  = idxConDatos.reduce((a, b) => a + b, 0);
-        const sy  = valConDatos.reduce((a, b) => a + b, 0);
-        const sxy = idxConDatos.reduce((s, x, i) => s + x * valConDatos[i], 0);
-        const sx2 = idxConDatos.reduce((s, x) => s + x * x, 0);
-        const pendiente = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
-        const intercept = (sy - pendiente * sx) / n;
-        tendenciaDescendente = pendiente <= 0;
-        tendenciaDatos = dias.map((_, i) => Math.max(0, pendiente * i + intercept));
-    }
+    const OBJETIVO_MIN = 22;
 
     if (state.chartTiempoMensual) state.chartTiempoMensual.destroy();
 
@@ -527,6 +346,17 @@ const actualizarGraficoTiempoMensual = async (mesObj = null) => {
             order: 2
         },
         {
+            label: `Objetivo (${OBJETIVO_MIN} min)`,
+            data: Array(diasDelMes).fill(OBJETIVO_MIN),
+            borderColor: 'rgba(59, 130, 246, 0.9)',
+            borderWidth: 1,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+            order: 1
+        },
+        {
             label: `Media (${mediaTotal.toFixed(1)} min)`,
             data: Array(diasDelMes).fill(mediaTotal > 0 ? mediaTotal : null),
             borderColor: 'rgba(0, 0, 0, 0)',
@@ -534,22 +364,9 @@ const actualizarGraficoTiempoMensual = async (mesObj = null) => {
             borderDash: [],
             pointRadius: 0,
             fill: false,
-            order: 1
+            order: 0
         }
     ];
-    if (tendenciaDatos) {
-        dsTM.push({
-            label: tendenciaDescendente ? 'Tendencia ↘ Mejora' : 'Tendencia ↗ Empeora',
-            data: tendenciaDatos,
-            borderColor: tendenciaDescendente ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)',
-            borderWidth: 1,
-            borderDash: [6, 4],
-            pointRadius: 0,
-            fill: false,
-            tension: 0,
-            order: 0
-        });
-    }
 
     state.chartTiempoMensual = new Chart(ctx, {
         type: 'line',
@@ -604,66 +421,153 @@ window.cambiarMesTiempoMensual = (dir) => {
     actualizarGraficoTiempoMensual(state.mesTiempoMensual);
 };
 
-window.seleccionarFechaProd = async (fecha) => {
-    state.fechaProdSeleccionada = fecha;
-    await guardarPreferencias('fechaProdSeleccionada', fecha);
-    const datosGuardados = await obtenerTiempoPorTarea(fecha);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
-    renderizarListaPuntos(fecha);
-    
-    // Sincronizar tabla de tareas con la misma fecha (sin bucle)
-    if (state.filtroFechaTareas === fecha) return;
-    state.filtroFechaTareas = fecha;
-    const btnFiltro = document.getElementById('btnFiltroFechaTareas');
-    const tituloTabla = document.getElementById('tituloTablaTareas');
-    if (btnFiltro && tituloTabla) {
-        const hoy = new Date().toISOString().split('T')[0];
-        const esHoy = fecha === hoy;
-        btnFiltro.classList.replace('bg-slate-800', 'bg-emerald-600');
-        btnFiltro.innerHTML = `📅 ${esHoy ? 'Hoy' : new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-        tituloTabla.textContent = 'Pedidos en proceso';
+// Gráfico: tiempo medio por bomba de cada mes (Ene-Dic), filtro por año, con puntos y tendencia
+const actualizarGraficoMediaMensualBomba = async (anio = null) => {
+    const ctx = document.getElementById('graficoMediaMensualBomba');
+    if (!ctx) return;
+
+    const hoy = new Date();
+    const year = anio != null ? anio : hoy.getFullYear();
+    state.anioGraficoMediaBomba = year;
+
+    const anioEl = document.getElementById('anioGraficoMediaBomba');
+    if (anioEl) anioEl.textContent = year;
+
+    const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const mediasPorMes = [];
+    for (let mes = 0; mes < 12; mes++) {
+        const diasDelMes = new Date(year, mes + 1, 0).getDate();
+        let todosTiempos = [];
+        for (let dia = 1; dia <= diasDelMes; dia++) {
+            const mesStr = String(mes + 1).padStart(2, '0');
+            const diaStr = String(dia).padStart(2, '0');
+            const fecha = `${year}-${mesStr}-${diaStr}`;
+            const snap = await get(ref(db, `tiempoPorTarea/${fechaToKey(fecha)}`));
+            const datos = snap.val();
+            if (datos) {
+                const tiempos = Object.values(datos).map(t => t.tiempo).filter(t => t > 0);
+                todosTiempos.push(...tiempos);
+            }
+        }
+        const media = todosTiempos.length > 0 ? todosTiempos.reduce((a, b) => a + b, 0) / todosTiempos.length : 0;
+        mediasPorMes.push(media > 0 ? media : null);
     }
-    await renderizarTablaTareas();
+
+    const conDatos = mediasPorMes.filter(v => v !== null);
+    const mediaAnual = conDatos.length > 0 ? conDatos.reduce((a, b) => a + b, 0) / conDatos.length : 0;
+
+    // Tendencia lineal sobre meses con datos
+    const idxConDatos = mediasPorMes.map((v, i) => v !== null ? i : null).filter(i => i !== null);
+    const valConDatos = idxConDatos.map(i => mediasPorMes[i]);
+    let tendenciaDatos = null;
+    let tendenciaDescendente = false;
+    if (idxConDatos.length >= 2) {
+        const n = idxConDatos.length;
+        const sx  = idxConDatos.reduce((a, b) => a + b, 0);
+        const sy  = valConDatos.reduce((a, b) => a + b, 0);
+        const sxy = idxConDatos.reduce((s, x, i) => s + x * valConDatos[i], 0);
+        const sx2 = idxConDatos.reduce((s, x) => s + x * x, 0);
+        const pendiente = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+        const intercept = (sy - pendiente * sx) / n;
+        tendenciaDescendente = pendiente <= 0;
+        tendenciaDatos = MESES_CORTOS.map((_, i) => Math.max(0, pendiente * i + intercept));
+    }
+
+    if (state.chartMediaMensualBomba) state.chartMediaMensualBomba.destroy();
+
+    const dsBombaMensual = [
+        {
+            label: 'Tiempo medio (min)',
+            data: mediasPorMes,
+            spanGaps: true,
+            borderColor: CHART_LINE,
+            backgroundColor: CHART_FILL,
+            pointBackgroundColor: (c) => c.raw === null ? 'transparent' : CHART_POINT,
+            pointBorderColor: (c) => c.raw === null ? 'transparent' : CHART_POINT,
+            pointBorderWidth: 0,
+            pointRadius: (c) => c.raw === null ? 0 : 3,
+            pointHoverRadius: 5,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.5,
+            order: 2
+        },
+        {
+            label: `Media anual (${mediaAnual.toFixed(1)} min)`,
+            data: Array(12).fill(mediaAnual > 0 ? mediaAnual : null),
+            borderColor: 'rgba(0, 0, 0, 0)',
+            borderWidth: 0,
+            pointRadius: 0,
+            fill: false,
+            order: 1
+        }
+    ];
+    if (tendenciaDatos) {
+        dsBombaMensual.push({
+            label: tendenciaDescendente ? 'Tendencia ↘ Mejora' : 'Tendencia ↗ Empeora',
+            data: tendenciaDatos,
+            borderColor: tendenciaDescendente ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)',
+            borderWidth: 1,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+            order: 0
+        });
+    }
+
+    state.chartMediaMensualBomba = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: MESES_CORTOS,
+            datasets: dsBombaMensual
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        boxWidth: 6,
+                        boxHeight: 6,
+                        color: CHART_TEXT,
+                        font: { size: 10, weight: 'bold' }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (item) => {
+                            const v = item.raw;
+                            return v != null && v > 0 ? `${v.toFixed(1)} min` : 'Sin datos';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: CHART_TEXT, font: { size: 10, weight: 'bold' }, maxRotation: 0 }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Minutos', color: CHART_TEXT, font: { size: 10, weight: 'bold' } },
+                    ticks: { color: CHART_TEXT },
+                    grid: { color: CHART_GRID }
+                }
+            }
+        }
+    });
 };
 
-const renderizarListaPuntos = async (fecha) => {
-    const lista = document.getElementById('listaPuntosTiempo');
-    if (!lista || lista.classList.contains('hidden')) return;
-    
-    const datos = await obtenerTiempoPorTarea(fecha);
-    const items = Object.entries(datos).sort((a, b) => (a[1].finMS || 0) - (b[1].finMS || 0));
-    
-    if (items.length === 0) {
-        lista.innerHTML = '<p class="text-[10px] font-black text-red-600 uppercase mb-2 flex items-center gap-1">Modo edición — sin puntos para este día</p>';
-        return;
-    }
-    
-    lista.innerHTML = `
-        <p class="text-[10px] font-black text-red-600 uppercase mb-2">Modo edición — pulsa 🗑️ para borrar un punto</p>
-        <table class="w-full text-xs">
-            <thead><tr class="bg-slate-100 text-slate-500 font-black uppercase text-[9px]">
-                <th class="p-1.5 text-left">#</th>
-                <th class="p-1.5 text-left">Serie</th>
-                <th class="p-1.5 text-center">Tiempo</th>
-                <th class="p-1.5"></th>
-            </tr></thead>
-            <tbody>
-                ${items.map(([id, t], i) => `
-                    <tr class="border-b border-slate-100 hover:bg-red-50">
-                        <td class="p-1.5 text-slate-400 font-bold">${i + 1}</td>
-                        <td class="p-1.5 font-black text-slate-700">${t.serie || '—'}</td>
-                        <td class="p-1.5 text-center"><span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-black">${t.tiempo} min</span></td>
-                        <td class="p-1.5 text-right">
-                            <button onclick="borrarPuntoTiempo('${fecha}', '${id}')" class="bg-red-100 hover:bg-red-600 text-red-500 hover:text-white p-1 rounded-lg transition-all">🗑️</button>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+window.cambiarAnioGraficoMediaBomba = (dir) => {
+    const anio = state.anioGraficoMediaBomba != null ? state.anioGraficoMediaBomba : new Date().getFullYear();
+    state.anioGraficoMediaBomba = anio + dir;
+    actualizarGraficoMediaMensualBomba(state.anioGraficoMediaBomba);
 };
 
 // Utilidad para limpiar duplicados en Firebase (ejecutar desde consola)
@@ -691,42 +595,7 @@ window.limpiarDuplicadosTiempoPorTarea = async (fecha = null) => {
 window.borrarPuntoTiempo = async (fecha, puntoId) => {
     const fechaKey = fechaToKey(fecha);
     await remove(ref(db, `tiempoPorTarea/${fechaKey}/${puntoId}`));
-    const datosGuardados = await obtenerTiempoPorTarea(fecha);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(d => ({ serie: d.serie, tiempo: d.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
-    renderizarListaPuntos(fecha);
-};
-
-window.toggleModoEdicionGrafico = () => {
-    state.modoEdicionGrafico = !state.modoEdicionGrafico;
-    const btn = document.getElementById('btnEditarGrafico');
-    const lista = document.getElementById('listaPuntosTiempo');
-    
-    if (state.modoEdicionGrafico) {
-        btn.classList.replace('bg-slate-100', 'bg-red-100');
-        btn.classList.replace('text-slate-600', 'text-red-600');
-        btn.classList.replace('border-slate-200', 'border-red-300');
-        btn.innerHTML = '❌ Salir edición';
-        lista.classList.remove('hidden');
-        renderizarListaPuntos(state.fechaProdSeleccionada || tsToFechaLocal(Date.now()));
-    } else {
-        btn.classList.replace('bg-red-100', 'bg-slate-100');
-        btn.classList.replace('text-red-600', 'text-slate-600');
-        btn.classList.replace('border-red-300', 'border-slate-200');
-        btn.innerHTML = '✏️ Editar puntos';
-        lista.classList.add('hidden');
-    }
-};
-
-window.mostrarSelectorFechaProd = () => {
-    const fechaGuardada = state.fechaProdSeleccionada || new Date().toISOString().split('T')[0];
-    const input = document.getElementById('inputFechaProd');
-    if (input) {
-        input.value = fechaGuardada;
-        input.showPicker();
-    }
+    if (state.anioGraficoMediaBomba != null) actualizarGraficoMediaMensualBomba(state.anioGraficoMediaBomba);
 };
 
 // ✅ CORREGIDO: Sintaxis correcta para Chart.js
@@ -920,7 +789,7 @@ const actualizarGraficoMensual = async (anioSeleccionado = null) => {
             data: tendencia.datos,
             borderColor: colorTendencia,
             backgroundColor: esTendenciaPositiva ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
-            borderWidth: 3,
+            borderWidth: 1,
             borderDash: [10, 5],
             pointRadius: 0,
             fill: false,
@@ -1613,7 +1482,7 @@ window.finalizarTarea = async (id, inicioMS) => {
     
     if (tarea.codigo !== "SISTEMA") {
         await guardarTiempoPorTarea(fecha, tarea.numSerie, minutos, finMS);
-        // ⚠️ No llamar actualizarGraficoProd aquí: el onValue listener ya lo hace
+        // El gráfico de media mensual se actualiza con el listener onValue(tiempoPorTareaRef)
         // al detectar el cambio en Firebase, evitando llamadas dobles que generan puntos fantasma
     }
     
@@ -1684,9 +1553,6 @@ window.aplicarFiltroFechaTareas = async (fecha) => {
     }
     
     await renderizarTablaTareas();
-    
-    // Sincronizar gráfico de tiempo por tarea con la misma fecha (sin bucle)
-    if (fecha && state.fechaProdSeleccionada !== fecha) await seleccionarFechaProd(fecha);
 };
 
 window.resetFiltroFechaTareas = () => {
@@ -2156,17 +2022,10 @@ onValue(incidenciasLogRef, (snap) => {
     filtrarIncidenciasPorMes();
 });
 
-// Listener para tiempo por tarea
-onValue(tiempoPorTareaRef, (snap) => {
+// Listener para tiempo por tarea: actualizar gráfico de media mensual cuando hay nuevas producciones
+onValue(tiempoPorTareaRef, () => {
     if (!state.inicializado) return;
-    const fecha = state.fechaProdSeleccionada || tsToFechaLocal(Date.now());
-    const fechaKey = fechaToKey(fecha);
-    const todosDatos = snap.val() || {};
-    const datosFecha = todosDatos[fechaKey] || {};
-    const datosProd = Object.values(datosFecha)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fecha);
+    if (state.anioGraficoMediaBomba != null) actualizarGraficoMediaMensualBomba(state.anioGraficoMediaBomba);
 });
 
 // Carga inicial
@@ -2177,20 +2036,11 @@ window.addEventListener('load', async () => {
     const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
     state.mesSeleccionado = mesGuardado;
     
-    const fechaProdGuardada = preferencias.fechaProdSeleccionada?.valor || tsToFechaLocal(Date.now());
-    state.fechaProdSeleccionada = fechaProdGuardada;
-    
     const anioGuardado = preferencias.anioMensualSeleccionado?.valor || new Date().getFullYear();
     state.anioSeleccionado = anioGuardado;
     
     await actualizarGraficoDiario(mesGuardado);
     await actualizarGraficoMensual(anioGuardado);
-    
-    const datosGuardados = await obtenerTiempoPorTarea(fechaProdGuardada);
-    const datosProd = Object.values(datosGuardados)
-        .sort((a, b) => (a.finMS || 0) - (b.finMS || 0))
-        .map(t => ({ serie: t.serie, tiempo: t.tiempo }));
-    actualizarGraficoProd(datosProd, fechaProdGuardada);
     
     actualizarTextoMiniCalendario(mesGuardado);
     
@@ -2204,6 +2054,9 @@ window.addEventListener('load', async () => {
     
     state.mesTiempoMensual = { year: new Date().getFullYear(), month: new Date().getMonth() };
     await actualizarGraficoTiempoMensual(state.mesTiempoMensual);
+    
+    state.anioGraficoMediaBomba = new Date().getFullYear();
+    await actualizarGraficoMediaMensualBomba(state.anioGraficoMediaBomba);
 
     state.inicializado = true;
 });
@@ -2347,28 +2200,12 @@ window.addEventListener('load', async () => {
         </div>
     </div>
     
-    <!-- Gráficos de Tiempo por Bomba / Tiempo Medio Diario -->
+    <!-- Gráficos: Tiempo por Bomba Diario (izq) / Tiempo por Bomba Mensual (der) -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <!-- Gráfico Tiempo por Bomba -->
+        <!-- Izquierda: Tiempo por Bomba Diario (por día del mes) -->
         <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6">
             <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba</h3>
-                <div class="flex items-center gap-3">
-                    <button id="btnEditarGrafico" onclick="toggleModoEdicionGrafico()" class="bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600 px-3 py-1 rounded-lg font-black text-[10px] border">✏️ Editar puntos</button>
-                    <button onclick="mostrarSelectorFechaProd()" class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;">📅 <span id="tituloFechaProd">Hoy</span></button>
-                    <input type="date" id="inputFechaProd" class="hidden" onchange="seleccionarFechaProd(this.value)">
-                </div>
-            </div>
-            <div class="relative h-64 bg-slate-50 rounded-xl p-2" id="graficoContainer">
-                <canvas id="graficoProd"></canvas>
-            </div>
-            <div id="listaPuntosTiempo" class="hidden mt-3 border border-red-200 rounded-xl overflow-hidden bg-red-50/30 p-2"></div>
-        </div>
-        
-        <!-- Gráfico Tiempo Medio por Día (Mensual) -->
-        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6">
-            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo Medio por Bomba Diario</h3>
+                <h3 class="text-sm font-black uppercase tracking-widest text-black">📅 Tiempo por Bomba Diario</h3>
                 <div class="flex items-center gap-2 justify-end">
                     <button onclick="cambiarMesTiempoMensual(-1)" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;">&lt;</button>
                     <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;">
@@ -2380,6 +2217,23 @@ window.addEventListener('load', async () => {
             </div>
             <div class="relative h-64 bg-slate-50 rounded-xl p-2">
                 <canvas id="graficoTiempoMensual"></canvas>
+            </div>
+        </div>
+        
+        <!-- Derecha: Tiempo por Bomba Mensual (Ene-Dic, filtro año) -->
+        <div class="bg-white rounded-3xl shadow-lg overflow-hidden border p-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 class="text-sm font-black uppercase tracking-widest text-black">⏱️ Tiempo por Bomba Mensual</h3>
+                <div class="flex items-center gap-2 justify-end">
+                    <button onclick="cambiarAnioGraficoMediaBomba(-1)" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;">&lt;</button>
+                    <div class="bg-slate-100 hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-black text-xs border-2 border-slate-400 focus:outline-none focus:ring-0 ring-0" style="background-color:#f1f5f9;border-color:#334155;color:#0f172a;">
+                        <span id="anioGraficoMediaBomba">2026</span>
+                    </div>
+                    <button onclick="cambiarAnioGraficoMediaBomba(1)" class="w-7 h-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 font-black text-base leading-none focus:outline-none focus:ring-0 ring-0" style="color:#000;appearance:none;-webkit-appearance:none;">&gt;</button>
+                </div>
+            </div>
+            <div class="relative h-64 bg-slate-50 rounded-xl p-2">
+                <canvas id="graficoMediaMensualBomba"></canvas>
             </div>
         </div>
     </div>
