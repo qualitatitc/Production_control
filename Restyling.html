@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Restyling Production - Cloud MES</title>
+<link rel="icon" type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' ry='14' fill='%230f172a'/%3E%3Cpath d='M18 46L30 18h6l10 28h-6l-2-6H26l-2 6h-6zm10.5-11h11L34 23.5 28.5 35z' fill='%23f97316'/%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -62,15 +64,8 @@ const state = {
     planDataCache: {},
 };
 
-// Listener para estado de conexión con Firebase
-const conexionRef = ref(db, '.info/connected');
-onValue(conexionRef, (snap) => {
-    const conectado = snap.val() === true;
-    state.firebaseConectado = conectado;
-    actualizarIndicadorConexion(conectado);
-});
-
-const actualizarIndicadorConexion = (conectado) => {
+// Indicador de conexión con Firebase
+function actualizarIndicadorConexion(conectado) {
     if (state.modoPrueba) return; // No sobreescribir si está en modo prueba
     const indicador = document.getElementById('indicadorFirebase');
     const led = document.getElementById('ledFirebase');
@@ -93,7 +88,15 @@ const actualizarIndicadorConexion = (conectado) => {
         texto.textContent = 'SIN CONEXIÓN';
         texto.classList.add('text-red-700');
     }
-};
+}
+
+// Listener para estado de conexión con Firebase
+const conexionRef = ref(db, '.info/connected');
+onValue(conexionRef, (snap) => {
+    const conectado = snap.val() === true;
+    state.firebaseConectado = conectado;
+    actualizarIndicadorConexion(conectado);
+});
 
 // ═══════════════════════════════════════════
 // MODO PRUEBA — bloquea todas las escrituras
@@ -274,6 +277,46 @@ const tsToFechaLocal = (ms) => {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+// Devuelve la siguiente fecha hábil (saltando fines de semana y festivos definidos)
+const siguienteFechaHabil = (iso) => {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    let fecha = new Date(y, m - 1, d);
+    do {
+        fecha.setDate(fecha.getDate() + 1);
+    } while (esFinDeSemana(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()) ||
+             esFestivo(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()));
+    const yy = fecha.getFullYear();
+    const mm = String(fecha.getMonth() + 1).padStart(2, '0');
+    const dd = String(fecha.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+};
+
+// Reprograma automáticamente las series pendientes de días pasados al siguiente día hábil
+const reprogramarPendientesAntiguas = async () => {
+    const hoy = tsToFechaLocal(Date.now());
+    const snap = await get(planRef);
+    if (!snap.exists()) return;
+    const data = snap.val() || {};
+    const updates = {};
+
+    Object.entries(data).forEach(([id, item]) => {
+        const fecha = item.fecha;
+        if (!fecha) return;
+        let f = fecha;
+        // Avanzar la fecha hasta que sea hoy o posterior, un día hábil cada vez
+        while (f < hoy) {
+            f = siguienteFechaHabil(f);
+        }
+        if (f !== fecha) {
+            updates[`${id}/fecha`] = f;
+        }
+    });
+
+    if (Object.keys(updates).length > 0) {
+        await update(planRef, updates);
+    }
 };
 
 // Formato corto para tablas: dd/mm/aa
@@ -1832,6 +1875,12 @@ const renderPlanificacion = (data) => {
     const pedidosOrdenadosKeys = Object.keys(grupos).sort((a, b) => (ordenMap[a] || 999999) - (ordenMap[b] || 999999));
     state.pedidosOrdenados = pedidosOrdenadosKeys;
 
+    // Helper para escapar valores que se pasan como argumentos JS en atributos HTML
+    const escapeJsArg = (v) =>
+        String(v ?? '')
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'");
+
     pedidosOrdenadosKeys.forEach((pedido, index) => {
         const pedidoId = `pedido-${index}`;
         const items = grupos[pedido];
@@ -1862,6 +1911,11 @@ const renderPlanificacion = (data) => {
 
         items.forEach(item => {
             const tieneNota = item.notas && item.notas.trim() !== "";
+            const safeSerie   = escapeJsArg(item.serie);
+            const safeCodigo  = escapeJsArg(item.codigo);
+            const safeNotas   = escapeJsArg(item.notas);
+            const safePedido  = escapeJsArg(pedido);
+            const safeCliente = escapeJsArg(item.cliente);
             cuerpo.innerHTML += `
                 <tr class="grupo-${pedidoId} grupo-item hidden border-b border-stone-100 bg-white hover:bg-stone-50">
                     <td class="p-3 pl-12" colspan="5">
@@ -1879,7 +1933,7 @@ const renderPlanificacion = (data) => {
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                                <button onclick="iniciarDesdePlan('${item.id}', '${item.serie}', '${item.codigo}', '${item.notas}', '${pedido}', '${item.cliente}')"
+                                <button onclick="iniciarDesdePlan('${item.id}', '${safeSerie}', '${safeCodigo}', '${safeNotas}', '${safePedido}', '${safeCliente}')"
                                     class="group flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white px-3 py-1.5 rounded-full border border-emerald-200 hover:border-emerald-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Iniciar">
                                     <span class="text-xs">▶</span> Iniciar
                                 </button>
@@ -2019,7 +2073,6 @@ onValue(incidenciasLogRef, (snap) => {
     _incidenciasCache = Object.entries(data).sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
     poblarFiltroMeses(_incidenciasCache);
     initFiltroIncidencias();
-    filtrarIncidenciasPorMes();
 });
 
 // Listener para tiempo por tarea: actualizar gráfico de media mensual cuando hay nuevas producciones
@@ -2031,6 +2084,9 @@ onValue(tiempoPorTareaRef, () => {
 // Carga inicial
 window.addEventListener('load', async () => {
     actualizarEstadoLineaUI();
+    
+    // Reprogramar automáticamente pedidos pendientes de días anteriores
+    await reprogramarPendientesAntiguas();
     
     const preferencias = await obtenerPreferencias();
     const mesGuardado = preferencias.mesDiarioSeleccionado?.valor || { year: new Date().getFullYear(), month: new Date().getMonth() };
