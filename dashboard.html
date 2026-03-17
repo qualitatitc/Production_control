@@ -580,11 +580,11 @@
       const sinObjetivoProd = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsProdDiaria = sinObjetivoProd
         ? [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (19)', data: Array(dias).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelMediaDiaria, data: Array(dias).fill(media), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -623,11 +623,11 @@
       const sinObjetivoProdMensual = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsProdMensual = sinObjetivoProdMensual
         ? [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: valores, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (19)', data: Array(12).fill(19), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelMensual, data: Array(12).fill(parseFloat(mediaAnualProd) || 0), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -665,11 +665,11 @@
       const sinObjetivoTiempoDiario = key === 'agitador' || key === 'dostec40' || key === 'dostec50' || key === 'dostecac' || key === 'dosmart';
       const datasetsDiario = sinObjetivoTiempoDiario
         ? [
-            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ]
         : [
-            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
+            { label: '', data: medias, spanGaps: true, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => c.raw == null ? 'transparent' : CHART_POINT, pointRadius: c => c.raw == null ? 0 : 3, borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE },
             { label: 'Objetivo (22 min)', data: Array(dias).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false },
             { label: labelTiempoDiario, data: Array(dias).fill(mediaTotal || null), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false }
           ];
@@ -712,7 +712,7 @@
       const labelMediaAnual = mediaAnual !== '—' ? `Media ${mediaAnual} min` : 'Media';
       const spanGapsBomba = key === 'restyling' || key === 'dostecac' || key === 'dosmart' ? false : true;
       const datasets = [
-        { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 2, fill: true, tension: 0.5, ...CHART_POINT_STYLE }
+        { label: '', data: medias, spanGaps: spanGapsBomba, borderColor: CHART_LINE, backgroundColor: CHART_FILL, pointBackgroundColor: c => (pointVisible(c) ? CHART_POINT : 'transparent'), pointRadius: c => (pointVisible(c) ? 3 : 0), borderWidth: 1, fill: true, tension: 0.5, ...CHART_POINT_STYLE }
       ];
       if (mediaAnual !== '—') datasets.push({ label: labelMediaAnual, data: Array(12).fill(parseFloat(mediaAnual)), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false });
       if (key === 'restyling') datasets.push({ label: 'Objetivo (22 min)', data: Array(12).fill(22), borderColor: 'rgba(59,130,246,0.8)', borderWidth: 1, borderDash: [6,4], pointRadius: 0, fill: false });
