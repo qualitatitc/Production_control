@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Planning de Programación de Producción</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase (modo compat) para guardar y cargar planificación desde cualquier terminal -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <style>
+        :root {
+            --header-height: 60px;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .product-card {
+            cursor: grab;
+            transition: transform 0.1s, box-shadow 0.2s;
+            user-select: none;
+            position: relative;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        .product-card:active {
+            cursor: grabbing;
+        }
+        
+        .product-card.dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+
+        /* Grid adaptativo */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: 1fr; 
+            gap: 1px;
+            background-color: #e5e7eb;
+            width: 100%;
+        }
+
+        @media (min-width: 1024px) {
+            .calendar-grid {
+                grid-template-columns: 50px repeat(7, 1fr);
+            }
+        }
+
+        .day-cell {
+            min-height: 100px;
+            background-color: white;
+            padding: 8px;
+            position: relative;
+        }
+
+        @media (min-width: 1024px) {
+            .day-cell {
+                min-height: 150px;
+            }
+        }
+
+        .empty-cell {
+            background-color: #f8fafc;
+            display: none;
+        }
+
+        @media (min-width: 1024px) {
+            .empty-cell {
+                display: block;
+            }
+        }
+
+        .day-header {
+            background-color: #f9fafb;
+            text-align: center;
+            font-weight: 800;
+            padding: 10px 4px;
+            border-bottom: 2px solid #e5e7eb;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #475569;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            display: none;
+        }
+
+        @media (min-width: 1024px) {
+            .day-header {
+                display: block;
+            }
+        }
+
+        .week-number {
+            background-color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 900;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        @media (min-width: 1024px) {
+            .week-number {
+                border-bottom: none;
+                border-right: 1px solid #e2e8f0;
+            }
+        }
+        
+        .is-non-working {
+            background-color: #f8fafc !important; 
+        }
+        
+        .holiday-label {
+            font-size: 9px;
+            color: #ef4444; 
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-top: 1px;
+            display: block;
+        }
+        
+        .quick-selector {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            z-index: 50;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: none;
+            padding: 4px;
+            width: 200px;
+        }
+        
+        .month-banner {
+            grid-column: 1 / -1;
+            background-color: #ffffff;
+            color: #0f172a;
+            padding: 12px 20px;
+            font-weight: 900;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            border-bottom: 1px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 25;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        @media (min-width: 1024px) {
+            .month-banner {
+                top: 38px;
+            }
+        }
+
+        #calendar-container {
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        /* Estilo para la línea única de info */
+        .card-line-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .card-abrev {
+            background: rgba(0,0,0,0.15);
+            padding: 1px 4px;
+            border-radius: 4px;
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .card-qty {
+            color: rgba(255,255,255,0.9);
+            flex-shrink: 0;
+        }
+
+        .card-main-text {
+            flex-grow: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-order {
+            opacity: 0.8;
+            font-weight: 400;
+            font-size: 9px;
+            flex-shrink: 0;
+        }
+
+        /* Botones de acción rápidos en la tarjeta */
+        .card-actions {
+            display: none;
+            align-items: center;
+            gap: 2px;
+            margin-left: 4px;
+            flex-shrink: 0;
+        }
+
+        .product-card:hover .card-actions {
+            display: flex;
+        }
+
+        .action-btn {
+            padding: 2px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .action-btn-delete:hover {
+            background: #ef4444;
+        }
+    </style>
+</head>
+<body class="bg-white text-slate-900 font-sans">
+
+    <div id="app" class="w-full h-screen flex flex-col">
+        
+        <header class="flex flex-col sm:flex-row justify-between items-center px-4 py-2 bg-white border-b border-slate-200 z-50">
+            <div class="flex items-center gap-4">
+                <h1 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Programación Producción</h1>
+                <div id="copy-indicator" class="hidden flex items-center gap-2 bg-amber-100 text-amber-800 px-3 py-1 rounded-md text-[10px] font-black border border-amber-200 animate-pulse">
+                    <span>MODO COPIA</span>
+                    <button onclick="cancelCopyMode()" class="bg-amber-800 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">×</button>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button onclick="goToToday()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all">HOY</button>
+            </div>
+        </header>
+
+        <main id="calendar-container" class="overflow-y-auto w-full">
+            <div class="calendar-grid sticky top-0 z-40 shadow-sm">
+                <div class="day-header">Sem</div>
+                <div class="day-header">Lunes</div>
+                <div class="day-header">Martes</div>
+                <div class="day-header">Miércoles</div>
+                <div class="day-header">Jueves</div>
+                <div class="day-header">Viernes</div>
+                <div class="day-header text-red-500">Sábado</div>
+                <div class="day-header text-red-600">Domingo</div>
+            </div>
+            <div id="calendar-body" class="calendar-grid"></div>
+            <div id="infinite-loader" class="p-8 text-center text-slate-400 text-xs font-medium italic">Cargando...</div>
+        </main>
+    </div>
+
+    <!-- Modal de Edición -->
+    <div id="edit-modal" class="fixed inset-0 bg-slate-900/60 hidden flex items-center justify-center z-[100] backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="p-5">
+                <h3 class="text-sm font-black text-slate-800 uppercase mb-4 tracking-tight">Editar Tarea</h3>
+                
+                <div class="space-y-4">
+                    <div id="modal-product-header" class="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
+                        <span id="modal-product-color" class="w-4 h-4 rounded-full"></span>
+                        <span id="modal-product-name" class="font-black text-slate-800 uppercase text-xs"></span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad</label>
+                            <input type="number" id="edit-quantity" class="w-full rounded-lg border-slate-200 border p-2 text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Nº Pedido</label>
+                            <input type="text" id="edit-order-number" class="w-full rounded-lg border-slate-200 border p-2 text-sm outline-none">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Cliente / Descripción</label>
+                            <input type="text" id="edit-notes" class="w-full rounded-lg border-slate-200 border p-2 text-sm outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-slate-50 p-4 flex gap-2 border-t border-slate-100">
+                <button onclick="deleteCurrentTask()" class="text-red-600 font-black text-[10px] uppercase px-3">Eliminar Tarea</button>
+                <div class="flex-grow"></div>
+                <button onclick="closeModal()" class="text-slate-500 font-black text-[10px] uppercase px-3">Cerrar</button>
+                <button onclick="saveTask()" class="bg-slate-900 text-white rounded-lg px-5 py-2 text-[10px] font-black uppercase tracking-widest">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Firebase (persistencia centralizada) ─────────────────────────────
+        const firebaseConfig = {
+            apiKey: "AIzaSyDn9Y-g7odI5T7rD1LVRSldkRwVnIyfPMg",
+            authDomain: "d40restyling.firebaseapp.com",
+            databaseURL: "https://d40restyling-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "d40restyling",
+            storageBucket: "d40restyling.appspot.com",
+            appId: "1:1085425091704:web:4ce5ab8af47546035b998d"
+        };
+        let tasksRef = null;
+        if (!window.firebase) {
+            console.error("Firebase compat no cargó correctamente (window.firebase no existe).");
+        } else {
+            if (!firebase.apps?.length) firebase.initializeApp(firebaseConfig);
+            const db = firebase.database();
+            tasksRef = db.ref("planificacionSemanal/v11/tasks");
+        }
+
+        const HOLIDAYS = {
+            "2025-01-01": "Año Nuevo", "2025-01-06": "Reyes", "2025-04-17": "J. Santo",
+            "2025-04-18": "V. Santo", "2025-05-01": "Trabajo", "2025-06-24": "San Juan", 
+            "2025-08-15": "Asunción", "2025-09-11": "Diada", "2025-10-12": "Hisp.", 
+            "2025-11-01": "Sntos", "2025-12-06": "Const.", "2025-12-08": "Inm.",
+            "2025-12-25": "Nav.", "2025-12-26": "S. Est."
+            ,
+
+            // 2026 festivos nacionales + Cataluña (Cataluña usa también varios nacionales)
+            "2026-01-01": "Año Nuevo",
+            "2026-01-06": "Reyes",
+            "2026-04-02": "J. Santo",
+            "2026-04-03": "V. Santo",
+            "2026-04-06": "L. Pascua",
+            "2026-05-01": "Trabajo",
+            "2026-05-25": "Pentecostés",
+            "2026-06-24": "San Juan",
+            "2026-08-15": "Asunción",
+            "2026-09-11": "Diada",
+            "2026-09-24": "La Mercè",
+            "2026-10-12": "Hisp.",
+            "2026-11-01": "Santos",
+            "2026-12-06": "Const.",
+            "2026-12-08": "Inm.",
+            "2026-12-25": "Nav.",
+            "2026-12-26": "S. Est.",
+
+            // Cierres de empresa
+            "2026-01-24": "Cierre empresa", "2026-01-25": "Cierre empresa",
+            "2026-01-26": "Cierre empresa", "2026-01-27": "Cierre empresa",
+            "2026-01-28": "Cierre empresa", "2026-01-29": "Cierre empresa",
+            "2026-01-30": "Cierre empresa", "2026-01-31": "Cierre empresa",
+            "2026-08-10": "Cierre empresa", "2026-08-11": "Cierre empresa",
+            "2026-08-12": "Cierre empresa", "2026-08-13": "Cierre empresa",
+            "2026-08-14": "Cierre empresa"
+        };
+
+        const PRODUCT_TYPES = [
+            { id: 'dostec40', name: 'Dostec 40', abrev: 'D40', bg: 'bg-blue-600' },
+            { id: 'dostec40oem', name: 'Dostec 40 OEM', abrev: 'OEM', bg: 'bg-emerald-600' },
+            { id: 'dostec50', name: 'Dostec 50', abrev: 'D50', bg: 'bg-amber-600' },
+            { id: 'dostecac', name: 'Dostec AC', abrev: 'DAC', bg: 'bg-purple-600' },
+            { id: 'dosmart', name: 'Dosmart', abrev: 'DSM', bg: 'bg-pink-600' },
+            { id: 'agitador', name: 'Agitador', abrev: 'AG', bg: 'bg-indigo-600' },
+            { id: 'electronica', name: 'Electrónica', abrev: 'Elec', bg: 'bg-slate-600' },
+            { id: 'efr', name: 'EFR', abrev: 'EFR', bg: 'bg-cyan-600' },
+            { id: 'multifertic', name: 'Multifertic', abrev: 'MF', bg: 'bg-lime-700' }
+        ];
+
+        let currentYear, currentMonth;
+        let tasks = []; 
+        let selectedTaskId, selectedModalProductId, draggedElement, activeQuickSelector, taskToCopy;
+        let isFetching = false;
+        const weekdayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+        window.onload = async () => {
+            await loadFromStorage();
+            attachFirebaseListener();
+            const now = new Date();
+            currentYear = now.getFullYear();
+            currentMonth = now.getMonth();
+            initCalendar();
+            setupInfiniteScroll();
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.day-cell') && activeQuickSelector) hideQuickSelector();
+            });
+        };
+
+        function formatDateKey(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function initCalendar() {
+            document.getElementById('calendar-body').innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                addMonthToCalendar(currentYear, currentMonth);
+                currentMonth++;
+                if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            }
+        }
+
+        function addMonthToCalendar(year, month) {
+            const container = document.getElementById('calendar-body');
+            const monthBanner = document.createElement('div');
+            monthBanner.className = 'month-banner';
+            const tempDate = new Date(year, month, 1);
+            monthBanner.innerText = tempDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+            container.appendChild(monthBanner);
+
+            const firstDayOfMonth = new Date(year, month, 1);
+            let startPadding = firstDayOfMonth.getDay() === 0 ? 6 : firstDayOfMonth.getDay() - 1;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            let dayCounter = 1;
+            let currentWeekNum = getWeekNumber(firstDayOfMonth);
+
+            while (dayCounter <= daysInMonth) {
+                const weekDiv = document.createElement('div');
+                weekDiv.className = 'week-number';
+                weekDiv.innerText = currentWeekNum;
+                container.appendChild(weekDiv);
+
+                for (let d = 0; d < 7; d++) {
+                    if (startPadding > 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'empty-cell border-r border-b border-slate-100';
+                        container.appendChild(empty);
+                        startPadding--;
+                    } else if (dayCounter <= daysInMonth) {
+                        const date = new Date(year, month, dayCounter);
+                        const dateStr = formatDateKey(date);
+                        container.appendChild(createDayCell(dateStr, dayCounter, d >= 5, d + 1));
+                        dayCounter++;
+                    } else {
+                        const empty = document.createElement('div');
+                        empty.className = 'empty-cell border-r border-b border-slate-100';
+                        container.appendChild(empty);
+                    }
+                }
+                currentWeekNum++;
+                if (currentWeekNum > 53) currentWeekNum = 1;
+            }
+        }
+
+        function createDayCell(dateStr, dayNum, isWeekend, dayOfWeekIndex) {
+            const div = document.createElement('div');
+            const holidayName = HOLIDAYS[dateStr];
+            const isHoliday = !!holidayName;
+            const isNonWorking = isWeekend || isHoliday;
+            const isToday = dateStr === formatDateKey(new Date());
+            
+            div.className = `day-cell border-r border-b border-slate-100 ${isNonWorking ? 'is-non-working' : ''} ${isToday ? 'bg-blue-50/30' : ''}`;
+            div.id = `cell-${dateStr}`;
+            
+            const addBtnHtml = !isNonWorking ? 
+                `<button onclick="toggleQuickSelector(event, '${dateStr}')" class="text-blue-600 hover:bg-blue-100 bg-blue-50 w-6 h-6 rounded-full flex items-center justify-center text-lg font-black transition-all active:scale-90">+</button>` : '';
+
+            div.innerHTML = `
+                <div class="flex justify-between items-start mb-1.5">
+                    <div class="flex items-baseline gap-1.5">
+                        <span class="text-[10px] font-black ${isToday ? 'text-blue-600' : 'text-slate-500'}">${dayNum}</span>
+                        ${isHoliday ? `<span class="holiday-label">${holidayName}</span>` : ''}
+                    </div>
+                    ${addBtnHtml}
+                </div>
+                <div class="quick-selector" id="qsel-${dateStr}">
+                    <div class="max-h-[300px] overflow-y-auto">
+                        ${PRODUCT_TYPES.map(p => `
+                            <button onclick="initNewTask(event, '${dateStr}', '${p.id}')" class="w-full text-left text-[10px] font-bold p-2 rounded hover:bg-slate-50 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full ${p.bg}"></span> ${p.name}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="task-list space-y-1 h-full min-h-[60px]" id="list-${dateStr}" 
+                     ${!isNonWorking ? 'ondragover="allowDrop(event)" ondrop="drop(event)"' : ''}>
+                </div>
+            `;
+
+            renderTasksInCell(div.querySelector('.task-list'), dateStr);
+            div.onclick = (e) => { if (taskToCopy && !isNonWorking) pasteTask(dateStr); };
+            return div;
+        }
+
+        function renderTasksInCell(list, dateStr) {
+            list.innerHTML = '';
+            const dayTasks = tasks.filter(t => t.date === dateStr).sort((a, b) => (a.order || 0) - (b.order || 0));
+            dayTasks.forEach(task => {
+                const product = PRODUCT_TYPES.find(p => p.id === task.productId) || PRODUCT_TYPES[0];
+                const taskEl = document.createElement('div');
+                taskEl.className = `product-card px-2 py-1 rounded-md text-white shadow-sm hover:brightness-110 active:scale-[0.99] transition-all group border border-white/5 ${product.bg}`;
+                taskEl.draggable = true;
+                taskEl.id = task.id;
+                
+                taskEl.innerHTML = `
+                    <div class="card-line-info">
+                        <span class="card-abrev">${product.abrev}</span>
+                        <span class="card-qty">${task.quantity || 1}u</span>
+                        <span class="card-main-text">${task.notes || '---'}</span>
+                        <span class="card-order">${task.orderNumber ? '#' + task.orderNumber : ''}</span>
+                        <div class="card-actions">
+                            <button onclick="startCopyMode(event, '${task.id}')" class="action-btn" title="Copiar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            </button>
+                            <button onclick="deleteTask(event, '${task.id}')" class="action-btn action-btn-delete" title="Eliminar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                taskEl.onclick = (e) => { e.stopPropagation(); openEditModal(task.id); };
+                taskEl.ondragstart = (e) => dragStart(e, task.id);
+                taskEl.ondragend = dragEnd;
+                list.appendChild(taskEl);
+            });
+        }
+
+        function setupInfiniteScroll() {
+            const scroller = document.getElementById('calendar-container');
+            scroller.addEventListener('scroll', () => {
+                if (isFetching) return;
+                if (scroller.scrollTop + scroller.clientHeight > scroller.scrollHeight - 400) {
+                    isFetching = true;
+                    addMonthToCalendar(currentYear, currentMonth);
+                    currentMonth++;
+                    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+                    setTimeout(() => isFetching = false, 200);
+                }
+            });
+        }
+
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function toggleQuickSelector(e, date) {
+            e.stopPropagation();
+            const qsel = document.getElementById(`qsel-${date}`);
+            const wasVisible = qsel.style.display === 'block';
+            hideQuickSelector();
+            if (!wasVisible) { qsel.style.display = 'block'; activeQuickSelector = qsel; }
+        }
+
+        function hideQuickSelector() { if (activeQuickSelector) activeQuickSelector.style.display = 'none'; activeQuickSelector = null; }
+
+        function initNewTask(e, date, prodId) {
+            e.stopPropagation();
+            hideQuickSelector();
+            const id = 't-' + Date.now() + Math.floor(Math.random() * 100);
+            tasks.push({ id, date, productId: prodId, quantity: 1, notes: '', orderNumber: '', order: 999 });
+            openEditModal(id);
+        }
+
+        function openEditModal(id) {
+            selectedTaskId = id;
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            document.getElementById('edit-quantity').value = task.quantity;
+            document.getElementById('edit-notes').value = task.notes || '';
+            document.getElementById('edit-order-number').value = task.orderNumber || '';
+            selectedModalProductId = task.productId;
+            const product = PRODUCT_TYPES.find(p => p.id === task.productId);
+            document.getElementById('modal-product-name').innerText = product.name;
+            document.getElementById('modal-product-color').className = `w-4 h-4 rounded-full ${product.bg}`;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function saveTask() {
+            const task = tasks.find(t => t.id === selectedTaskId);
+            if (task) {
+                task.quantity = document.getElementById('edit-quantity').value;
+                task.notes = document.getElementById('edit-notes').value;
+                task.orderNumber = document.getElementById('edit-order-number').value;
+                task.productId = selectedModalProductId;
+                saveToStorage();
+                refreshAllCells();
+                closeModal();
+            }
+        }
+
+        function deleteTask(e, id) { 
+            if (e) e.stopPropagation(); 
+            tasks = tasks.filter(t => t.id !== id); 
+            saveToStorage(); 
+            refreshAllCells(); 
+        }
+
+        function deleteCurrentTask() { deleteTask(null, selectedTaskId); closeModal(); }
+        function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+        function refreshAllCells() { document.querySelectorAll('.task-list').forEach(list => renderTasksInCell(list, list.id.replace('list-', ''))); }
+
+        function startCopyMode(e, taskId) {
+            e.stopPropagation();
+            taskToCopy = tasks.find(t => t.id === taskId);
+            document.getElementById('copy-indicator').classList.remove('hidden');
+        }
+
+        function cancelCopyMode() { taskToCopy = null; document.getElementById('copy-indicator').classList.add('hidden'); }
+
+        function pasteTask(date) {
+            const newTask = { ...taskToCopy, id: 't-' + Date.now() + Math.random(), date, order: tasks.filter(t => t.date === date).length };
+            tasks.push(newTask);
+            saveToStorage();
+            renderTasksInCell(document.getElementById(`list-${date}`), date);
+        }
+
+        function dragStart(ev, taskId) {
+            draggedElement = document.getElementById(taskId);
+            ev.dataTransfer.setData("text", taskId);
+            setTimeout(() => draggedElement.classList.add('dragging'), 0);
+        }
+
+        function dragEnd() { if (draggedElement) draggedElement.classList.remove('dragging'); }
+        function allowDrop(ev) {
+            ev.preventDefault();
+            const list = ev.currentTarget;
+            if (list.closest('.is-non-working')) return;
+            const afterElement = getDragAfterElement(list, ev.clientY);
+            if (draggedElement) {
+                if (!afterElement) list.appendChild(draggedElement);
+                else list.insertBefore(draggedElement, afterElement);
+            }
+        }
+
+        function drop(ev) {
+            ev.preventDefault();
+            const list = ev.currentTarget;
+            const taskId = ev.dataTransfer.getData("text");
+            const date = list.id.replace('list-', '');
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                task.date = date;
+                Array.from(list.children).forEach((el, i) => {
+                    const t = tasks.find(x => x.id === el.id);
+                    if (t) t.order = i;
+                });
+                saveToStorage();
+                renderTasksInCell(list, date);
+            }
+        }
+
+        function getDragAfterElement(container, y) {
+            const els = [...container.querySelectorAll('.product-card:not(.dragging)')];
+            return els.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) return { offset, element: child };
+                else return closest;
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function goToToday() { 
+            const now = new Date();
+            currentYear = now.getFullYear();
+            currentMonth = now.getMonth();
+            initCalendar(); 
+            const todayStr = formatDateKey(new Date());
+            const todayEl = document.getElementById(`cell-${todayStr}`);
+            if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // ── Persistencia (Firebase) ─────────────────────────────────────────
+        let firebaseListenerAttached = false;
+        function attachFirebaseListener() {
+            if (firebaseListenerAttached) return;
+            if (!tasksRef) return;
+            firebaseListenerAttached = true;
+            tasksRef.on("value", (snap) => {
+                const val = snap.val() || {};
+                const incoming = Object.keys(val).map(id => ({ id, ...(val[id] || {}) }));
+                tasks = incoming;
+                // Refrescar vista si ya existen celdas renderizadas
+                refreshAllCells();
+            });
+        }
+
+        async function loadFromStorage() {
+            try {
+                if (!tasksRef) return;
+                const snap = await tasksRef.once("value");
+                const val = snap.val() || {};
+                const hasRemote = Object.keys(val).length > 0;
+                if (!hasRemote) {
+                    // Migración 1 vez desde localStorage anterior (si existía)
+                    const LOCAL_KEY = 'prod_planning_v11_compact';
+                    const localRaw = localStorage.getItem(LOCAL_KEY);
+                    if (localRaw) {
+                        try {
+                            const parsed = JSON.parse(localRaw);
+                            if (Array.isArray(parsed) && parsed.length) {
+                                const map = {};
+                                parsed.forEach(t => {
+                                    if (!t || !t.id) return;
+                                    map[t.id] = t;
+                                });
+                                if (Object.keys(map).length) {
+                                    await tasksRef.set(map);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("No se pudo migrar localStorage:", e);
+                        }
+                    }
+                }
+                // Cargar definitivo desde Firebase (ya migrado si hacía falta)
+                const snap2 = await tasksRef.once("value");
+                const val2 = snap2.val() || {};
+                tasks = Object.keys(val2).map(id => ({ id, ...(val2[id] || {}) }));
+            } catch (e) {
+                console.error("Error cargando planificación desde Firebase:", e);
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                if (!tasksRef) return;
+                // Guardar como mapa por id para evitar problemas con arrays en RTDB
+                const map = {};
+                tasks.forEach(t => { map[t.id] = t; });
+                tasksRef.set(map).catch(err => console.error("Error guardando planificación:", err));
+            } catch (e) {
+                console.error("saveToStorage fallo:", e);
+            }
+        }
+    </script>
+</body>
+</html>
