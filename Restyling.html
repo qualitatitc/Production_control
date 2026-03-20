@@ -205,26 +205,25 @@ const guardarSesionDiaria = async (fecha, operarios, tareasEnSesion, horasEnSesi
     await update(ref(db, `productividadDiaria/${fechaKey}`), diaActual);
 };
 
-window.recalcularProductividadHoy = async () => {
-    const hoy = tsToFechaLocal(Date.now());
-    const fechaKey = fechaToKey(hoy);
+// Recalcula productividad para un día concreto SIN acumular (overwrite),
+// usando totalTareas por fecha de finalización (finMS) y horas ponderadas por sesiones ENTRADA→SALIDA.
+const recalcularProductividadDia = async (fechaISO) => {
+    const fechaKey = fechaToKey(fechaISO);
     const snapshot = await get(tareasRef);
-    if (!snapshot.exists()) return;
 
-    const tareas = Object.values(snapshot.val());
+    const tareasObj = snapshot.val() || {};
+    const tareas = Object.values(tareasObj);
 
-    // Encontrar todos los pares ENTRADA/SALIDA del día de hoy
+    // Sesiones del día: ENTRADA LÍNEA / SALIDA LÍNEA (entrada/salida nunca cruza medianoche)
     const entradas = tareas
-        .filter(t => t.numSerie === 'ENTRADA LÍNEA' && tsToFechaLocal(t.inicioMS) === hoy)
+        .filter(t => t?.numSerie === 'ENTRADA LÍNEA' && t?.inicioMS && tsToFechaLocal(t.inicioMS) === fechaISO)
         .sort((a, b) => a.inicioMS - b.inicioMS);
 
     const salidas = tareas
-        .filter(t => t.numSerie === 'SALIDA LÍNEA' && tsToFechaLocal(t.inicioMS) === hoy)
+        .filter(t => t?.numSerie === 'SALIDA LÍNEA' && t?.inicioMS && tsToFechaLocal(t.inicioMS) === fechaISO)
         .sort((a, b) => a.inicioMS - b.inicioMS);
 
-    // Emparejar cada entrada con su salida más cercana posterior
     let horasPonderadas = 0;
-    let totalTareas = 0;
     let resumenSesiones = '';
 
     entradas.forEach(entrada => {
@@ -234,14 +233,55 @@ window.recalcularProductividadHoy = async () => {
         const horasSesion = (hastaMS - entrada.inicioMS) / (1000 * 3600);
         horasPonderadas += horasSesion * operariosSesion;
         resumenSesiones += `\nSesión ${operariosSesion} op: ${horasSesion.toFixed(2)}h × ${operariosSesion} = ${(horasSesion * operariosSesion).toFixed(2)}h`;
+    });
 
-        // Contar tareas finalizadas en esta sesión
-        tareas.forEach(t => {
-            if (t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0
-                && t.finMS && t.finMS >= entrada.inicioMS && t.finMS <= hastaMS) {
-                totalTareas++;
+    const addDaysISO = (iso, delta) => {
+        if (!iso) return null;
+        const parts = String(iso).split('-').map(Number);
+        if (parts.length !== 3) return null;
+        const [y, mo, d] = parts;
+        const dt = new Date(y, mo - 1, d);
+        dt.setDate(dt.getDate() + delta);
+        const yy = dt.getFullYear();
+        const mm = String(dt.getMonth() + 1).padStart(2, '0');
+        const dd = String(dt.getDate()).padStart(2, '0');
+        return `${yy}-${mm}-${dd}`;
+    };
+
+    // Total tareas con regla 0.5/0.5 si una tarea se completa al día siguiente.
+    // - Si la tarea finaliza el mismo día: 1 tarea para ese día.
+    // - Si finaliza al día siguiente: 0.5 para el día de inicio y 0.5 para el día de fin.
+    // - Si aún no está finalizada: asumimos que se repartirá igual (0.5 en inicio y 0.5 en mañana).
+    let totalTareas = 0;
+    tareas.forEach((t) => {
+        if (!t) return;
+        if (t.codigo === 'SISTEMA') return;
+        const inicioMS = t.inicioMS;
+        if (!inicioMS) return;
+
+        const startFecha = t.fechaTrabajoInicio ? String(t.fechaTrabajoInicio) : tsToFechaLocal(inicioMS);
+        if (!startFecha) return;
+
+        const nextStart = addDaysISO(startFecha, 1);
+
+        if (t.estado === 'finalizado') {
+            if (!t.finMS) return;
+            const endFecha = tsToFechaLocal(t.finMS);
+            if (startFecha === endFecha) {
+                if (fechaISO === startFecha) totalTareas += 1;
+                return;
             }
-        });
+
+            // Regla 0.5/0.5 solo si termina al día siguiente
+            if (nextStart && endFecha === nextStart) {
+                if (fechaISO === startFecha) totalTareas += 0.5;
+                if (fechaISO === endFecha) totalTareas += 0.5;
+            }
+        } else {
+            // Pendiente: contamos media tarea hoy y media tarea mañana
+            if (fechaISO === startFecha) totalTareas += 0.5;
+            if (nextStart && fechaISO === nextStart) totalTareas += 0.5;
+        }
     });
 
     const productividad = calcularProductividadDiaria(totalTareas, horasPonderadas);
@@ -252,9 +292,37 @@ window.recalcularProductividadHoy = async () => {
         productividad
     });
 
-    await actualizarGraficoDiario(state.mesSeleccionado);
+    return { totalTareas, horasPonderadas, productividad, resumenSesiones };
+};
 
+window.recalcularProductividadHoy = async () => {
+    const hoy = tsToFechaLocal(Date.now());
+    const { totalTareas, horasPonderadas, productividad, resumenSesiones } = await recalcularProductividadDia(hoy);
+    await actualizarGraficoDiario(state.mesSeleccionado);
     alert(`✅ Productividad del ${hoy} recalculada${resumenSesiones}\n\nHoras ponderadas totales: ${horasPonderadas.toFixed(2)}h\nTareas: ${totalTareas}\nProductividad: ${productividad}`);
+};
+
+// Recalcula todo el histórico de productividad (solo sobre los días que ya existen)
+// para que el gráfico pinte correctamente los datos pasados.
+window.recalcularProductividadHistorico = async () => {
+    const snap = await get(productividadDiariaRef);
+    const datos = snap.val() || {};
+    const keysDias = Object.keys(datos).filter(k => /^\d{4}_\d{2}_\d{2}$/.test(k));
+
+    if (!keysDias.length) {
+        alert('No hay días en productividadDiaria para recalcular.');
+        return;
+    }
+
+    // Recalcular secuencialmente: es más estable y evita ráfagas de actualizaciones.
+    for (const key of keysDias) {
+        const fechaISO = key.replace(/_/g, '-');
+        await recalcularProductividadDia(fechaISO);
+    }
+
+    await actualizarGraficoDiario(state.mesSeleccionado);
+    await actualizarGraficoMensual(state.anioSeleccionado);
+    alert(`✅ Histórico recalculado: ${keysDias.length} días.`);
 };
 
 const festivosEspa = [
@@ -353,17 +421,33 @@ const actualizarGraficoTiempoMensual = async (mesObj = null) => {
     const diasDelMes = new Date(m.year, m.month + 1, 0).getDate();
     const dias = Array.from({ length: diasDelMes }, (_, i) => i + 1);
 
-    // Para cada día, calcular la media de tiempos de las tareas
-    const medias = await Promise.all(dias.map(async dia => {
+    // Media diaria: suma de `total` de tareas finalizadas / nº de tareas finalizadas.
+    // Usamos `fechaFiltro` cuando exista (por reentradas tras SALIDA LÍNEA) para alinear gráfico y tabla.
+    const snapshotTareas = await get(tareasRef);
+    const tareasData = snapshotTareas.val() || {};
+    const aggPorFecha = {}; // fechaISO -> { sum, count }
+
+    for (const [, t] of Object.entries(tareasData)) {
+        if (!t) continue;
+        if (t.estado !== "finalizado") continue;
+        if (t.codigo === "SISTEMA") continue;
+        const total = Number(t.total || 0);
+        if (!total || total <= 0) continue;
+
+        const fecha = t.fechaFiltro ? String(t.fechaFiltro) : tsToFechaLocal(t.inicioMS);
+        if (!fecha) continue;
+        if (!aggPorFecha[fecha]) aggPorFecha[fecha] = { sum: 0, count: 0 };
+        aggPorFecha[fecha].sum += total;
+        aggPorFecha[fecha].count += 1;
+    }
+
+    const medias = dias.map((dia) => {
         const mes   = String(m.month + 1).padStart(2, '0');
         const diaS  = String(dia).padStart(2, '0');
         const fecha = `${m.year}-${mes}-${diaS}`;
-        const snap  = await get(ref(db, `tiempoPorTarea/${fechaToKey(fecha)}`));
-        const datos = snap.val();
-        if (!datos) return null;
-        const tiempos = Object.values(datos).map(t => t.tiempo).filter(t => t > 0);
-        return tiempos.length > 0 ? tiempos.reduce((a, b) => a + b, 0) / tiempos.length : null;
-    }));
+        const item = aggPorFecha[fecha];
+        return item && item.count > 0 ? (item.sum / item.count) : null;
+    });
 
     const conDatos   = medias.filter(v => v !== null);
     const mediaTotal = conDatos.length > 0 ? conDatos.reduce((a, b) => a + b, 0) / conDatos.length : 0;
@@ -1049,6 +1133,7 @@ window.cerrarSelector = () => {
 };
 
 let _registrandoEntrada = false;
+let _registrandoSalida = false;
 
 window.seleccionarOperarios = async (num) => {
     if (_registrandoEntrada) return; // Bloquear doble clic
@@ -1070,6 +1155,27 @@ window.seleccionarOperarios = async (num) => {
             total: 0,
             estado: "finalizado"
         });
+
+        // Reactivar solo tareas pausadas por SALIDA LÍNEA
+        const snapshotResume = await get(tareasRef);
+        if (snapshotResume.exists()) {
+            const updatesResume = {};
+            const ahora = Date.now();
+            const fechaFiltro = tsToFechaLocal(ahora);
+            snapshotResume.forEach((child) => {
+                const t = child.val() || {};
+                if (t.estado === "pausa" && t.pausaLinea === true) {
+                    const acumulado = t.tiempoAcumuladoMS || 0;
+                    updatesResume[`${child.key}/inicioMS`] = ahora - acumulado;
+                    updatesResume[`${child.key}/estado`] = "activo";
+                    updatesResume[`${child.key}/pausaLinea`] = null; // limpiar flag
+                    updatesResume[`${child.key}/fechaFiltro`] = fechaFiltro; // para mostrar en el día de re-entrada
+                }
+            });
+            if (Object.keys(updatesResume).length) {
+                await update(tareasRef, updatesResume);
+            }
+        }
     } else if (state.modo === "reposicion") {
         const nuevaRep = await push(tareasRef, {
             numSerie: "REPOSICIÓN",
@@ -1093,55 +1199,85 @@ window.seleccionarOperarios = async (num) => {
 };
 
 window.registrarSalida = async () => {
-    if (state.operarios === 0) {
-        alert("La línea ya está cerrada.");
-        return;
-    }
-    
-    const ahoraMSTime = Date.now();
-    const fechaHoy = tsToFechaLocal(ahoraMSTime);
-    
-    await push(tareasRef, {
-        numSerie: "SALIDA LÍNEA",
-        codigo: "SISTEMA",
-        notas: "",
-        operarios: state.operarios,
-        inicio: new Date().toLocaleTimeString('es-ES'),
-        inicioMS: ahoraMSTime,
-        fin: "--:--",
-        total: 0,
-        estado: "finalizado"
-    });
-    
-    const snapshot = await get(tareasRef);
-    const entradaMS = state.entradaLineaHoy;
-    const operariosSesion = state.operarios;
-    let tareasEnSesion = 0;
-    
-    if (snapshot.exists()) {
-        Object.values(snapshot.val()).forEach(t => {
-            const fechaTarea = tsToFechaLocal(t.inicioMS);
-            // Contar tareas finalizadas en esta sesión (entre entradaMS y ahoraMSTime)
-            if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0
-                && t.finMS && t.finMS >= entradaMS && t.finMS <= ahoraMSTime) {
-                tareasEnSesion++;
-            }
+    if (_registrandoSalida) return; // Bloquear doble click/duplicados
+    _registrandoSalida = true;
+    try {
+        if (state.operarios === 0) {
+            alert("La línea ya está cerrada.");
+            return;
+        }
+        
+        const ahoraMSTime = Date.now();
+        const fechaHoy = tsToFechaLocal(ahoraMSTime);
+        
+        await push(tareasRef, {
+            numSerie: "SALIDA LÍNEA",
+            codigo: "SISTEMA",
+            notas: "",
+            operarios: state.operarios,
+            inicio: new Date().toLocaleTimeString('es-ES'),
+            inicioMS: ahoraMSTime,
+            fin: "--:--",
+            total: 0,
+            estado: "finalizado"
         });
-    }
-    
-    const horasEnSesion = entradaMS ? (ahoraMSTime - entradaMS) / (1000 * 3600) : 0;
-    await guardarSesionDiaria(fechaHoy, operariosSesion, tareasEnSesion, horasEnSesion);
-    
-    state.operarios = 0;
-    state.entradaLineaHoy = null;
-    state.salidaLineaHoy = null;
-    await guardarEstadoSesion({ operarios: 0, entradaLineaHoy: null, salidaLineaHoy: null });
-    
-    actualizarEstadoLineaUI();
-    
-    if (state.inicializado) {
-        await actualizarGraficoDiario(state.mesSeleccionado);
-        await actualizarGraficoMensual(state.anioSeleccionado);
+        
+        const snapshot = await get(tareasRef);
+        const entradaMS = state.entradaLineaHoy;
+        const operariosSesion = state.operarios;
+        let tareasEnSesion = 0;
+        
+        if (snapshot.exists()) {
+            Object.values(snapshot.val()).forEach(t => {
+                const fechaTarea = tsToFechaLocal(t.inicioMS);
+                // Contar tareas finalizadas en esta sesión (entre entradaMS y ahoraMSTime)
+                if (fechaTarea === fechaHoy && t.estado === 'finalizado' && t.codigo !== 'SISTEMA' && t.total > 0
+                    && t.finMS && t.finMS >= entradaMS && t.finMS <= ahoraMSTime) {
+                    tareasEnSesion++;
+                }
+            });
+        }
+        
+        // Pausar tareas activas hasta que se vuelva a entrar en la línea
+        if (snapshot.exists()) {
+            const updatesPausa = {};
+            const ahora = Date.now();
+            snapshot.forEach((child) => {
+                const t = child.val() || {};
+                if (t.estado === "activo") {
+                    const inicioMS = t.inicioMS || ahora;
+                    updatesPausa[`${child.key}/estado`] = "pausa";
+                    updatesPausa[`${child.key}/tiempoAcumuladoMS`] = ahora - inicioMS;
+                    updatesPausa[`${child.key}/pausaLinea`] = true; // flag para reactivar al re-entrar
+                    // Guardar la fecha real de inicio para poder partir la tarea (0.5 / 0.5) si termina mañana.
+                    // No la sobrescribimos si ya existía (evita perder el inicio original en reentradas).
+                    if (!t.fechaTrabajoInicio) {
+                        updatesPausa[`${child.key}/fechaTrabajoInicio`] = tsToFechaLocal(inicioMS);
+                    }
+                }
+            });
+            if (Object.keys(updatesPausa).length) {
+                await update(tareasRef, updatesPausa);
+            }
+        }
+        
+        const horasEnSesion = entradaMS ? (ahoraMSTime - entradaMS) / (1000 * 3600) : 0;
+        // Productividad diaria NO acumulativa: se recalcula desde cero y se sobrescribe.
+        await recalcularProductividadDia(fechaHoy);
+        
+        state.operarios = 0;
+        state.entradaLineaHoy = null;
+        state.salidaLineaHoy = null;
+        await guardarEstadoSesion({ operarios: 0, entradaLineaHoy: null, salidaLineaHoy: null });
+        
+        actualizarEstadoLineaUI();
+        
+        if (state.inicializado) {
+            await actualizarGraficoDiario(state.mesSeleccionado);
+            await actualizarGraficoMensual(state.anioSeleccionado);
+        }
+    } finally {
+        _registrandoSalida = false;
     }
 };
 
@@ -1472,6 +1608,64 @@ window.toggleGrupo = (pedidoId) => {
     if (icon) icon.classList.toggle('rotate-90');
 };
 
+// Toggle tablas de "Pedidos en proceso" (agrupación por cliente y por pedido)
+window.toggleClienteTareas = (clienteId) => {
+  const rows = document.querySelectorAll(`.cliente-body-${clienteId}`);
+  if (!rows.length) return;
+
+  // Detectar estado real del cliente mirando cabeceras (filas de pedido), no tareas.
+  // Las tareas tienen data-pedido-visible="0|1"; las cabeceras no tienen ese atributo.
+  const headerRows = Array.from(rows).filter(r => r.dataset.pedidoVisible === undefined);
+  const isOpen = headerRows.length
+      ? headerRows.some(r => !r.classList.contains('hidden'))
+      : rows.length
+          ? Array.from(rows).some(r => !r.classList.contains('hidden'))
+          : false;
+
+  const shouldShow = !isOpen;
+
+  if (shouldShow) {
+    // Al abrir: respetar el estado propio del "pedido" (data-pedido-visible)
+    rows.forEach(r => {
+      const pv = r.dataset.pedidoVisible;
+      const keepHidden = pv === '0';
+      r.classList.toggle('hidden', keepHidden);
+    });
+  } else {
+    // Al cerrar: ocultar todo (guardamos el botón; el estado del pedido se mantiene por data-pedido-visible)
+    rows.forEach(r => r.classList.add('hidden'));
+  }
+
+  const btn = document.getElementById(`btn-cliente-${clienteId}`);
+  if (btn) btn.textContent = shouldShow ? 'Ocultar' : 'Ver';
+};
+
+window.togglePedidoTareas = (pedidoId) => {
+  const rows = document.querySelectorAll(`.grupo-pedido-${pedidoId}`);
+  if (!rows.length) return;
+  const anyHidden = Array.from(rows).some(r => r.classList.contains('hidden'));
+  const shouldShow = anyHidden;
+  rows.forEach(r => {
+    r.classList.toggle('hidden', !shouldShow);
+    r.dataset.pedidoVisible = shouldShow ? '1' : '0';
+  });
+
+  const btn = document.getElementById(`btn-pedido-${pedidoId}`);
+  if (btn) btn.textContent = shouldShow ? 'Ocultar' : 'Ver';
+};
+
+// Nuevo toggle: un único grupo por (cliente + pedido)
+window.toggleGrupoPedidoCliente = (grupoId) => {
+  const rows = document.querySelectorAll(`.grupo-${grupoId}`);
+  if (!rows.length) return;
+  const anyHidden = Array.from(rows).some(r => r.classList.contains('hidden'));
+  const shouldShow = anyHidden;
+  rows.forEach(r => r.classList.toggle('hidden', !shouldShow));
+
+  const btn = document.getElementById(`btn-grupo-${grupoId}`);
+  if (btn) btn.textContent = shouldShow ? 'Ocultar' : 'Ver';
+};
+
 window.borrarSeriePendiente = (id, e) => {
     e.stopPropagation();
     if (confirm("¿Eliminar serie?")) {
@@ -1535,6 +1729,21 @@ window.finalizarTarea = async (id, inicioMS) => {
         total: minutos,
         estado: "finalizado"
     });
+
+    // Asegurar productividad siempre correcta: recalcular los días afectados
+    // (tarea puede repartir 0.5/0.5 entre día de inicio y día de fin).
+    const diaFin = tsToFechaLocal(finMS);
+    const diaInicio = tarea.fechaTrabajoInicio
+        ? String(tarea.fechaTrabajoInicio)
+        : tsToFechaLocal(tarea.inicioMS);
+
+    // No recalcular el mismo día dos veces.
+    if (diaInicio === diaFin) {
+        await recalcularProductividadDia(diaFin);
+    } else {
+        await recalcularProductividadDia(diaInicio);
+        await recalcularProductividadDia(diaFin);
+    }
 };
 
 window.borrarRegistro = (id) => {
@@ -1626,7 +1835,9 @@ const renderizarTablaTareas = async () => {
     
     if (state.filtroFechaTareas) {
         tareasFiltradas = tareas.filter(([id, t]) => {
-            const fechaTarea = tsToFechaLocal(t.inicioMS);
+            // Para tareas pausadas por SALIDA LÍNEA, `inicioMS` puede quedar "atrás" (cruce de día).
+            // En ese caso usamos `fechaFiltro` para mostrarla en el día en el que se re-entra a la línea.
+            const fechaTarea = t.fechaFiltro ? t.fechaFiltro : tsToFechaLocal(t.inicioMS);
             return fechaTarea === state.filtroFechaTareas;
         });
     }
@@ -1668,19 +1879,31 @@ const renderizarTablaTareas = async () => {
         return;
     }
     
-    tareasFiltradas.forEach(([id, t]) => {
+    const escapeHtml = (str) => String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const safeToken = (str) => {
+        const s = String(str ?? '').trim();
+        const cleaned = s.replace(/[^a-zA-Z0-9_-]/g, '_');
+        return cleaned || 'vacio';
+    };
+
+    const buildTaskRow = (id, t, rowExtraClass = '', mostrarPedidoCliente = false, pedidoVisible = true) => {
         const esActivo = t.estado === "activo";
         const esPausado = t.estado === "pausa" || t.estado === "incidencia_pausa";
         const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
         const esHito = t.codigo === "SISTEMA";
-        
-        // Declarar estas variables primero para usarlas en tiempoTexto
+
         const esIncidencia = t.numSerie === "INCIDENCIA";
         const esDesayuno = t.numSerie === "PAUSA DESAYUNO";
         const esReposicion = t.numSerie === "REPOSICIÓN";
         const esEntrada = t.numSerie === "ENTRADA LÍNEA";
         const esSalida = t.numSerie === "SALIDA LÍNEA";
-        
+
         let tiempoTexto = "";
         if (esActivo) {
             tiempoTexto = '<span class="animate-pulse">0m 0s</span>';
@@ -1691,16 +1914,12 @@ const renderizarTablaTareas = async () => {
         } else if (esPausaSistema) {
             tiempoTexto = "EN CURSO...";
         } else if (esHito) {
-            // Mostrar tiempo total para INCIDENCIA y PAUSA DESAYUNO, hora para otros
-            if (esIncidencia || esDesayuno) {
-                tiempoTexto = `${t.total}m`;
-            } else {
-                tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
-            }
+            if (esIncidencia || esDesayuno) tiempoTexto = `${t.total}m`;
+            else tiempoTexto = `<span class="font-mono text-slate-600">${t.inicio}</span>`;
         } else {
             tiempoTexto = `${t.total}m`;
         }
-        
+
         const filaClase = esEntrada ? "bg-emerald-50 border-emerald-200" :
             esSalida ? "bg-red-50 border-red-200" :
             esDesayuno ? "bg-orange-50 border-orange-200" :
@@ -1708,23 +1927,23 @@ const renderizarTablaTareas = async () => {
             esReposicion ? "bg-purple-50 border-purple-200" :
             esActivo ? "bg-red-50 border-red-100" :
             esPausado ? "bg-blue-50 border-blue-100" : "bg-white hover:bg-stone-50";
-        
+
         const serieColorClase = esIncidencia ? "text-red-600" :
             esDesayuno ? "text-orange-500" :
             esReposicion ? "text-purple-600" :
             esEntrada ? "text-emerald-600" :
             esSalida ? "text-red-600" : "";
-        
-        const clienteHtml = (!esHito && t.cliente && t.cliente.trim() && t.cliente !== "Sin cliente")
-            ? `<span class="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">👤 ${t.cliente}</span>` : '';
-        
-        const pedidoHtml = (!esHito && t.pedido)
-            ? `<span class="ml-1 text-[10px] text-slate-400">PED: ${t.pedido}</span>` : '';
-        
+
+        const clienteHtml = (!esHito && mostrarPedidoCliente && t.cliente && String(t.cliente).trim() && t.cliente !== "Sin cliente")
+            ? `<span class="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">👤 ${escapeHtml(t.cliente)}</span>` : '';
+
+        const pedidoHtml = (!esHito && mostrarPedidoCliente && t.pedido)
+            ? `<span class="ml-1 text-[10px] text-slate-400">PED: ${escapeHtml(t.pedido)}</span>` : '';
+
         const prodHtml = (!esHito && t.total > 0)
-            ? `<span class="${(420/t.total) >= 19 ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'} px-2 py-1 rounded font-black text-sm">${(420 / t.total).toFixed(1)}</span>`
+            ? `<span class="${(420 / t.total) >= 19 ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'} px-2 py-1 rounded font-black text-sm">${(420 / t.total).toFixed(1)}</span>`
             : '<span class="text-stone-300">—</span>';
-        
+
         let accionHtml = '';
         if (esActivo) {
             accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="flex items-center gap-1.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-full border border-red-200 hover:border-red-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Finalizar"><span class="text-xs">■</span> Fin</button>`;
@@ -1735,19 +1954,101 @@ const renderizarTablaTareas = async () => {
         } else {
             accionHtml = '<span class="text-[10px] font-black text-emerald-600 uppercase">✅ HECHO</span>';
         }
-        
-        cuerpo.innerHTML += `
-            <tr class="${filaClase} border-b">
-                <td class="p-3 font-black text-[15px] ${serieColorClase}">${t.numSerie} ${pedidoHtml} ${clienteHtml}</td>
-                <td class="p-3 font-bold text-sm">${t.codigo}</td>
+
+        const dataInicioAttr = (esActivo || esPausaSistema) ? ` data-inicio-ms="${t.inicioMS}"` : '';
+
+        return `
+            <tr class="${filaClase} border-b ${rowExtraClass}" data-pedido-visible="${pedidoVisible ? '1' : '0'}">
+                <td class="p-3 font-black text-[15px] ${serieColorClase}">${escapeHtml(t.numSerie)} ${pedidoHtml} ${clienteHtml}</td>
+                <td class="p-3 font-bold text-sm">${escapeHtml(t.codigo)}</td>
                 <td class="p-3 text-center"><span class="bg-slate-100 px-2 py-1 rounded font-black text-xs">${t.operarios || 0}</span></td>
-                <td class="p-3">${t.notas && t.notas.trim() ? `<div class="bg-yellow-100 border-yellow-500 p-2 rounded text-[12px] font-black">⚠️ ${t.notas}</div>` : '<span class="text-stone-300 text-[10px]">-</span>'}</td>
-                <td class="p-3 font-[1000] text-lg ${esActivo ? 'text-red-600' : esPausado || esPausaSistema ? 'text-blue-600' : ''}" ${esActivo || esPausaSistema ? `data-inicio-ms="${t.inicioMS}"` : ''}>${tiempoTexto}</td>
+                <td class="p-3">${t.notas && String(t.notas).trim() ? `<div class="bg-yellow-100 border-yellow-500 p-2 rounded text-[12px] font-black">⚠️ ${escapeHtml(t.notas)}</div>` : '<span class="text-stone-300 text-[10px]">-</span>'}</td>
+                <td class="p-3 font-[1000] text-lg ${esActivo ? 'text-red-600' : (esPausado || esPausaSistema) ? 'text-blue-600' : ''}"${dataInicioAttr}>${tiempoTexto}</td>
                 <td class="p-3 text-center">${prodHtml}</td>
                 <td class="p-3 text-right flex gap-3">${accionHtml} <button onclick="borrarRegistro('${id}')" class="bg-red-100 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-lg">🗑️</button></td>
             </tr>
         `;
+    };
+
+    // 1) Sistema (siempre visible, fuera de desplegables)
+    const sistema = [];
+    const normales = [];
+    tareasFiltradas.forEach(([id, t]) => {
+        if (t && t.codigo === "SISTEMA") sistema.push([id, t]);
+        else normales.push([id, t]);
     });
+
+    let html = '';
+    sistema.forEach(([id, t]) => {
+        html += buildTaskRow(id, t, '', true);
+    });
+
+    // 2) Agrupar normales por (cliente + pedido) -> un solo nivel
+    const gruposPedidoCliente = new Map(); // grupoKey -> { clienteKey, pedidoKey, minInicioMS, tieneActivo, items: [] }
+
+    normales.forEach(([id, t]) => {
+        const clienteKey = (t.cliente && String(t.cliente).trim() && t.cliente !== "Sin cliente") ? String(t.cliente).trim() : "Sin cliente";
+        const pedidoKey = (t.pedido && String(t.pedido).trim()) ? String(t.pedido).trim() : "S/P";
+        const tieneActivo = t.estado === "activo";
+
+        const grupoKey = `${clienteKey}||${pedidoKey}`;
+        if (!gruposPedidoCliente.has(grupoKey)) {
+            gruposPedidoCliente.set(grupoKey, {
+                clienteKey,
+                pedidoKey,
+                minInicioMS: Number(t.inicioMS || 0),
+                tieneActivo,
+                items: []
+            });
+        }
+        const g = gruposPedidoCliente.get(grupoKey);
+        g.minInicioMS = Math.min(g.minInicioMS, Number(t.inicioMS || 0));
+        g.tieneActivo = g.tieneActivo || tieneActivo;
+        g.items.push([id, t]);
+    });
+
+    const gruposOrdenados = Array.from(gruposPedidoCliente.values())
+        .sort((a, b) => (a.minInicioMS || 0) - (b.minInicioMS || 0));
+
+    gruposOrdenados.forEach((g) => {
+        const grupoId = `gc_${safeToken(g.clienteKey)}_${safeToken(g.pedidoKey)}`;
+        const grupoExpanded = g.tieneActivo; // por defecto desagrupado si tiene tareas activas
+        const grupoHiddenCls = grupoExpanded ? '' : 'hidden';
+
+        const items = g.items.slice().sort((a, b) => (a[1].inicioMS || 0) - (b[1].inicioMS || 0));
+
+        html += `
+            <tr class="bg-white border-b">
+                <td colspan="7" class="p-3">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full ${g.tieneActivo ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
+                            <span class="font-black text-slate-700 uppercase tracking-wide text-[12px] truncate">👤 ${escapeHtml(g.clienteKey)} </span>
+                            <span class="font-black text-slate-500 uppercase tracking-wide text-[12px] truncate">PED: ${escapeHtml(g.pedidoKey)}</span>
+                            <span class="text-[10px] text-slate-500 font-bold">${items.length} tareas</span>
+                        </div>
+                        <button id="btn-grupo-${grupoId}" type="button"
+                            onclick="toggleGrupoPedidoCliente('${grupoId}')"
+                            class="px-3 py-1.5 rounded-xl ${grupoExpanded ? 'bg-white' : 'bg-slate-50'} hover:bg-slate-50 border border-slate-200 text-slate-600 text-[10px] font-black uppercase">
+                            ${grupoExpanded ? 'Ocultar' : 'Ver'}
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        items.forEach(([id, t]) => {
+            html += buildTaskRow(
+                id,
+                t,
+                `grupo-${grupoId} ${grupoHiddenCls}`.trim(),
+                false,
+                grupoExpanded
+            );
+        });
+    });
+
+    cuerpo.innerHTML = html;
 };
 
 // Listener para tareas
