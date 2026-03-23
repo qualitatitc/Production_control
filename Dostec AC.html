@@ -777,6 +777,46 @@ window.finalizarTarea = async function(id) {
   }
 };
 
+window.pausarTarea = async function(id) {
+  if (!id || id === 'undefined' || id === 'null') {
+    alert('❌ Error: ID no válido. Recarga la página.');
+    return;
+  }
+  if (!confirm('¿Pausar tarea activa?')) return;
+
+  try {
+    const ahora = Date.now();
+    const snap = await fbGet(ref(db, `tareas/${id}`));
+    const t = snap.val() || tareasActivasTemp[id] || null;
+    if (!t) { alert('❌ No se encontró la tarea'); return; }
+    if (t.estado !== 'activo') { alert('⚠️ Solo se pueden pausar tareas activas'); return; }
+
+    const acumuladoMS = (t.acumuladoMS || 0) + Math.max(0, (ahora - (t.inicioMS || ahora)));
+    await fbUpdate(ref(db, `tareas/${id}`), { estado: 'pausa_manual', acumuladoMS });
+  } catch (err) {
+    alert('❌ Error al pausar: ' + err.message);
+  }
+};
+
+window.reanudarTarea = async function(id) {
+  if (!id || id === 'undefined' || id === 'null') {
+    alert('❌ Error: ID no válido. Recarga la página.');
+    return;
+  }
+  if (!confirm('¿Reanudar tarea?')) return;
+
+  try {
+    const snap = await fbGet(ref(db, `tareas/${id}`));
+    const t = snap.val() || tareasActivasTemp[id] || null;
+    if (!t) { alert('❌ No se encontró la tarea'); return; }
+    if (t.estado !== 'pausa_manual') { alert('⚠️ La tarea no está en pausa manual'); return; }
+
+    await fbUpdate(ref(db, `tareas/${id}`), { estado: 'activo', inicioMS: Date.now() });
+  } catch (err) {
+    alert('❌ Error al reanudar: ' + err.message);
+  }
+};
+
 // ============================================
 // ✅ FIX 1: borrarTarea — borra del nodo correcto
 // ============================================
@@ -1271,7 +1311,9 @@ function actualizarTablaTareas() {
           ${pausaSalidaLinea && t.acumuladoMS ? `<div class="text-[10px] text-purple-400 font-bold mt-1">${formatTime(t.acumuladoMS)}</div>` : ''}
         </td>
         <td class="p-4 text-right flex justify-end gap-2">
-          ${(activo || pausaSalidaLinea) ? `<button onclick="finalizarTarea('${t.id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>` : (estaEnPausa ? '⏸️' : '✓')}
+          ${activo && t._nodo === 'tareas' ? `<button onclick="pausarTarea('${t.id}')" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Pausa</button>` : ''}
+          ${t.estado === 'pausa_manual' && t._nodo === 'tareas' ? `<button onclick="reanudarTarea('${t.id}')" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Reanudar</button>` : ''}
+          ${(activo || pausaSalidaLinea || t.estado === 'pausa_manual') ? `<button onclick="finalizarTarea('${t.id}')" class="bg-slate-900 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase shadow-sm">Fin</button>` : (estaEnPausa ? '⏸️' : '✓')}
           <button onclick="borrarTarea('${t.id}', '${t._nodo}')" class="text-slate-300 hover:text-red-500 ml-2" title="Borrar tarea">🗑️</button>
         </td>
       </tr>`;
