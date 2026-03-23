@@ -1217,7 +1217,6 @@ function renderGlobalCal(){
                     : '';
         const botones = (esFin || esCurso)
           ? `<button type="button" class="btn-info-pedido text-slate-400 hover:text-slate-700 rounded p-0.5 text-[10px]" title="Información">ℹ️</button>
-             ${esCurso && esRestyling ? `<button type="button" onclick="toggleTaskPause('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-amber-700 hover:bg-amber-100 rounded p-0.5 opacity-80 hover:opacity-100 text-[10px]" title="${enPausa ? 'Reanudar tarea' : 'Pausar tarea'}">${enPausa ? '\u25B6' : '\u23F8'}</button>` : ''}
              <span class="text-slate-300 text-sm leading-none select-none">${esFin ? '\u2713' : (enPausa ? '\u23F8' : '\u25b6')}</span>`
           : `<button type="button" class="btn-info-pedido text-slate-400 hover:text-slate-700 rounded p-0.5 text-[10px]" title="Información">ℹ️</button>
              <button type="button" onclick="abrirReconfigurarPedido('${key}','${pedSafe}','${iso}',event)" class="text-slate-400 hover:text-amber-600 hover:bg-amber-100 rounded p-0.5 opacity-80 hover:opacity-100 text-[10px]" title="Reconfigurar pedido">\u2699\uFE0F</button>

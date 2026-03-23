@@ -1746,6 +1746,51 @@ window.finalizarTarea = async (id, inicioMS) => {
     }
 };
 
+// Pausa/Reanudar manual por tarea (estado: "activo" <-> "pausa")
+window.togglePausaTarea = async (id, accion) => {
+    const snap = await get(ref(db, `tareas/${id}`));
+    if (!snap.exists()) return;
+    const t = snap.val() || {};
+
+    const estadoActual = t.estado;
+    const ahora = Date.now();
+
+    if (accion === 'pausar') {
+        if (estadoActual !== 'activo') return;
+        const inicioMSNum = Number(t.inicioMS || ahora);
+        const acumulado = Math.max(0, ahora - inicioMSNum);
+
+        const updates = {
+            estado: 'pausa',
+            tiempoAcumuladoMS: acumulado,
+            pausaLinea: null,
+        };
+
+        // Guardamos la fecha de inicio real para que finalizarTarea calcule bien 0.5/0.5 si cruza de día
+        if (!t.fechaTrabajoInicio) {
+            updates.fechaTrabajoInicio = tsToFechaLocal(inicioMSNum);
+        }
+
+        await update(ref(db, `tareas/${id}`), updates);
+        return;
+    }
+
+    if (accion === 'reanudar') {
+        if (estadoActual !== 'pausa') return; // no reanudar incidencias automáticamente aquí
+        const acumulado = Number(t.tiempoAcumuladoMS || 0);
+        const nuevoInicioMS = ahora - acumulado;
+
+        await update(ref(db, `tareas/${id}`), {
+            estado: 'activo',
+            inicioMS: nuevoInicioMS,
+            pausaLinea: null,
+            tiempoAcumuladoMS: 0,
+            fechaFiltro: null,
+        });
+        return;
+    }
+};
+
 window.borrarRegistro = (id) => {
     if (confirm("¿Eliminar?")) {
         remove(ref(db, `tareas/${id}`));
@@ -1894,7 +1939,9 @@ const renderizarTablaTareas = async () => {
 
     const buildTaskRow = (id, t, rowExtraClass = '', mostrarPedidoCliente = false, pedidoVisible = true) => {
         const esActivo = t.estado === "activo";
-        const esPausado = t.estado === "pausa" || t.estado === "incidencia_pausa";
+        const esPausadoManual = t.estado === "pausa";
+        const esPausadoIncidencia = t.estado === "incidencia_pausa";
+        const esPausado = esPausadoManual || esPausadoIncidencia;
         const esPausaSistema = t.estado === "en_pausa_sistema" || t.estado === "en_incidencia_sistema" || t.estado === "en_reposicion_sistema";
         const esHito = t.codigo === "SISTEMA";
 
@@ -1946,9 +1993,15 @@ const renderizarTablaTareas = async () => {
 
         let accionHtml = '';
         if (esActivo) {
-            accionHtml = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="flex items-center gap-1.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-full border border-red-200 hover:border-red-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Finalizar"><span class="text-xs">■</span> Fin</button>`;
+            const btnPausa = `<button onclick="togglePausaTarea('${id}', 'pausar')" class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-500 text-amber-700 hover:text-white px-3 py-1.5 rounded-full border border-amber-200 hover:border-amber-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Pausar"><span class="text-xs">⏸</span> Pausa</button>`;
+            const btnFin = `<button onclick="finalizarTarea('${id}', ${t.inicioMS})" class="flex items-center gap-1.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-full border border-red-200 hover:border-red-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Finalizar"><span class="text-xs">■</span> Fin</button>`;
+            accionHtml = `${btnPausa}${btnFin}`;
         } else if (esPausado) {
-            accionHtml = '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>';
+            if (esPausadoManual) {
+                accionHtml = `<button onclick="togglePausaTarea('${id}', 'reanudar')" class="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-500 text-amber-700 hover:text-white px-3 py-1.5 rounded-full border border-amber-200 hover:border-amber-500 transition-all font-black text-[10px] uppercase tracking-wide" title="Reanudar"><span class="text-xs">▶</span> Reanudar</button><span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>`;
+            } else {
+                accionHtml = '<span class="text-[10px] font-black text-blue-600 uppercase">PAUSADA</span>';
+            }
         } else if (esHito) {
             accionHtml = '<span class="text-[10px] font-bold text-stone-400 uppercase">REGISTRO</span>';
         } else {
