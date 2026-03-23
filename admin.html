@@ -970,18 +970,18 @@ function renderCalGrid(){
       const esCurso  = tarea && !esFin;
       const esRestyling = modulo === 'restyling';
       const enPausa = esCurso && esRestyling && isTaskPaused(modulo, iso, pedId);
-      const pillCls  = esFin   ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-                     : esCurso ? (enPausa ? 'bg-amber-50 border-amber-300' : 'bg-blue-50 border-blue-300')
+      const pillCls  = esFin   ? 'bg-emerald-100 border border-emerald-300 text-emerald-800 cursor-default'
+                     : esCurso ? (enPausa ? 'bg-amber-300 border-2 border-amber-600 text-amber-950' : 'bg-amber-200 border-2 border-amber-500 text-amber-900')
                      : `${col.pill} border ${col.border}`;
-      const dotCls   = esFin   ? 'bg-slate-400'
-                     : esCurso ? (enPausa ? 'bg-amber-400' : 'bg-blue-400 animate-pulse')
+      const dotCls   = esFin   ? 'bg-emerald-500'
+                     : esCurso ? (enPausa ? 'bg-amber-500' : 'bg-amber-400 animate-pulse')
                      : col.dot;
       const draggable = (esFin || esCurso) ? 'draggable="false"'
         : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-        const badge = esFin   ? '<span class="text-[9px] font-black text-slate-400 bg-slate-200 rounded px-1 ml-1">\u2713 LISTO</span>'
+        const badge = esFin   ? '<span class="text-[9px] font-black text-emerald-800 bg-emerald-100 rounded px-1 ml-1">\u2713 LISTO</span>'
                   : esCurso ? (enPausa
-                      ? '<span class="text-[9px] font-black text-amber-700 bg-amber-100 rounded px-1 ml-1">\u23F8 PAUSADO</span>'
-                      : '<span class="text-[9px] font-black text-blue-600 bg-blue-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>')
+                      ? '<span class="text-[9px] font-black text-amber-800 bg-amber-200 rounded px-1 ml-1">\u23F8 PAUSADO</span>'
+                      : '<span class="text-[9px] font-black text-amber-800 bg-amber-100 rounded px-1 ml-1">\u25b6 EN CURSO</span>')
                   : '';
         const botones = (esFin || esCurso)
         ? `<button type="button" class="btn-info-pedido text-slate-400 hover:text-slate-700 rounded p-1 text-[11px]" title="Información">ℹ️</button>
@@ -1202,18 +1202,18 @@ function renderGlobalCal(){
         const esCurso = tarea && !esFin;
         const esRestyling = key === 'restyling';
         const enPausa = esCurso && esRestyling && isTaskPaused(key, iso, pedId);
-        const pillCls  = esFin   ? 'bg-slate-100 border-slate-200 opacity-70 cursor-default'
-                       : esCurso ? (enPausa ? 'bg-amber-50 border-amber-300' : 'bg-blue-50 border-blue-300')
+        const pillCls  = esFin   ? 'bg-emerald-100 border border-emerald-300 text-emerald-800 cursor-default'
+                       : esCurso ? (enPausa ? 'bg-amber-300 border-2 border-amber-600 text-amber-950' : 'bg-amber-200 border-2 border-amber-500 text-amber-900')
                        : `${col.pill} border ${col.border}`;
-        const dotCls   = esFin   ? 'bg-slate-400'
-                       : esCurso ? (enPausa ? 'bg-amber-400' : 'bg-blue-400 animate-pulse')
+        const dotCls   = esFin   ? 'bg-emerald-500'
+                       : esCurso ? (enPausa ? 'bg-amber-500' : 'bg-amber-400 animate-pulse')
                        : col.dot;
         const draggable = (esFin || esCurso) ? 'draggable="false"'
           : `draggable="true" ondragstart="onPillDragStart(event)" ondragend="onPillDragEnd(event)"`;
-        const badge = esFin   ? '<span class="text-[8px] font-black text-slate-400 bg-slate-200 rounded px-1">\u2713</span>'
+        const badge = esFin   ? '<span class="text-[8px] font-black text-emerald-800 bg-emerald-100 rounded px-1">\u2713</span>'
                     : esCurso ? (enPausa
-                        ? '<span class="text-[8px] font-black text-amber-700 bg-amber-100 rounded px-1">\u23F8</span>'
-                        : '<span class="text-[8px] font-black text-blue-600 bg-blue-100 rounded px-1">\u25b6</span>')
+                        ? '<span class="text-[8px] font-black text-amber-800 bg-amber-200 rounded px-1">\u23F8</span>'
+                        : '<span class="text-[8px] font-black text-amber-800 bg-amber-100 rounded px-1">\u25b6</span>')
                     : '';
         const botones = (esFin || esCurso)
           ? `<button type="button" class="btn-info-pedido text-slate-400 hover:text-slate-700 rounded p-0.5 text-[10px]" title="Información">ℹ️</button>
