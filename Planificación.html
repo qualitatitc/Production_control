@@ -254,6 +254,21 @@
         .action-btn-delete:hover {
             background: #ef4444;
         }
+
+        .filter-dropdown {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            z-index: 80;
+            width: 260px;
+            max-height: 320px;
+            overflow-y: auto;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+            padding: 8px;
+        }
     </style>
 </head>
 <body class="bg-white text-slate-900 font-sans">
@@ -270,6 +285,22 @@
             </div>
             
             <div class="flex items-center gap-3">
+                <div class="relative">
+                    <button id="product-filter-btn" onclick="toggleProductFilterMenu(event)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+                        FILTRO PRODUCTO
+                    </button>
+                    <div id="product-filter-menu" class="filter-dropdown hidden">
+                        <div class="flex items-center justify-between mb-2 px-1">
+                            <span class="text-[10px] font-black uppercase text-slate-500">Mostrar productos</span>
+                            <span id="product-filter-count" class="text-[10px] font-black text-slate-400"></span>
+                        </div>
+                        <div class="flex gap-2 mb-2">
+                            <button onclick="selectAllProducts(event)" class="flex-1 text-[10px] font-black uppercase bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md py-1">Todos</button>
+                            <button onclick="clearAllProducts(event)" class="flex-1 text-[10px] font-black uppercase bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md py-1">Ninguno</button>
+                        </div>
+                        <div id="product-filter-options" class="space-y-1"></div>
+                    </div>
+                </div>
                 <button onclick="goToToday()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all">HOY</button>
             </div>
         </header>
@@ -438,6 +469,7 @@
         let tasks = []; 
         let selectedTaskId, selectedModalProductId, draggedElement, activeQuickSelector, taskToCopy;
         let isFetching = false;
+        let selectedProductIds = new Set(PRODUCT_TYPES.map(p => p.id));
         const weekdayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
         window.onload = async () => {
@@ -446,12 +478,65 @@
             const now = new Date();
             currentYear = now.getFullYear();
             currentMonth = now.getMonth();
+            renderProductFilterOptions();
+            updateProductFilterCount();
             initCalendar();
             setupInfiniteScroll();
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.day-cell') && activeQuickSelector) hideQuickSelector();
+                if (!e.target.closest('#product-filter-menu') && !e.target.closest('#product-filter-btn')) {
+                    document.getElementById('product-filter-menu').classList.add('hidden');
+                }
             });
         };
+
+        function toggleProductFilterMenu(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('product-filter-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        function renderProductFilterOptions() {
+            const wrap = document.getElementById('product-filter-options');
+            if (!wrap) return;
+            wrap.innerHTML = PRODUCT_TYPES.map(p => `
+                <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" class="accent-blue-600" data-product-filter="${p.id}" ${selectedProductIds.has(p.id) ? 'checked' : ''}>
+                    <span class="w-2.5 h-2.5 rounded-full ${p.bg}"></span>
+                    <span class="text-[11px] font-semibold text-slate-700">${p.name}</span>
+                </label>
+            `).join('');
+            wrap.querySelectorAll('input[data-product-filter]').forEach(chk => {
+                chk.addEventListener('change', (ev) => {
+                    const productId = ev.target.getAttribute('data-product-filter');
+                    if (ev.target.checked) selectedProductIds.add(productId);
+                    else selectedProductIds.delete(productId);
+                    updateProductFilterCount();
+                    refreshAllCells();
+                });
+            });
+        }
+
+        function updateProductFilterCount() {
+            const countEl = document.getElementById('product-filter-count');
+            if (countEl) countEl.textContent = `${selectedProductIds.size}/${PRODUCT_TYPES.length}`;
+        }
+
+        function selectAllProducts(e) {
+            e.stopPropagation();
+            selectedProductIds = new Set(PRODUCT_TYPES.map(p => p.id));
+            renderProductFilterOptions();
+            updateProductFilterCount();
+            refreshAllCells();
+        }
+
+        function clearAllProducts(e) {
+            e.stopPropagation();
+            selectedProductIds = new Set();
+            renderProductFilterOptions();
+            updateProductFilterCount();
+            refreshAllCells();
+        }
 
         function formatDateKey(date) {
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -552,7 +637,9 @@
 
         function renderTasksInCell(list, dateStr) {
             list.innerHTML = '';
-            const dayTasks = tasks.filter(t => t.date === dateStr).sort((a, b) => (a.order || 0) - (b.order || 0));
+            const dayTasks = tasks
+                .filter(t => t.date === dateStr && selectedProductIds.has(t.productId))
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
             dayTasks.forEach(task => {
                 const product = PRODUCT_TYPES.find(p => p.id === task.productId) || PRODUCT_TYPES[0];
                 const taskEl = document.createElement('div');
